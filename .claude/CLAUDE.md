@@ -1,206 +1,219 @@
-# AI Agent Development Guide
+# AI-Driven E2E Test Self-Healing Engine — Development Guide
 
-This document provides essential guidelines for AI agents working on this LangGraph FastAPI Agent project.
-
-## Quick Commands
-
-```bash
-make install              # Install deps (uv sync) + pre-commit hooks
-make dev                  # Dev server with hot reload (port 8000)
-make lint                 # ruff check .
-make format               # ruff format .
-make typecheck            # uv run pyright (static type check)
-make check                # lint + typecheck
-make eval                 # Run LLM evals (interactive)
-make eval-quick           # Run LLM evals (default settings)
-make migrate              # Run DB migrations to latest (Alembic)
-make docker-up            # Docker: API + DB (ENV=development by default)
-make stack-up ENV=development  # Full stack: API + DB + Prometheus + Grafana
-```
-
-> All server/DB/Docker targets accept `ENV=development|staging|production|test`.
-> Run `make help` for the full list of targets.
-
-## Project Structure
-
-```
-app/
-  api/v1/          # Route handlers (auth.py, chatbot.py, api.py)
-  core/
-    config.py      # Pydantic Settings config
-    database.py    # Async DB setup
-    langgraph/     # LangGraph agent graph + tools
-    logging.py     # structlog setup
-    llm.py         # LLM service with retry logic
-    limiter.py     # Rate limiting (slowapi)
-    metrics.py     # Prometheus metrics
-    middleware.py  # ASGI middleware
-    prompts/       # System prompts
-  models/          # SQLModel ORM models
-  schemas/         # Pydantic request/response schemas + graph state
-  services/        # Business logic services
-  utils/           # Shared utilities
-evals/             # LLM evaluation framework (Langfuse-based)
-scripts/           # Environment setup, Docker build scripts
-```
+This document provides essential guidelines for AI agents working on this project.
 
 ## Project Overview
 
-This is a production-ready AI agent application built with:
+An engine that automatically repairs broken Playwright E2E tests. When a UI change
+breaks a test's selectors, the engine diagnoses the failure, generates a targeted patch,
+re-runs the test, and loops until the test passes or a retry cap is hit.
 
-- **LangGraph** for stateful, multi-step AI agent workflows
-- **FastAPI** for high-performance async REST API endpoints
+**Delivery model: a CLI core with a CI integration wrapper.**
 
-## Quick Reference: Critical Rules
+- **CLI core** — the engine itself is a single command-line executable. It receives a
+  target test path plus the `git diff` and failure log, runs the repair loop, and writes
+  the patched test back. This is the source of truth; everything else calls into it.
+- **CI wrapper** — a thin pipeline layer (e.g. a GitHub Action / CI step) that detects a
+  failing E2E run, invokes the CLI core, and surfaces the result (commit or PR with the
+  patch). The wrapper orchestrates; it must contain no repair logic of its own.
 
-### Import Rules
+Keep this separation strict: repair logic lives in the CLI core so it stays runnable
+locally by a developer _and_ callable from CI without duplication.
 
-- **All imports MUST be at the top of the file** - never add imports inside functions or classes
+The system is organized into four layers:
 
-### Logging Rules
+1. **CLI Interface** — user-facing entry point that launches a repair run (also the
+   invocation surface CI calls into).
+2. **Data Preprocessor (AST analyzer)** — abstracts raw inputs (error logs, `git diff`)
+   into compact, hallucination-resistant context for the LLM.
+3. **LangGraph Agent** — stateful judgment + repair loop (Diagnoser → Patch Generator → Test Runner).
+4. **Test Runner** — validation tool that executes `npx playwright test` via subprocess.
 
-- Use **structlog** for all logging
-- Log messages must be **lowercase_with_underscores** (e.g., `"user_login_successful"`)
-- **NO f-strings in structlog events** - pass variables as kwargs
-- Use `logger.exception()` instead of `logger.error()` to preserve tracebacks
-- Example: `logger.info("chat_request_received", session_id=session.id, message_count=len(messages))`
+Built with **LangGraph** (agent orchestration), **OpenAI Structured Outputs** (deterministic
+patches), and **Playwright** (test execution).
 
-### Retry Rules
+## Architecture
 
-- **Always use tenacity library** for retry logic
-- Configure with exponential backoff
+### Data Preprocessor
+
+Input data is abstracted before it reaches the LLM to optimize context-window usage and
+prevent hallucination.
+
+- **Error Log Parser** — from the full Playwright log, extract only the `Error:` keyword,
+  the failing line number, and the core failure reason from the top of the stack trace
+  (e.g. `locator.click: Timeout 5000ms waiting for selector...`).
+- **Diff-JSX AST Analyzer** — parse the JSX/TSX regions of a `git diff` and convert the
+  before/after DOM node tree into a lightweight JSON object:
+
+  ```json
+  {
+    "file": "components/SubmitButton.tsx",
+    "previous": {
+      "tag": "button",
+      "attributes": { "id": "old-id", "className": "btn" }
+    },
+    "current": {
+      "tag": "button",
+      "attributes": { "id": "new-id", "className": "btn" }
+    }
+  }
+  ```
+
+### LangGraph State
+
+Shared state is immutable and traceable, defined with `TypedDict`:
+
+```python
+from typing import TypedDict
+
+class AgentState(TypedDict):
+    test_script_path: str         # path to the test file under repair
+    original_code: str            # the original test script
+    current_code: str             # test script as modified in the current loop
+    error_log: str                # latest Playwright error log
+    dom_diff_context: list[dict]  # DOM changes from AST parsing
+    analysis_report: str          # Diagnoser's failure-cause report
+    patch_instructions: dict      # Patch Generator's fix guide (line, code)
+    loop_count: int               # infinite-loop guard (max: 3)
+    is_success: bool              # whether the test passed
+```
+
+### Nodes & Conditional Edges
+
+Three nodes and one conditional edge control the flow.
+
+- **Diagnoser** — maps the failing selector in `error_log` to the actual DOM change in
+  `dom_diff_context` and infers the root cause. Updates `analysis_report`.
+- **Patch Generator** — uses **OpenAI Structured Outputs** to return the target line and
+  replacement code as strict JSON, preventing arbitrary rewrites. Updates `current_code`
+  and records `patch_instructions`.
+- **Test Runner** — writes `current_code` to disk and runs `npx playwright test <path>`
+  via subprocess. On success sets `is_success = True`; on failure refreshes `error_log`
+  and increments `loop_count`.
+- **Router (conditional edge)** — routes to `[End]` when `is_success` is `True` **or**
+  `loop_count >= 3`; otherwise re-enters `[Diagnoser]`.
+
+## Critical Rules
+
+### Guardrails (non-negotiable)
+
+- **Code Integrity** — the Patch Generator may ONLY fix failing locators (selectors) and
+  optimize wait conditions. It must never alter test business logic (assertions, flow).
+  Enforce this at BOTH the prompt and the JSON schema level.
+- **Non-deterministic output control** — wrap LLM calls in `try/except`. On a JSON parse
+  failure, feed the error back into the Patch Generator via an internal exception loop
+  rather than crashing the graph.
+- **Loop cap** — `loop_count` must never exceed 3. The Router is the single source of
+  truth for termination.
+
+### Imports
+
+- **All imports MUST be at the top of the file** — never inside functions or classes.
+
+### Logging
+
+- Use **structlog** for all logging.
+- Event names must be **lowercase_with_underscores** (e.g. `"patch_generated"`).
+- **NO f-strings in structlog events** — pass variables as kwargs.
+- Use `logger.exception()` (not `logger.error()`) inside `except` blocks to keep tracebacks.
+- Example: `logger.info("test_run_finished", path=path, is_success=is_success, loop_count=count)`
+
+### Retry
+
+- Use the **tenacity** library for retrying flaky LLM / subprocess calls.
+- Configure exponential backoff.
 - Example: `@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))`
 
-### Output Rules
+### Console Output
 
-- **Always enable rich library** for formatted console outputs
-- Use rich for progress bars, tables, panels, and formatted text
+- Use the **rich** library for all CLI output (progress bars, tables, panels, diffs).
 
-### Caching Rules
+## Code Style
 
-- **Only cache successful responses**, never cache errors
-- Use appropriate cache TTL based on data volatility
+### Python
 
-### FastAPI Rules
-
-- All routes must have rate limiting decorators
-- Use dependency injection for services, database connections, and auth
-- All database operations must be async
-
-## Code Style Conventions
-
-### Python/FastAPI
-
-- Use `async def` for asynchronous operations
-- Use type hints for all function signatures
-- Prefer Pydantic models over raw dictionaries
-- Use functional, declarative programming; avoid classes except for services and agents
-- File naming: lowercase with underscores (e.g., `user_routes.py`)
-- Use the RORO pattern (Receive an Object, Return an Object)
+- Target **Python 3.13**; manage deps with **uv**.
+- Use type hints on every function signature.
+- Prefer Pydantic models / `TypedDict` over raw dictionaries for structured data.
+- Use functional, declarative style; reserve classes for agents and services.
+- File naming: lowercase with underscores (e.g. `error_log_parser.py`).
+- Use the RORO pattern (Receive an Object, Return an Object).
 
 ### Error Handling
 
-- Handle errors at the beginning of functions
-- Use early returns for error conditions
-- Place the happy path last in the function
-- Use guard clauses for preconditions
-- Use `HTTPException` for expected errors with appropriate status codes
+- Handle errors at the start of functions with guard clauses / early returns.
+- Place the happy path last.
 
-## LangGraph & LangChain Patterns
+## LangGraph Patterns
 
-### Graph Structure
+- Use `StateGraph` to build the repair workflow; compile to `CompiledStateGraph` for use.
+- Define state with `AgentState` (see above).
+- Use `Command` / conditional edges to control flow between nodes.
+- Keep node functions pure where possible: read from state, return a state update.
 
-- Use `StateGraph` for building AI agent workflows
-- Define clear state schemas using Pydantic models (see `app/schemas/graph.py`)
-- Use `CompiledStateGraph` for production workflows
-- Implement `AsyncPostgresSaver` for checkpointing and persistence
-- Use `Command` for controlling graph flow between nodes
+## Subprocess (Test Runner)
 
-### Tracing
+- Run Playwright via `subprocess` (`npx playwright test <path>`); never block the event loop.
+- Capture stdout/stderr and pass the raw log to the Error Log Parser, not to the LLM directly.
 
-- Use LangChain's `CallbackHandler` from Langfuse for tracing all LLM calls
-- All LLM operations must have Langfuse tracing enabled
+## CLI Core & CI Wrapper
 
-## Database Operations
+- **Single entry point** — the CLI core is the only place the repair loop runs. The CI
+  wrapper (and any future surface) must shell out to it, never re-implement the graph.
+- **Clean I/O contract** — the CLI takes explicit inputs (test path, diff source, config
+  via flags/env) and communicates outcome through **exit codes**: `0` = test fixed,
+  non-zero = still failing / gave up after the loop cap. CI branches on the exit code.
+- **Machine-readable output** — emit a structured summary (e.g. JSON to stdout or a file)
+  describing what changed, so the CI wrapper can build a PR/commit message without parsing
+  human text. Keep rich-formatted output on stderr / a separate stream.
+- **No side effects in the wrapper** — the wrapper only detects failures, invokes the core,
+  and reports results (open PR, post status). All diagnosis/patching stays in the core.
+- **Local == CI** — the same command a developer runs locally is what CI runs; do not add
+  CI-only code paths inside the core.
 
-- Use SQLModel for ORM models (combines SQLAlchemy + Pydantic)
-- Define models in `app/models/` directory
-- Use async database operations with asyncpg
-- Use LangGraph's AsyncPostgresSaver for agent checkpointing
+## Configuration
 
-## Performance Guidelines
+- Use environment variables / a settings object for config (e.g. OpenAI API key, retry caps).
+- Never hardcode secrets or API keys.
 
-- Minimize blocking I/O operations
-- Use async for all database and external API calls
-- Implement caching for frequently accessed data
-- Use connection pooling for database connections
-- Optimize LLM calls with streaming responses
+## Commandments for This Project
 
-## Observability
-
-- Integrate Langfuse for LLM tracing on all agent operations
-- Export Prometheus metrics for API performance
-- Use structured logging with context binding (request_id, session_id, user_id)
-- Track LLM inference duration, token usage, and costs
-
-## Testing & Evaluation
-
-- Implement metric-based evaluations for LLM outputs (see `evals/` directory)
-- Create custom evaluation metrics as markdown files in `evals/metrics/prompts/`
-- Use Langfuse traces for evaluation data sources
-- Generate JSON reports with success rates
-
-## Configuration Management
-
-- Use environment-specific configuration files (`.env.development`, `.env.staging`, `.env.production`)
-- Use Pydantic Settings for type-safe configuration (see `app/core/config.py`)
-- Never hardcode secrets or API keys
-
-## Key Dependencies
-
-- **FastAPI** - Web framework
-- **LangGraph** - Agent workflow orchestration
-- **LangChain** - LLM abstraction and tools
-- **Pydantic v2** - Data validation and settings
-
-## 10 Commandments for This Project
-
-1. All routes must have rate limiting decorators
-2. All async operations must have proper error handling
-3. All logs must follow structured logging format with lowercase_underscore event names
-4. All retries must use tenacity library
-5. All console outputs should use rich formatting
-6. All caching should only store successful responses
-7. All imports must be at the top of files
-8. All database operations must be async
-9. All endpoints must have proper type hints and Pydantic models
-10. All code must pass `make typecheck` (pyright standard mode)
+1. The Patch Generator only fixes selectors and wait conditions — never assertions/logic.
+2. Enforce the code-integrity guardrail at both prompt and schema level.
+3. `loop_count` never exceeds 3; the Router owns termination.
+4. All LLM/subprocess retries use the tenacity library.
+5. All logs use structlog with lowercase_underscore event names and no f-strings.
+6. All CLI output uses rich formatting.
+7. All imports are at the top of the file.
+8. Preprocess (parse/abstract) inputs before sending anything to the LLM.
+9. All function signatures have type hints; structured data uses Pydantic/TypedDict.
+10. JSON parse failures feed back into the Patch Generator — never crash the graph.
+11. Repair logic lives in the CLI core only; the CI wrapper orchestrates, never re-implements.
+12. The CLI signals outcome via exit codes and machine-readable output for CI to branch on.
 
 ## Common Pitfalls to Avoid
 
+- ❌ Letting the Patch Generator rewrite assertions or test flow
+- ❌ Sending raw Playwright logs / full `git diff` to the LLM instead of abstracted context
 - ❌ Using f-strings in structlog events
 - ❌ Adding imports inside functions
-- ❌ Forgetting rate limiting decorators on routes
-- ❌ Missing Langfuse tracing on LLM calls
-- ❌ Caching error responses
+- ❌ Missing the `loop_count` guard (risk of infinite loops)
 - ❌ Using `logger.error()` instead of `logger.exception()` for exceptions
-- ❌ Blocking I/O operations without async
+- ❌ Crashing the graph on a malformed LLM JSON response
 - ❌ Hardcoding secrets or API keys
 - ❌ Missing type hints on function signatures
 
 ## When Making Changes
 
-Before modifying code:
-
-1. Read the existing implementation first
-2. Check for related patterns in the codebase
-3. Ensure consistency with existing code style
-4. Add appropriate logging with structured format
-5. Include error handling with early returns
-6. Add type hints and Pydantic models
+1. Read the existing implementation first.
+2. Check for related patterns in the codebase.
+3. Keep consistency with existing style.
+4. Add structured logging.
+5. Include error handling with early returns.
+6. Add type hints and Pydantic/TypedDict models.
 
 ## References
 
-- LangGraph Documentation: https://langchain-ai.github.io/langgraph/
-- LangChain Documentation: https://python.langchain.com/docs/
-- FastAPI Documentation: https://fastapi.tiangolo.com/
+- LangGraph: https://langchain-ai.github.io/langgraph/
+- OpenAI Structured Outputs: https://platform.openai.com/docs/guides/structured-outputs
+- Playwright: https://playwright.dev/
