@@ -86,6 +86,25 @@ cp .env.example .env    # then set E2E_HEALER_NVIDIA_API_KEY
 Get a free NVIDIA NIM API key at [build.nvidia.com](https://build.nvidia.com/) (the default
 model is `openai/gpt-oss-120b`).
 
+### Run it on your own project (global CLI)
+
+Before publishing to PyPI, install the CLI globally straight from this repo — then `cd`
+into **any** real Playwright project and run `e2e-healer` there:
+
+```bash
+uv tool install /path/to/this/repo     # installs a global `e2e-healer` (isolated env)
+
+cd ~/work/your-real-web-app             # your actual Playwright suite
+export E2E_HEALER_NVIDIA_API_KEY=nvapi-...
+e2e-healer                              # heal the whole suite, in place
+e2e-healer tests/login.spec.ts --dry-run   # or preview a single spec, write nothing
+```
+
+The CLI reads config from `E2E_HEALER_*` env vars (or a `.env` in the project dir), runs
+`npx playwright test` in the current directory, and exits `0` when everything is healed —
+so it drops into a real repo with no per-project setup. Re-run `uv tool install --force
+/path/to/this/repo` to pick up new changes.
+
 ## Usage (CLI)
 
 ```bash
