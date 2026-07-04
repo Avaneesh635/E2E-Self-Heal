@@ -27,6 +27,10 @@ inputs:
     description: "Command used to run Playwright"
     required: false
     default: "npx playwright test"
+  app-url:
+    description: "URL the Selector Verifier loads to check patched selectors (empty = skip verification)"
+    required: false
+    default: ""
 
 outputs:
   outcome:
@@ -75,7 +79,12 @@ runs:
           diff_flag="--diff-base ${{ inputs.diff-base }}"
         fi
 
-        uv run e2e-healer "${{ inputs.test-path }}" --log playwright.log $diff_flag --json > "$summary"
+        url_flag=""
+        if [ -n "${{ inputs.app-url }}" ]; then
+          url_flag="--app-url ${{ inputs.app-url }}"
+        fi
+
+        uv run e2e-healer "${{ inputs.test-path }}" --log playwright.log $diff_flag $url_flag --json > "$summary"
         healed_rc=$?
         echo "summary-path=repair-summary.json" >> "$GITHUB_OUTPUT"
         if [ "$healed_rc" -eq 0 ]; then

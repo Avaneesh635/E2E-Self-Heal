@@ -66,10 +66,15 @@ def heal(
     dry_run: bool = typer.Option(
         False, "--dry-run", help="run the loop but restore the original file; write nothing"
     ),
+    app_url: Optional[str] = typer.Option(
+        None, "--app-url", help="URL the Selector Verifier loads to check patched selectors"
+    ),
     json_output: bool = typer.Option(False, "--json", help="emit RepairSummary JSON to stdout"),
 ) -> None:
     """Repair a single failing test. Exit 0 if fixed, non-zero otherwise."""
     configure_logging(settings.log_level)
+    if app_url is not None:
+        settings.app_url = app_url  # CLI flag overrides the E2E_HEALER_APP_URL setting
     original_code = test_path.read_text()
 
     # 1. Acquire the failure log: reuse --log, else run the test once to capture it.
@@ -91,6 +96,7 @@ def heal(
         ],
         "analysis_report": "",
         "patch_instructions": {},
+        "verification_report": {},
         "loop_count": 0,
         "is_success": False,
     }

@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     nvidia_max_tokens: int = Field(default=4096, description="completion token cap (reasoning models need headroom)")
     max_loops: int = Field(default=3, description="repair loop cap (Router termination)")
     playwright_cmd: str = Field(default="npx playwright test", description="Playwright invocation")
+    verify_selectors: bool = Field(
+        default=True, description="verify patched selectors against the live DOM before re-running"
+    )
+    app_url: str = Field(
+        default="", description="URL the Selector Verifier loads to check candidate selectors"
+    )
+    node_cmd: str = Field(default="node", description="Node.js executable for the selector verifier")
     log_level: str = Field(default="INFO")
 
 

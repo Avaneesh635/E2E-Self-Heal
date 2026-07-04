@@ -15,5 +15,6 @@ class AgentState(TypedDict):
     dom_diff_context: list[dict]  # DOM changes from AST parsing
     analysis_report: str          # Diagnoser's failure-cause report
     patch_instructions: dict      # Patch Generator's fix guide (line, code)
+    verification_report: dict     # Selector Verifier's live-DOM match result
     loop_count: int               # infinite-loop guard (max: settings.max_loops)
     is_success: bool              # whether the test passed

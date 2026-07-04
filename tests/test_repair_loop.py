@@ -21,6 +21,7 @@ def _initial_state() -> AgentState:
         "dom_diff_context": [],
         "analysis_report": "",
         "patch_instructions": {},
+        "verification_report": {},
         "loop_count": 0,
         "is_success": False,
     }

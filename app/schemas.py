@@ -21,6 +21,14 @@ class PatchInstruction(BaseModel):
     original: str = Field(..., description="the exact line being replaced")
     replacement: str = Field(..., description="the new line content")
     reason: str = Field(..., description="why this selector/wait was changed")
+    selector: str = Field(
+        default="",
+        description=(
+            "the new locator as a Playwright selector-engine string usable by page.locator() "
+            "(e.g. '#submit', 'role=button[name=\"Submit\"]', 'text=Submit'), for live-DOM "
+            "verification. Empty if this edit is not a selector change (e.g. a wait tweak)."
+        ),
+    )
 
 
 class PatchOutput(BaseModel):

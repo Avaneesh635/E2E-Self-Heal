@@ -2,9 +2,9 @@
 
 깨진 Playwright E2E 테스트를 자동으로 복구합니다. UI 변경으로 요소가 이름이 바뀌거나
 구조가 달라져 테스트의 셀렉터가 깨지면, 엔진이 실패 원인을 진단하고 → 셀렉터/대기 조건을
-패치하고 → 테스트를 다시 실행하는 과정을 테스트가 통과하거나 재시도 한도에 도달할 때까지
-반복한 뒤 수정본을 파일에 기록합니다. 로컬 **CLI**로도, 패치 PR을 여는 **CI GitHub
-Action**으로도 동작합니다.
+패치하고 → **실제 DOM에서 새 셀렉터를 검증한 뒤** → 테스트를 다시 실행하는 과정을 테스트가
+통과하거나 재시도 한도에 도달할 때까지 반복한 뒤 수정본을 파일에 기록합니다. 로컬 **CLI**로도,
+패치 PR을 여는 **CI GitHub Action**으로도 동작합니다.
 
 > **안전장치(가드레일):** 엔진은 **실패한 셀렉터(locator)와 대기 조건만** 수정합니다.
 > 단언(assertion)이나 테스트 로직은 절대 건드리지 않으며, 패치는 항상 사람이 검토할 수
@@ -18,21 +18,29 @@ Action**으로도 동작합니다.
 2. **데이터 전처리기(Preprocessor)** — 원본 Playwright 로그와 `git diff`를 LLM이 이해하기
    쉬운 압축된, 환각(hallucination)에 강한 컨텍스트로 추상화합니다(실패한 셀렉터 + 변경된
    DOM 속성만 추출).
-3. **LangGraph 에이전트** — `Diagnoser → Patch Generator → Test Runner` 노드가 조건부
-   Router를 통해 테스트가 통과하거나 `max_loops`에 도달할 때까지 순환합니다.
-4. **Test Runner** — 각 시도를 검증하기 위해 `npx playwright test`를 서브프로세스로 실행합니다.
+3. **LangGraph 에이전트** — `Diagnoser → Patch Generator → Selector Verifier → Test Runner`
+   노드가 조건부 Router를 통해 테스트가 통과하거나 `max_loops`에 도달할 때까지 순환합니다.
+4. **Selector Verifier** — 패치된 셀렉터를 실제 페이지 DOM에 대조해 **정확히 1개** 매칭되는지
+   확인합니다(Node/Playwright 보조 스크립트). 환각(0개)·모호(2개 이상) 셀렉터는 무거운
+   테스트 실행 전에 되돌리고 재패치합니다.
+5. **Test Runner** — 각 시도를 검증하기 위해 `npx playwright test`를 서브프로세스로 실행합니다.
 
 ```
-        ┌──────────┐      ┌─────────────────┐      ┌─────────────┐
-  ──▶   │ Diagnoser │ ──▶ │ Patch Generator │ ──▶  │ Test Runner │ ──┐
-        └──────────┘      └─────────────────┘      └─────────────┘   │
-             ▲                                                        │
-             │        실패 & loop_count < max                          │
-             └───────────────────  Router  ◀──────────────────────────┘
-                                     │ 통과 또는 루프 한도 도달
-                                     ▼
-                                   [End]
+   ┌──────────┐    ┌─────────────────┐    ┌───────────────────┐    ┌─────────────┐
+──▶│ Diagnoser│──▶ │ Patch Generator │──▶ │ Selector Verifier │─┬─▶│ Test Runner │──┐
+   └──────────┘    └─────────────────┘    └───────────────────┘ │  └─────────────┘  │
+        ▲                   ▲     검증 실패(0/2+ 매칭) → 재패치 ──┘                    │
+        │                   └──────────────────────────────────────────────────────┘ │
+        │                          실패 & loop_count < max                            │
+        └───────────────────────────────  Router  ◀───────────────────────────────────┘
+                                            │ 통과 또는 루프 한도 도달
+                                            ▼
+                                          [End]
 ```
+
+> Selector Verifier는 `E2E_HEALER_APP_URL`이 비어 있거나 페이지에 접근할 수 없으면(예: Node/
+> Playwright 미설치) 검증을 **건너뛰고** 루프를 그대로 진행합니다 — 도구 문제로 치유가 막히지
+> 않도록 항상 우아하게 저하(graceful degrade)합니다.
 
 전체 설계는 [`docs/design.md`](docs/design.md)를 참고하세요.
 
@@ -48,6 +56,7 @@ Action**으로도 동작합니다.
 | LangGraph 상태 / 그래프 조립                     | ✅ 구현 완료                                           | `app/state.py`, `app/graph.py`             |
 | Diagnoser 노드                                   | ✅ 구현 완료                                           | `app/nodes/diagnoser.py`                   |
 | Patch Generator 노드(Structured Outputs)         | ✅ 구현 완료                                           | `app/nodes/patch_generator.py`             |
+| **Selector Verifier 노드(실제 DOM 대조 검증)**   | ✅ **구현 완료**                                       | `app/nodes/selector_verifier.py`, `app/verify/` |
 | Test Runner 노드 + Router 조건부 엣지            | ✅ 구현 완료                                           | `app/nodes/test_runner.py`, `app/graph.py` |
 | LLM 클라이언트                                   | ✅ **NVIDIA NIM(`openai/gpt-oss-120b`)으로 전환 완료** | `app/llm.py`                               |
 | GitHub Action 래퍼 + 셀프 데모 워크플로          | ✅ 구현 완료                                           | `action.yml`, `ci/`                        |
@@ -87,6 +96,9 @@ uv run e2e-healer tests/example.spec.ts --dry-run
 
 # 미리 캡처한 로그와 PR 범위 diff를 넘기는 방식(CI 경로):
 uv run e2e-healer tests/example.spec.ts --log playwright.log --diff-base origin/main --json
+
+# 셀렉터 검증을 켜고 실행 — 패치한 셀렉터를 실제 페이지에서 대조:
+uv run e2e-healer tests/example.spec.ts --app-url http://localhost:4173
 ```
 
 테스트가 치유되면 종료 코드 `0`, 아니면 0이 아닌 값입니다. `--json`은 기계가 읽을 수 있는
@@ -132,6 +144,13 @@ uv run e2e-healer tests/example.spec.ts --log playwright.log --diff-base origin/
 | `E2E_HEALER_NVIDIA_MAX_TOKENS` | `4096`                                | 응답 토큰 한도(추론 모델 여유분) |
 | `E2E_HEALER_MAX_LOOPS`         | `3`                                   | 복구 루프 한도                   |
 | `E2E_HEALER_PLAYWRIGHT_CMD`    | `npx playwright test`                 | Playwright 실행 명령             |
+| `E2E_HEALER_VERIFY_SELECTORS`  | `true`                                | 패치 셀렉터의 실제 DOM 검증 on/off |
+| `E2E_HEALER_APP_URL`           | —                                     | Selector Verifier가 로드할 앱 URL(비면 검증 건너뜀) |
+| `E2E_HEALER_NODE_CMD`          | `node`                                | 검증기 실행에 쓰는 Node 실행 파일 |
+
+> `--app-url` CLI 플래그로 `E2E_HEALER_APP_URL`을 덮어쓸 수 있습니다. 로컬에서 셀렉터 검증을
+> 실제로 돌리려면 Playwright 프로젝트에 브라우저가 설치돼 있어야 합니다
+> (`npm install && npx playwright install`).
 
 ## 개발
 
@@ -147,6 +166,9 @@ make test       # pytest
 
 - 셀렉터와 대기 조건만 수정 — 단언이나 제어 흐름은 절대 건드리지 않음.
 - JSX/TSX diff 분석기는 v0.1 기준 정규식 휴리스틱(tree-sitter 업그레이드 예정).
+- Selector Verifier는 v1에서 `APP_URL`의 **진입 페이지 상태**를 기준으로 검증합니다. 클릭·이동
+  이후의 깊은 상태에서만 나타나는 요소는 이 단계에서 검증되지 않고, 최종 판정은 Test Runner가
+  맡습니다(추후 실패 시점 스냅샷 캡처로 고도화 예정).
 - 치유 품질은 LLM과 `git diff`의 명확성에 좌우됨.
 
 ## 라이선스
