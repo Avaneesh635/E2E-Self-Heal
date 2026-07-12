@@ -8,6 +8,7 @@ from typing import Optional
 import structlog
 import typer
 from rich.console import Console
+from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 from typer.core import TyperGroup
@@ -33,6 +34,7 @@ from app.schemas import (
     ReviewReport,
     SuiteSummary,
 )
+from app.shadow.runtime import run_shadow
 from app.state import AgentState
 from app.utils.files import atomic_write
 
@@ -60,6 +62,26 @@ app = typer.Typer(
 )
 console = Console(stderr=True)  # human output on stderr; JSON summary on stdout
 logger = structlog.get_logger(__name__)
+
+
+@app.callback(invoke_without_command=True)
+def main(
+    shadow: bool = typer.Option(
+        False, "--shadow", help="run the Shadow Testing runtime (under development)"
+    ),
+) -> None:
+    """AI-driven E2E test self-healing engine.
+
+    Runs the repair loop by default (see ``heal``); ``--shadow`` routes into the
+    upcoming Shadow Testing runtime instead. Existing behavior is unchanged when
+    the flag is absent.
+    """
+    if not shadow:
+        return
+    configure_logging(settings.log_level)
+    logger.info("shadow_mode_invoked")
+    console.print(Panel(run_shadow(), title="Shadow Testing", border_style="yellow"))
+    raise typer.Exit(code=0)
 
 
 def _read_diff(diff_file: Optional[Path], diff_base: Optional[str]) -> str:

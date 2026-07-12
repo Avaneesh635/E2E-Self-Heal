@@ -238,6 +238,20 @@ def test_cli_sandbox_violation_exits_2(monkeypatch, tmp_path):
     assert "sandbox denied:" in result.stderr
 
 
+def test_cli_shadow_flag_runs_without_error():
+    runner = CliRunner()
+    result = runner.invoke(app, ["--shadow"])
+    assert result.exit_code == 0
+    assert "Shadow Testing" in result.stderr
+
+
+def test_cli_help_documents_shadow_flag():
+    runner = CliRunner()
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "--shadow" in result.stdout
+
+
 def test_cli_suite_passes(monkeypatch):
     monkeypatch.setattr(cli_module, "run_playwright", lambda path: (True, "Suite passes!"))
 
