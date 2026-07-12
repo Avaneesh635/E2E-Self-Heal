@@ -26,7 +26,7 @@ def test_shadow_config_accepts_overrides():
 
 
 def test_cleanup_policy_accepts_string_value():
-    config = ShadowConfig(cleanup_policy="always")
+    config = ShadowConfig.model_validate({"cleanup_policy": "always"})
     assert config.cleanup_policy is CleanupPolicy.ALWAYS
 
 
@@ -38,4 +38,4 @@ def test_shadow_config_is_immutable():
 
 def test_invalid_cleanup_policy_is_rejected():
     with pytest.raises(ValidationError):
-        ShadowConfig(cleanup_policy="sometimes")
+        ShadowConfig.model_validate({"cleanup_policy": "sometimes"})
