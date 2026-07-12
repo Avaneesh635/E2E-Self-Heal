@@ -9,6 +9,20 @@ from typing import Any
 
 from app.shadow.interfaces import IMockInjector, IShadowRuntime, ISnapshotStore, IShadowWorkspace
 
+SHADOW_PLACEHOLDER_MESSAGE = (
+    "Shadow Testing runtime is under development — no shadow logic runs yet."
+)
+
+
+def run_shadow() -> str:
+    """Dedicated entry point for ``e2e-healer --shadow`` (placeholder).
+
+    The real Shadow Testing orchestration (mocking, trace parsing, DOM injection)
+    lands in a future issue. For now this only marks the routed execution path and
+    returns a human-readable status message for the CLI to surface.
+    """
+    return SHADOW_PLACEHOLDER_MESSAGE
+
 
 class ShadowRuntime(IShadowRuntime):
     """Placeholder orchestrator for the Shadow Runtime.
