@@ -87,7 +87,6 @@ honor the schema contract — the rest of the pipeline stays agnostic to it.
 | Idea                                                                                                            | Where                    | Difficulty |
 | --------------------------------------------------------------------------------------------------------------- | ------------------------ | ---------- |
 | Real React + Vite demo environment ([#3](https://github.com/Lee-Dongwook/E2E-Self-Heal/issues/3))               | `examples/`              | Medium     |
-| Test coverage for `RequestNormalizer` and `ShadowContext` (currently untested)                                  | `tests/`                 | Easy       |
 | "Record a trace → replay it" quickstart, once `--shadow` lands                                                  | `docs/`                  | Easy       |
 | Correct [`shadow-testing.md`](shadow-testing.md) status — the Trace Parser is now **implemented**, not "future" | `docs/shadow-testing.md` | Easy       |
 
