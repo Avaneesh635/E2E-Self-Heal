@@ -26,6 +26,12 @@ jobs:
       - name: Format check
         run: uv run ruff format --check .
 
+      - name: Commit formatting changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "style: auto-format code with ruff"
+          file_pattern: "*.py"
+
       - name: Typecheck
         run: uv run pyright
 
