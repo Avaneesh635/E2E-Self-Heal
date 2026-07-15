@@ -230,14 +230,23 @@ always exits `0` — the CI wrapper branches on `has_findings`.
 
 ## Configuration
 
-All settings use the `E2E_HEALER_` prefix (see [`.env.example`](.env.example)):
+All settings use the `E2E_HEALER_` prefix (see [`.env.example`](.env.example)). LLM
+configuration is **provider-neutral**: pick a backend with `E2E_HEALER_LLM_PROVIDER` and
+configure it via the generic `LLM_*` vars. The legacy `NVIDIA_*` vars still work — when
+the provider is `nvidia` they are folded into the generic ones, so existing setups need no
+changes.
 
 | Variable                       | Default                               | Purpose                                        |
 | ------------------------------ | ------------------------------------- | ---------------------------------------------- |
-| `E2E_HEALER_NVIDIA_API_KEY`    | —                                     | NVIDIA NIM API key                             |
-| `E2E_HEALER_NVIDIA_BASE_URL`   | `https://integrate.api.nvidia.com/v1` | OpenAI-compatible endpoint                     |
-| `E2E_HEALER_NVIDIA_MODEL`      | `openai/gpt-oss-120b`                 | Structured-Outputs-capable model               |
-| `E2E_HEALER_NVIDIA_MAX_TOKENS` | `4096`                                | Completion token cap (headroom for reasoning)  |
+| `E2E_HEALER_LLM_PROVIDER`      | `nvidia`                              | LLM backend: `nvidia`, `openai`, `anthropic`, `ollama` |
+| `E2E_HEALER_LLM_API_KEY`       | —                                     | API key for the selected provider              |
+| `E2E_HEALER_LLM_BASE_URL`      | —                                     | OpenAI-compatible endpoint (empty = SDK default) |
+| `E2E_HEALER_LLM_MODEL`         | —                                     | Structured-Outputs-capable model               |
+| `E2E_HEALER_LLM_MAX_TOKENS`    | `4096`                                | Completion token cap (headroom for reasoning)  |
+| `E2E_HEALER_NVIDIA_API_KEY`    | —                                     | NVIDIA NIM API key (legacy; maps to `LLM_API_KEY`) |
+| `E2E_HEALER_NVIDIA_BASE_URL`   | `https://integrate.api.nvidia.com/v1` | OpenAI-compatible endpoint (legacy)            |
+| `E2E_HEALER_NVIDIA_MODEL`      | `openai/gpt-oss-120b`                 | Structured-Outputs-capable model (legacy)      |
+| `E2E_HEALER_NVIDIA_MAX_TOKENS` | `4096`                                | Completion token cap (legacy)                  |
 | `E2E_HEALER_MAX_LOOPS`         | `3`                                   | Repair loop cap                                |
 | `E2E_HEALER_PLAYWRIGHT_CMD`    | `npx playwright test`                 | Playwright invocation                          |
 | `E2E_HEALER_VERIFY_SELECTORS`  | `true`                                | Toggle live-DOM selector verification          |
