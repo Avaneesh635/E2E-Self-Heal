@@ -17,6 +17,7 @@ def normalizer():
 
 # --- normalize_value ----------------------------------------------------------
 
+
 def test_normalize_value_replaces_uuid(normalizer):
     val = "id-550e8400-e29b-41d4-a716-446655440000-end"
     assert normalizer.normalize_value(val) == "id-<UUID>-end"
@@ -53,6 +54,7 @@ def test_normalize_value_converts_non_string_to_string(normalizer):
 
 # --- normalize_url: path canonicalization --------------------------------------
 
+
 def test_normalize_url_replaces_uuid_in_path(normalizer):
     path, _ = normalizer.normalize_url(
         "http://example.com/api/users/550e8400-e29b-41d4-a716-446655440000"
@@ -73,6 +75,7 @@ def test_normalize_url_two_different_uuids_normalize_to_same_path(normalizer):
 
 # --- normalize_url: query canonicalization --------------------------------------
 
+
 def test_normalize_url_keeps_static_query_params(normalizer):
     _, query = normalizer.normalize_url("/api/x?a=1&b=2")
     assert query == {"a": ["1"], "b": ["2"]}
@@ -92,9 +95,7 @@ def test_normalize_url_dynamic_key_check_is_case_insensitive(normalizer):
 
 
 def test_normalize_url_normalizes_values_within_query_params(normalizer):
-    _, query = normalizer.normalize_url(
-        "/api/x?req_id=550e8400-e29b-41d4-a716-446655440000"
-    )
+    _, query = normalizer.normalize_url("/api/x?req_id=550e8400-e29b-41d4-a716-446655440000")
     assert query == {"req_id": ["<UUID>"]}
 
 
@@ -116,6 +117,7 @@ def test_normalize_url_query_param_order_does_not_affect_result(normalizer):
 
 # --- normalize_headers ----------------------------------------------------------
 
+
 def test_normalize_headers_lowercases_keys(normalizer):
     result = normalizer.normalize_headers({"Content-Type": "application/json"})
     assert result == {"content-type": "application/json"}
@@ -134,9 +136,7 @@ def test_normalize_headers_strips_dynamic_headers(normalizer):
 
 
 def test_normalize_headers_normalizes_values(normalizer):
-    result = normalizer.normalize_headers(
-        {"X-Request-Id": "550e8400-e29b-41d4-a716-446655440000"}
-    )
+    result = normalizer.normalize_headers({"X-Request-Id": "550e8400-e29b-41d4-a716-446655440000"})
     assert result == {"x-request-id": "<UUID>"}
 
 
@@ -145,13 +145,12 @@ def test_normalize_headers_empty_input_returns_empty_dict(normalizer):
 
 
 def test_normalize_headers_keeps_all_non_dynamic_headers(normalizer):
-    result = normalizer.normalize_headers(
-        {"Accept": "application/json", "X-Custom": "value"}
-    )
+    result = normalizer.normalize_headers({"Accept": "application/json", "X-Custom": "value"})
     assert result == {"accept": "application/json", "x-custom": "value"}
 
 
 # --- normalize_body: None / empty ------------------------------------------------
+
 
 def test_normalize_body_none_returns_empty_string(normalizer):
     assert normalizer.normalize_body(None) == ""
@@ -162,6 +161,7 @@ def test_normalize_body_empty_string_returns_empty_string(normalizer):
 
 
 # --- normalize_body: JSON --------------------------------------------------------
+
 
 def test_normalize_body_parses_and_normalizes_json_object(normalizer):
     body = '{"x": 1, "req_id": "550e8400-e29b-41d4-a716-446655440000"}'
@@ -207,6 +207,7 @@ def test_normalize_body_non_string_json_values_are_untouched(normalizer):
 
 # --- normalize_body: non-JSON text ----------------------------------------------
 
+
 def test_normalize_body_falls_back_to_text_scrubbing_for_non_json(normalizer):
     body = "user 550e8400-e29b-41d4-a716-446655440000 logged in"
     result = normalizer.normalize_body(body)
@@ -220,6 +221,7 @@ def test_normalize_body_scrubs_timestamp_in_plain_text(normalizer):
 
 
 # --- Determinism ---------------------------------------------------------------
+
 
 def test_normalize_url_is_deterministic(normalizer):
     url = "/api/x?a=1&b=2"
