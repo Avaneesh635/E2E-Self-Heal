@@ -236,6 +236,58 @@ configure it via the generic `LLM_*` vars. The legacy `NVIDIA_*` vars still work
 the provider is `nvidia` they are folded into the generic ones, so existing setups need no
 changes.
 
+### Using OpenAI
+
+Set the provider to `openai` and supply a key — either the generic `E2E_HEALER_LLM_API_KEY`
+or an existing standard `OPENAI_API_KEY` (used as a fallback). Patch/review use OpenAI's
+native strict Structured Outputs. Point `E2E_HEALER_LLM_BASE_URL` at an Azure or
+OpenAI-compatible endpoint to override the default.
+
+```bash
+E2E_HEALER_LLM_PROVIDER=openai
+OPENAI_API_KEY=sk-...            # or E2E_HEALER_LLM_API_KEY=sk-...
+E2E_HEALER_LLM_MODEL=gpt-4o-mini
+```
+
+### Using Anthropic (Claude)
+
+Anthropic is an **optional** dependency — install the extra so non-Anthropic users don't
+pull it in:
+
+```bash
+pip install "ai-driven-e2e[anthropic]"   # or: uv sync --extra anthropic
+```
+
+Then set the provider and a key — either `E2E_HEALER_LLM_API_KEY` or an existing standard
+`ANTHROPIC_API_KEY` (fallback). Claude has no OpenAI-style `response_format`, so
+`PatchOutput`/`ReviewOutput` are enforced via tool-use.
+
+```bash
+E2E_HEALER_LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...     # or E2E_HEALER_LLM_API_KEY=sk-ant-...
+E2E_HEALER_LLM_MODEL=claude-sonnet-4-6
+```
+
+### Using Ollama (local, offline)
+
+Run fully offline with **no API key**. Ollama is an optional dependency:
+
+```bash
+pip install "ai-driven-e2e[ollama]"      # or: uv sync --extra ollama
+```
+
+Start Ollama and pull a model, then point the provider at it. Structured outputs use
+Ollama's **native JSON-schema `format`**, so pick a model that handles structured output
+well — recommended: `llama3.1`, `qwen2.5-coder`, or `mistral-nemo`. Smaller/older models are
+less reliable at strict JSON; on a parse failure the engine retries and falls back to the
+Patch Generator feedback loop.
+
+```bash
+E2E_HEALER_LLM_PROVIDER=ollama
+E2E_HEALER_LLM_MODEL=llama3.1
+# E2E_HEALER_LLM_BASE_URL=http://localhost:11434   # default; override for a remote host
+```
+
 | Variable                       | Default                               | Purpose                                        |
 | ------------------------------ | ------------------------------------- | ---------------------------------------------- |
 | `E2E_HEALER_LLM_PROVIDER`      | `nvidia`                              | LLM backend: `nvidia`, `openai`, `anthropic`, `ollama` |

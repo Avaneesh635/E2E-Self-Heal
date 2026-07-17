@@ -11,11 +11,11 @@ completions are given explicit token headroom (``settings.llm_max_tokens``) to l
 for its reasoning content.
 """
 
+import os
 from functools import lru_cache
 from typing import Any, Protocol, TypeVar
 
 import structlog
-from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_openai import ChatOpenAI
@@ -25,13 +25,31 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from app.config import LLMProvider, settings
 from app.schemas import PatchOutput, ReviewOutput
 
+# Anthropic and Ollama are optional dependencies: users who don't use them shouldn't have to
+# install langchain-anthropic / langchain-ollama. The guarded imports stay at module top per
+# the imports-at-top rule; the matching provider branch checks availability at build time.
+try:
+    from langchain_anthropic import ChatAnthropic
+except ImportError:  # pragma: no cover - exercised only without the extra installed
+    ChatAnthropic = None
+
+try:
+    from langchain_ollama import ChatOllama
+except ImportError:  # pragma: no cover - exercised only without the extra installed
+    ChatOllama = None
+
 logger = structlog.get_logger(__name__)
 
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
 
-# Ollama exposes an OpenAI-compatible endpoint locally and needs no real credential.
-_OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434/v1"
-_OLLAMA_PLACEHOLDER_KEY = "ollama"
+# Ollama runs models locally with no credential; the native endpoint (no OpenAI /v1 path).
+_OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434"
+
+# OpenAI's native Structured Outputs: strict json_schema guarantees the response matches
+# PatchOutput/ReviewOutput exactly (the same mechanism the original beta.parse used). Applied
+# to the OpenAI-SDK-driven providers; other backends fall back to their default method.
+_STRICT_JSON_SCHEMA: dict[str, Any] = {"method": "json_schema", "strict": True}
+_STRICT_SCHEMA_PROVIDERS: frozenset[str] = frozenset({"openai", "nvidia"})
 
 
 class LLMClient(Protocol):
@@ -66,8 +84,13 @@ class LangChainClient:
     regardless of backend.
     """
 
-    def __init__(self, model: BaseChatModel) -> None:
+    def __init__(
+        self, model: BaseChatModel, structured_kwargs: dict[str, Any] | None = None
+    ) -> None:
         self._model = model
+        # Per-provider Structured Outputs tuning (e.g. OpenAI/NVIDIA use strict json_schema,
+        # which is OpenAI's native Structured Outputs). Empty = the model's default method.
+        self._structured_kwargs = structured_kwargs or {}
 
     def complete(self, system_prompt: str, user_prompt: str) -> str:
         messages = [("system", system_prompt), ("human", user_prompt)]
@@ -80,7 +103,8 @@ class LangChainClient:
 
     def structured(self, system_prompt: str, user_prompt: str, schema: type[SchemaT]) -> SchemaT:
         messages = [("system", system_prompt), ("human", user_prompt)]
-        parsed = self._model.with_structured_output(schema).invoke(messages)
+        runnable = self._model.with_structured_output(schema, **self._structured_kwargs)
+        parsed = runnable.invoke(messages)
         if not isinstance(parsed, schema):
             logger.warning("llm_returned_no_parsed_output", schema=schema.__name__)
             raise ValueError("llm_returned_no_parsed_output")
@@ -96,6 +120,34 @@ def _require_key() -> str:
     return settings.llm_api_key
 
 
+def _openai_api_key() -> str:
+    """OpenAI key: prefer the generic setting, else the standard ``OPENAI_API_KEY`` env var.
+
+    Lets a user with an existing ``OPENAI_API_KEY`` drop in without duplicating it under the
+    ``E2E_HEALER_`` prefix.
+    """
+    key = settings.llm_api_key or os.environ.get("OPENAI_API_KEY", "")
+    if not key:
+        raise RuntimeError(
+            "E2E_HEALER_LLM_API_KEY or OPENAI_API_KEY is not set for provider=openai"
+        )
+    return key
+
+
+def _anthropic_api_key() -> str:
+    """Anthropic key: prefer the generic setting, else the standard ``ANTHROPIC_API_KEY`` env var.
+
+    Lets a user with an existing ``ANTHROPIC_API_KEY`` drop in without duplicating it under
+    the ``E2E_HEALER_`` prefix.
+    """
+    key = settings.llm_api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+    if not key:
+        raise RuntimeError(
+            "E2E_HEALER_LLM_API_KEY or ANTHROPIC_API_KEY is not set for provider=anthropic"
+        )
+    return key
+
+
 def _build_chat_model(provider: LLMProvider) -> BaseChatModel:
     """Construct the LangChain chat model for ``provider`` from settings (the factory core).
 
@@ -103,23 +155,49 @@ def _build_chat_model(provider: LLMProvider) -> BaseChatModel:
     ``max_tokens`` as pydantic aliases the type checker can't see on the constructor.
     """
     if provider == "anthropic":
+        if ChatAnthropic is None:
+            raise RuntimeError(
+                "provider=anthropic requires the optional 'anthropic' extra: "
+                'install it with pip install "ai-driven-e2e[anthropic]"'
+            )
+        # Anthropic has no OpenAI-style response_format; with_structured_output maps
+        # PatchOutput/ReviewOutput onto Claude tool-use (the default method), so the schema
+        # is still enforced. That's why anthropic is absent from _STRICT_SCHEMA_PROVIDERS.
         params: dict[str, Any] = {
             "model": settings.llm_model,
-            "api_key": _require_key(),
+            "api_key": _anthropic_api_key(),
             "max_tokens": settings.llm_max_tokens,
         }
         return ChatAnthropic(**params)
     if provider == "ollama":
-        # Ollama's OpenAI-compatible endpoint is local and needs no real credential.
+        if ChatOllama is None:
+            raise RuntimeError(
+                "provider=ollama requires the optional 'ollama' extra: "
+                'install it with pip install "ai-driven-e2e[ollama]"'
+            )
+        # Fully local, no API key. Ollama's native structured output (format=<json schema>,
+        # the default with_structured_output method) validates against PatchOutput/ReviewOutput;
+        # a parse/validation failure raises out of structured() so tenacity retries and, on
+        # exhaustion, the Patch Generator feedback loop kicks in (local models are less reliable
+        # at strict JSON). num_predict is Ollama's token-cap name.
         params = {
             "model": settings.llm_model,
             "base_url": settings.llm_base_url or _OLLAMA_DEFAULT_BASE_URL,
-            "api_key": settings.llm_api_key or _OLLAMA_PLACEHOLDER_KEY,
+            "num_predict": settings.llm_max_tokens,
+        }
+        return ChatOllama(**params)
+    if provider == "openai":
+        # Native OpenAI. base_url stays empty for api.openai.com, or points at an
+        # Azure / OpenAI-compatible endpoint via E2E_HEALER_LLM_BASE_URL.
+        params = {
+            "model": settings.llm_model,
+            "api_key": _openai_api_key(),
+            "base_url": settings.llm_base_url or None,
             "max_tokens": settings.llm_max_tokens,
         }
         return ChatOpenAI(**params)
-    # nvidia + openai are both driven by the OpenAI SDK. nvidia needs an explicit
-    # base_url; openai falls back to the SDK default when llm_base_url is empty.
+    # nvidia: OpenAI-compatible NIM endpoint driven by the OpenAI SDK; needs an explicit
+    # base_url (folded in from the legacy nvidia_* settings by the config layer).
     params = {
         "model": settings.llm_model,
         "api_key": _require_key(),
@@ -137,7 +215,9 @@ def _get_client() -> LLMClient:
     ``--help``; deferring it here keeps import side-effect-free and fails only when the
     LLM is actually called without a key configured.
     """
-    return LangChainClient(_build_chat_model(settings.llm_provider))
+    provider = settings.llm_provider
+    structured_kwargs = _STRICT_JSON_SCHEMA if provider in _STRICT_SCHEMA_PROVIDERS else {}
+    return LangChainClient(_build_chat_model(provider), structured_kwargs)
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
