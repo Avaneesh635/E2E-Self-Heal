@@ -34,8 +34,9 @@ export default function Home(): ReactNode {
   const {siteConfig} = useDocusaurusContext();
   return (
     <Layout
-      title={`Hello from ${siteConfig.title}`}
-      description="Description will go into a meta tag in <head />">
+      title={`${siteConfig.title} — Self-healing Playwright E2E tests`}
+      description="Auto-repair broken Playwright E2E tests with an AI agent. When a UI change breaks a selector, E2E-Healer diagnoses, patches the locator, verifies it against the live DOM, and re-runs until green — as a local CLI or a CI GitHub Action that opens a patch PR.">
+
       <HomepageHeader />
       <main>
         <HomepageFeatures />
