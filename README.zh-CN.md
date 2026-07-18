@@ -56,9 +56,11 @@ LangGraph 修复循环由以下部分组成：
 
 ## 演示（已通过端到端验证）
 
-[`examples/`](examples/) 项目复现了一个真实故障：页面中按钮的 ID 从 `submit-btn` 改为
-`submit` 后，`example.spec.ts` 会因超时而失败。使用有效的 NVIDIA API 密钥运行本引擎后，
-输出如下：
+[`examples/`](examples/) 项目是一个可运行的 **React + Vite** 应用，引擎会对其进行端到端
+修复。它以 **green**（绿色）状态提交——干净检出时，所有 spec 都能针对真实应用通过。
+应用某个场景的真实 `git diff` 即可将其破坏：[`id-rename`](examples/scenarios/id-rename/)
+场景把按钮 ID 从 `submit-btn` 改为 `submit`，于是 `scenarios/id-rename/spec.ts` 在
+`#submit-btn` 上超时。使用有效的 NVIDIA API 密钥运行本引擎后，输出如下：
 
 ```text
 diagnoser_finished
@@ -74,7 +76,7 @@ fixed after 0 loop(s)
 + await page.click("#submit");        # assertion on "Thanks!" left untouched
 ```
 
-复现步骤请参阅 [`examples/README.md`](examples/README.md)。
+复现步骤请参阅 [`examples/README.md`](examples/README.md)（演示使用 [pnpm](https://pnpm.io)）。
 
 ## 实际案例
 

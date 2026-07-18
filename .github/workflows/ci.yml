@@ -67,15 +67,20 @@ jobs:
         working-directory: examples
         run: pnpm exec playwright install chromium
 
-      - name: Verify demo fails on outdated selector
+      - name: Verify demo is green on a clean checkout
+        working-directory: examples
+        run: pnpm exec playwright test scenarios/id-rename
+
+      - name: Verify applying the change breaks the selector
         working-directory: examples
         run: |
+          git apply scenarios/id-rename/change.patch
           set +e
-          pnpm exec playwright test example.spec.ts
+          pnpm exec playwright test scenarios/id-rename
           code=$?
           set -e
           if [ "$code" -eq 0 ]; then
-            echo "Expected example.spec.ts to fail on #submit-btn"
+            echo "Expected scenarios/id-rename to fail on #submit-btn after applying change.patch"
             exit 1
           fi
           echo "Demo correctly reproduces the broken-selector failure"
@@ -129,15 +134,19 @@ jobs:
         working-directory: examples
         run: pnpm exec playwright install chromium
 
+      - name: Apply the breaking change
+        working-directory: examples
+        run: git apply scenarios/id-rename/change.patch
+
       - name: Capture failing Playwright log
         working-directory: examples
         run: |
           set +e
-          pnpm exec playwright test example.spec.ts 2>&1 | tee playwright.log
+          pnpm exec playwright test scenarios/id-rename 2>&1 | tee scenarios/id-rename/playwright.log
           set -e
 
       - name: Dry-run heal against demo
         working-directory: examples
         env:
           E2E_HEALER_NVIDIA_API_KEY: ${{ secrets.E2E_HEALER_NVIDIA_API_KEY }}
-        run: uv run e2e-healer example.spec.ts --log playwright.log --diff selector-rename.diff --dry-run
+        run: uv run e2e-healer scenarios/id-rename/spec.ts --log scenarios/id-rename/playwright.log --diff scenarios/id-rename/change.patch --dry-run

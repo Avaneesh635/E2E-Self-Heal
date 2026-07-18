@@ -113,9 +113,12 @@ comments — a ready-to-copy workflow lives in
 
 ## Demo (verified end-to-end)
 
-The [`examples/`](examples/) project reproduces a real break: the page's button id was
-renamed `submit-btn` → `submit`, so `example.spec.ts` times out. Running the healer against
-it (with a live NVIDIA key) produces:
+The [`examples/`](examples/) project is a runnable **React + Vite** app the engine heals
+end to end. It ships **green** — on a clean checkout every spec passes against the real app.
+Applying a scenario's real `git diff` breaks it: the
+[`id-rename`](examples/scenarios/id-rename/) scenario renames the button id
+`submit-btn` → `submit`, so `scenarios/id-rename/spec.ts` times out on `#submit-btn`.
+Running the healer against it (with a live NVIDIA key) produces:
 
 ```text
 diagnoser_finished
@@ -131,7 +134,8 @@ fixed after 0 loop(s)
 + await page.click("#submit");        # assertion on "Thanks!" left untouched
 ```
 
-Reproduce it yourself: see [`examples/README.md`](examples/README.md).
+Reproduce it yourself (the demo uses [pnpm](https://pnpm.io)): see
+[`examples/README.md`](examples/README.md).
 
 ## In practice
 
