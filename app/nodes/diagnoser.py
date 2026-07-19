@@ -6,7 +6,9 @@ import structlog
 
 from app.llm import generate_diagnosis
 from app.preprocess.aria_snapshot import abstract_snapshot
+from app.preprocess.jsx_chunker import chunk_for_line, extract_error_line
 from app.prompts.diagnoser import SYSTEM_PROMPT
+from app.config import settings
 from app.state import AgentState
 
 logger = structlog.get_logger(__name__)
@@ -22,7 +24,16 @@ def diagnoser(state: AgentState) -> dict:
     snapshot = abstract_snapshot(state.get("dom_snapshot", ""))
     if snapshot:
         user_prompt += f"ARIA page snapshot (at failure):\n{snapshot}\n\n"
-    user_prompt += f"Current test code:\n{state['current_code']}"
+    chunk = chunk_for_line(
+        state["current_code"],
+        extract_error_line(state["error_log"]),
+        margin=settings.jsx_chunk_margin_lines,
+    )
+    fallback_note = "whole-file fallback" if chunk.is_fallback else "semantic JSX chunk"
+    user_prompt += (
+        f"Current test code context ({fallback_note}, lines {chunk.start_line}-{chunk.end_line}):\n"
+        f"{chunk.source}"
+    )
     report = generate_diagnosis(SYSTEM_PROMPT, user_prompt)
     logger.info("diagnoser_finished")
     return {"analysis_report": report}
