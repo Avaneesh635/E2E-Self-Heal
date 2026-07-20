@@ -53,6 +53,11 @@ class Settings(BaseSettings):
         default="test-results",
         description="Playwright output dir holding error-context.md failure snapshots",
     )
+    jsx_chunk_margin_lines: int = Field(
+        default=1,
+        ge=0,
+        description="extra context lines around the enclosing JSX element chunk",
+    )
     sandbox_mode: str = Field(
         default="relaxed",
         description="sandbox mode: strict, relaxed, or off",
