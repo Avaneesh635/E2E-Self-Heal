@@ -333,62 +333,58 @@ def test_cli_heal_notifies_slack_single_file(monkeypatch, tmp_path) -> None:
     """Should notify Slack after healing a single file."""
     monkeypatch.chdir(tmp_path)
 
-    # Create a dummy playwright config
-    (tmp_path / "playwright.config.ts").write_text("export default {}")
+    # Mock the notification function and internal CLI dependencies
+    with (
+        patch("app.cli.notify_heal_outcome") as mock_notify,
+        patch("app.cli.run_playwright", return_value=(False, "error log")),
+        patch("app.cli._read_diff", return_value=""),
+        patch("app.cli.analyze_diff", return_value=[]),
+        patch("app.cli._heal_file") as mock_heal,
+    ):
+        mock_heal.return_value = RepairSummary(
+            test_script_path=str(tmp_path / "test.spec.ts"),
+            is_success=True,
+            loop_count=1,
+            instructions=[],
+        )
 
-    # Mock the notification function
-    with patch("app.cli.notify_heal_outcome") as mock_notify:
         runner = CliRunner()
-        # Create a dummy test file
         test_file = tmp_path / "test.spec.ts"
         test_file.write_text("test('dummy', () => {})")
 
-        # Mock run_playwright to return a failure then success
-        with patch("app.cli.run_playwright") as mock_run:
-            mock_run.return_value = (True, "")  # Test passes after heal
+        runner.invoke(app, ["heal", str(test_file)])
 
-            runner.invoke(app, ["heal", str(test_file)])
-
-            # Should have called notify_heal_outcome once
-            assert mock_notify.call_count == 1
-            # Verify it received a RepairSummary
-            call_args = mock_notify.call_args[0][0]
-            assert isinstance(call_args, RepairSummary)
+        # Should have called notify_heal_outcome once
+        assert mock_notify.call_count == 1
+        call_args = mock_notify.call_args[0][0]
+        assert isinstance(call_args, RepairSummary)
 
 
 def test_cli_heal_notifies_slack_suite(monkeypatch, tmp_path) -> None:
     """Should notify Slack for each result in a suite heal."""
     monkeypatch.chdir(tmp_path)
 
-    # Create a dummy playwright config
-    (tmp_path / "playwright.config.ts").write_text("export default {}")
+    # Mock the notification function and internal CLI dependencies
+    with (
+        patch("app.cli.notify_heal_outcome") as mock_notify,
+        patch("app.cli.run_playwright", return_value=(False, "error log")),
+        patch("app.cli._read_diff", return_value=""),
+        patch("app.cli.analyze_diff", return_value=[]),
+        patch("app.cli.scan_failing_tests", return_value=["test.spec.ts"]),
+        patch("app.cli._heal_file") as mock_heal,
+    ):
+        mock_heal.return_value = RepairSummary(
+            test_script_path="test.spec.ts",
+            is_success=True,
+            loop_count=1,
+            instructions=[],
+        )
 
-    # Mock the notification function
-    with patch("app.cli.notify_heal_outcome") as mock_notify:
         runner = CliRunner()
+        test_file = tmp_path / "test.spec.ts"
+        test_file.write_text("test('dummy', () => {})")
 
-        # Mock run_playwright to return failure
-        with patch("app.cli.run_playwright") as mock_run:
-            mock_run.return_value = (False, "Error: test failed")
+        runner.invoke(app, ["heal"])
 
-            # Mock scan_failing_tests to return one test
-            with patch("app.cli.scan_failing_tests") as mock_scan:
-                mock_scan.return_value = ["test.spec.ts"]
-
-                # Create the test file
-                test_file = tmp_path / "test.spec.ts"
-                test_file.write_text("test('dummy', () => {})")
-
-                # Mock the per-file rerun
-                with patch("app.cli._heal_file") as mock_heal:
-                    mock_heal.return_value = RepairSummary(
-                        test_script_path="test.spec.ts",
-                        is_success=True,
-                        loop_count=1,
-                        instructions=[],
-                    )
-
-                    runner.invoke(app, ["heal"])
-
-                    # Should have called notify_heal_outcome for each result
-                    assert mock_notify.call_count >= 1
+        # Should have called notify_heal_outcome for each result
+        assert mock_notify.call_count >= 1
