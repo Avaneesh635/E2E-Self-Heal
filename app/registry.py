@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 class FailureCause(str, Enum):
     """Categorized reasons why a selector failed."""
+
     ID_RENAME = "id_rename"
     CLASSNAME_CHANGE = "classname_change"
     TEXT_CHANGE = "text_change"
@@ -16,6 +17,7 @@ class FailureCause(str, Enum):
 
 class SelectorKind(str, Enum):
     """Categorized types of CSS/DOM selectors."""
+
     CSS_ID = "css_id"
     CSS_CLASS = "css_class"
     ROLE = "role"
@@ -27,6 +29,7 @@ class SelectorKind(str, Enum):
 
 class ComponentFailureStats(BaseModel):
     """Failure statistics aggregated for a specific UI component."""
+
     component: str
     total_failures: int = 0
     by_cause: dict[FailureCause, int] = Field(default_factory=dict)
@@ -36,6 +39,7 @@ class ComponentFailureStats(BaseModel):
 
 class AggregateFailureStats(BaseModel):
     """Aggregate failure statistics across multiple healing records."""
+
     components: dict[str, ComponentFailureStats] = Field(default_factory=dict)
     total_records: int = 0
     global_by_cause: dict[FailureCause, int] = Field(default_factory=dict)
@@ -47,6 +51,7 @@ class HealingRecord(BaseModel):
     """
     A single healing history record (as read from the v0.5.5 healing-history store).
     """
+
     test_script_path: str
     component: str
     original_selector: str
@@ -92,25 +97,24 @@ def aggregate_failure_stats(records: list[HealingRecord]) -> AggregateFailureSta
     Sorting ensures deterministic dictionary insertion order (Python 3.7+).
     """
     stats = AggregateFailureStats()
-    
+
     # Sort by component, then reason, then original_selector for strict determinism
-    sorted_records = sorted(
-        records, 
-        key=lambda r: (r.component, r.reason, r.original_selector)
-    )
-    
+    sorted_records = sorted(records, key=lambda r: (r.component, r.reason, r.original_selector))
+
     for record in sorted_records:
         stats.total_records += 1
-        
+
         cause = classify_failure_cause(record.reason)
         kind = classify_selector_kind(record.original_selector)
         pattern = record.original_selector  # Track the exact selector pattern
-        
+
         # Global aggregation
         stats.global_by_cause[cause] = stats.global_by_cause.get(cause, 0) + 1
         stats.global_by_selector_kind[kind] = stats.global_by_selector_kind.get(kind, 0) + 1
-        stats.global_by_selector_pattern[pattern] = stats.global_by_selector_pattern.get(pattern, 0) + 1
-        
+        stats.global_by_selector_pattern[pattern] = (
+            stats.global_by_selector_pattern.get(pattern, 0) + 1
+        )
+
         # Component aggregation
         if record.component not in stats.components:
             stats.components[record.component] = ComponentFailureStats(
@@ -120,11 +124,11 @@ def aggregate_failure_stats(records: list[HealingRecord]) -> AggregateFailureSta
                 by_selector_kind={},
                 by_selector_pattern={},
             )
-        
+
         comp_stats = stats.components[record.component]
         comp_stats.total_failures += 1
         comp_stats.by_cause[cause] = comp_stats.by_cause.get(cause, 0) + 1
         comp_stats.by_selector_kind[kind] = comp_stats.by_selector_kind.get(kind, 0) + 1
         comp_stats.by_selector_pattern[pattern] = comp_stats.by_selector_pattern.get(pattern, 0) + 1
-        
+
     return stats

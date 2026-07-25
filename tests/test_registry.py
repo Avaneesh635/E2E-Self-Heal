@@ -1,6 +1,5 @@
 """Tests for the Failed Test Registry aggregation (Issue #122)."""
 
-
 from app.registry import (
     FailureCause,
     HealingRecord,
@@ -62,21 +61,21 @@ def test_aggregate_failure_stats_counts():
             reason="className changed to primary",
         ),
     ]
-    
+
     stats = aggregate_failure_stats(records)
-    
+
     assert stats.total_records == 3
-    
+
     # Global counts
     assert stats.global_by_cause[FailureCause.ID_RENAME] == 2
     assert stats.global_by_cause[FailureCause.CLASSNAME_CHANGE] == 1
     assert stats.global_by_selector_kind[SelectorKind.CSS_ID] == 2
     assert stats.global_by_selector_kind[SelectorKind.CSS_CLASS] == 1
-    
+
     # Global pattern tracking
     assert stats.global_by_selector_pattern["#submit-btn"] == 2
     assert stats.global_by_selector_pattern[".btn-primary"] == 1
-    
+
     # Component counts
     assert len(stats.components) == 2
     assert "LoginButton" in stats.components
@@ -84,7 +83,7 @@ def test_aggregate_failure_stats_counts():
     assert stats.components["LoginButton"].by_cause[FailureCause.ID_RENAME] == 2
     assert stats.components["LoginButton"].by_selector_kind[SelectorKind.CSS_ID] == 2
     assert stats.components["LoginButton"].by_selector_pattern["#submit-btn"] == 2
-    
+
     assert "SubmitForm" in stats.components
     assert stats.components["SubmitForm"].total_failures == 1
     assert stats.components["SubmitForm"].by_cause[FailureCause.CLASSNAME_CHANGE] == 1
@@ -95,17 +94,41 @@ def test_aggregate_failure_stats_counts():
 def test_aggregate_failure_stats_deterministic_order():
     """Aggregation should produce the exact same result regardless of input order."""
     records1 = [
-        HealingRecord(component="B", original_selector="x", replacement_selector="y", reason="z", test_script_path="a"),
-        HealingRecord(component="A", original_selector="x", replacement_selector="y", reason="z", test_script_path="a"),
+        HealingRecord(
+            component="B",
+            original_selector="x",
+            replacement_selector="y",
+            reason="z",
+            test_script_path="a",
+        ),
+        HealingRecord(
+            component="A",
+            original_selector="x",
+            replacement_selector="y",
+            reason="z",
+            test_script_path="a",
+        ),
     ]
     records2 = [
-        HealingRecord(component="A", original_selector="x", replacement_selector="y", reason="z", test_script_path="a"),
-        HealingRecord(component="B", original_selector="x", replacement_selector="y", reason="z", test_script_path="a"),
+        HealingRecord(
+            component="A",
+            original_selector="x",
+            replacement_selector="y",
+            reason="z",
+            test_script_path="a",
+        ),
+        HealingRecord(
+            component="B",
+            original_selector="x",
+            replacement_selector="y",
+            reason="z",
+            test_script_path="a",
+        ),
     ]
-    
+
     stats1 = aggregate_failure_stats(records1)
     stats2 = aggregate_failure_stats(records2)
-    
+
     # Pydantic models compare by value, so this checks structural equality
     assert stats1 == stats2
 
@@ -142,19 +165,19 @@ def test_aggregate_failure_stats_tracks_selector_patterns():
             reason="className changed to primary",
         ),
     ]
-    
+
     stats = aggregate_failure_stats(records)
-    
+
     # Global pattern tracking
     assert stats.global_by_selector_pattern["#submit-btn"] == 2
     assert stats.global_by_selector_pattern["#cancel-btn"] == 1
     assert stats.global_by_selector_pattern[".btn-primary"] == 1
-    
+
     # Component pattern tracking
     assert stats.components["LoginButton"].by_selector_pattern["#submit-btn"] == 2
     assert stats.components["LoginButton"].by_selector_pattern["#cancel-btn"] == 1
     assert stats.components["SubmitForm"].by_selector_pattern[".btn-primary"] == 1
-    
+
     # Kind tracking still works
     assert stats.global_by_selector_kind[SelectorKind.CSS_ID] == 3
     assert stats.global_by_selector_kind[SelectorKind.CSS_CLASS] == 1
