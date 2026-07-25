@@ -76,7 +76,9 @@ def classify_selector_kind(selector: str) -> SelectorKind:
         return SelectorKind.CSS_ID
 
     # CSS class - but NOT .xpath (already handled above)
-    if selector.startswith(("[class", "css=")) or (selector.startswith(".") and not selector.startswith(".xpath")):
+    if selector.startswith(("[class", "css=")) or (
+        selector.startswith(".") and not selector.startswith(".xpath")
+    ):
         return SelectorKind.CSS_CLASS
 
     if selector.startswith(("[data-testid=", "[data-test=", "getbytestid")):
