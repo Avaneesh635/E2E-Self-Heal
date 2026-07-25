@@ -1,5 +1,6 @@
 """Failed Test Registry: aggregate failure-stats data model (Issue #122)."""
 
+import re
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -73,9 +74,6 @@ def classify_selector_kind(selector: str) -> SelectorKind:
     if selector.startswith(("text=", "getbytext")):
         return SelectorKind.TEXT
     return SelectorKind.OTHER
-
-
-import re
 
 
 def classify_failure_cause(reason: str) -> FailureCause:
