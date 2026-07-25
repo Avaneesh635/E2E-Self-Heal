@@ -72,11 +72,16 @@ def classify_selector_kind(selector: str) -> SelectorKind:
     if selector.startswith(("xpath=", "//")):
         return SelectorKind.XPATH
 
+    # Strip a "css=" prefix so the underlying payload drives ID vs class
+    # classification (e.g. "css=#main" -> CSS_ID, "css=.btn" -> CSS_CLASS),
+    # instead of always bucketing "css=" selectors as CSS_CLASS.
+    selector = selector.removeprefix("css=")
+
     if selector.startswith(("#", "[id=")):
         return SelectorKind.CSS_ID
 
     # CSS class - but NOT .xpath (already handled above)
-    if selector.startswith(("[class", "css=")) or (
+    if selector.startswith("[class") or (
         selector.startswith(".") and not selector.startswith(".xpath")
     ):
         return SelectorKind.CSS_CLASS

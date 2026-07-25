@@ -41,7 +41,7 @@ def test_classify_selector_kind():
 
     # Attribute selectors
     assert classify_selector_kind("[class*=btn]") == SelectorKind.CSS_CLASS
-    assert classify_selector_kind("css=#main") == SelectorKind.CSS_CLASS
+    assert classify_selector_kind("css=#main") == SelectorKind.CSS_ID
 
     # Other
     assert classify_selector_kind("div > span") == SelectorKind.OTHER
@@ -51,6 +51,12 @@ def test_classify_selector_kind_not_reachable_branches():
     """Ensure .xpath is NOT matched as CSS class (was unreachable before fix)."""
     # This should be OTHER, not CSS_CLASS (the .xpath branch was unreachable)
     assert classify_selector_kind(".xpath(//div)") == SelectorKind.OTHER
+
+
+def test_classify_selector_kind_css_prefix():
+    """The "css=" prefix should defer to the underlying payload, not force CSS_CLASS."""
+    assert classify_selector_kind("css=#main") == SelectorKind.CSS_ID
+    assert classify_selector_kind("css=.btn-primary") == SelectorKind.CSS_CLASS
 
 
 def test_classify_failure_cause_no_false_positives():
