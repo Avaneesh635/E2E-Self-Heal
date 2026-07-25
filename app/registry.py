@@ -101,30 +101,32 @@ def classify_failure_cause(reason: str) -> FailureCause:
     """Heuristically classify a failure reason into a FailureCause using word boundaries."""
     reason = reason.lower()
 
+    # Structural change: accept targeted structural terms only when paired with an
+    # explicit change cue or an explicit structural verb such as "refactored".
+    structural_pattern = r"\b(structur\w*|nest\w*|hierarch\w*|dom\s+structure)\b"
+    change_verb_pattern = r"\b(renamed?|changed|updated|removed|refactor\w*|restructur\w*|modified|rewritten?|moved)\b"
+
+    if re.search(structural_pattern, reason) and re.search(change_verb_pattern, reason):
+        return FailureCause.STRUCTURAL_CHANGE
+
     # Use word-boundary regexes for all checks to avoid false positives
-    # ID rename: matches "id", "identifier" + change verbs
-    if re.search(r"\b(id|identifier)\b", reason) and re.search(
-        r"\b(renamed?|changed|updated|removed)\b", reason
+    # ID rename: matches "id", "identifier", or test-id style terms + change verbs
+    if re.search(r"\b(id|identifier|testid)\b", reason) and re.search(
+        r"\b(renamed?|changed|updated|removed|refactored)\b", reason
     ):
         return FailureCause.ID_RENAME
 
     # Class name change: matches "class", "classname", "style" + change verbs
     if re.search(r"\b(class|classname|style)\b", reason) and re.search(
-        r"\b(renamed?|changed|updated|removed)\b", reason
+        r"\b(renamed?|changed|updated|removed|refactored)\b", reason
     ):
         return FailureCause.CLASSNAME_CHANGE
 
     # Text change: matches "text", "label", "content", "visible" + change verbs
     if re.search(r"\b(text|label|content|visible)\b", reason) and re.search(
-        r"\b(renamed?|changed|updated|removed)\b", reason
+        r"\b(renamed?|changed|updated|removed|refactored)\b", reason
     ):
         return FailureCause.TEXT_CHANGE
-
-    # Structural change: matches "structur", "dom", "nest", "hierarch" OR "refactor", "restructur"
-    if re.search(r"\b(structur|dom|nest|hierarch)\b", reason) or re.search(
-        r"\b(refactor|restructur)\b", reason
-    ):
-        return FailureCause.STRUCTURAL_CHANGE
 
     return FailureCause.OTHER
 
