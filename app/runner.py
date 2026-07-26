@@ -9,6 +9,7 @@ import shlex
 import signal
 import subprocess
 import sys
+from typing import Any
 
 import structlog
 
@@ -70,16 +71,17 @@ def run_playwright(test_path: str = "") -> tuple[bool, str]:
     # Launch in its own process group (POSIX) / group (Windows) so a timeout can reap the
     # entire tree — Playwright spawns browser and helper descendants that ``subprocess.run``
     # would otherwise leave orphaned.
+    group_kwargs: dict[str, Any] = (
+        {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        if sys.platform == "win32"
+        else {"start_new_session": True}
+    )
     process = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        **(
-            {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
-            if sys.platform == "win32"
-            else {"start_new_session": True}
-        ),
+        **group_kwargs,
     )
     try:
         stdout, stderr = process.communicate(timeout=timeout)
