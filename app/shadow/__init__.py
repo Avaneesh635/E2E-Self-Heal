@@ -4,6 +4,7 @@ Provides workspaces, snapshots, matching, and playwright mock injection.
 """
 
 from app.shadow.config import CleanupPolicy, ShadowConfig
+from app.shadow.content_addressed_snapshot_store import ContentAddressedSnapshotStore
 from app.shadow.injector import MockInjector
 from app.shadow.in_memory_snapshot_store import InMemorySnapshotStore
 from app.shadow.interfaces import (
@@ -71,4 +72,5 @@ __all__ = [
     "InvalidHarFileError",
     "ShadowWorkspace",
     "InMemorySnapshotStore",
+    "ContentAddressedSnapshotStore",
 ]
