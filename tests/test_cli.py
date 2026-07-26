@@ -1,6 +1,8 @@
 import json
 import re
+import subprocess
 from pathlib import Path
+from typing import NoReturn
 from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
@@ -207,8 +209,6 @@ def test_cli_diff_base_usage(mock_graph_success, monkeypatch, tmp_path) -> None:
 
     def mock_run(cmd, **kwargs):
         called_cmd.append(cmd)
-        import subprocess
-
         return subprocess.CompletedProcess(
             args=cmd, returncode=0, stdout="git diff output", stderr=""
         )
@@ -222,15 +222,13 @@ def test_cli_diff_base_usage(mock_graph_success, monkeypatch, tmp_path) -> None:
     assert called_cmd == [["git", "diff", "origin/main...HEAD"]]
 
 
-def test_cli_bad_diff_base_exits_2(monkeypatch, tmp_path) -> None:
+def test_cli_bad_diff_base_exits_2(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     test_file = tmp_path / "test.spec.ts"
     test_file.write_text("await page.click('#old')")
     log_file = tmp_path / "error.log"
     log_file.write_text("Timeout error")
 
-    def mock_run(cmd, **kwargs):
-        import subprocess
-
+    def mock_run(cmd: list[str], **kwargs: object) -> NoReturn:
         raise subprocess.CalledProcessError(
             returncode=128, cmd=cmd, stderr="fatal: bad revision 'nope...HEAD'"
         )
@@ -244,13 +242,13 @@ def test_cli_bad_diff_base_exits_2(monkeypatch, tmp_path) -> None:
     assert "Traceback" not in _strip_ansi(result.output)
 
 
-def test_cli_git_not_found_exits_2(monkeypatch, tmp_path) -> None:
+def test_cli_git_not_found_exits_2(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     test_file = tmp_path / "test.spec.ts"
     test_file.write_text("await page.click('#old')")
     log_file = tmp_path / "error.log"
     log_file.write_text("Timeout error")
 
-    def mock_run(cmd, **kwargs):
+    def mock_run(cmd: list[str], **kwargs: object) -> NoReturn:
         raise FileNotFoundError("git")
 
     monkeypatch.setattr(cli_module.subprocess, "run", mock_run)
