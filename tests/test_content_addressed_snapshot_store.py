@@ -90,8 +90,8 @@ def test_identical_payloads_map_to_one_object(tmp_path):
     assert len(refs) == 2
 
     # Both ids resolve to the same content hash.
-    hash_a = (store.refs_dir / "snap_a.ref").read_text(encoding="utf-8").strip()
-    hash_b = (store.refs_dir / "snap_b.ref").read_text(encoding="utf-8").strip()
+    hash_a = store._ref_path("snap_a").read_text(encoding="utf-8").strip()
+    hash_b = store._ref_path("snap_b").read_text(encoding="utf-8").strip()
     assert hash_a == hash_b
 
     # Each id round-trips with its own identity preserved.
@@ -150,8 +150,8 @@ def test_get_snapshot_not_found_raises_error(tmp_path):
 def test_get_snapshot_dangling_reference_raises_corruption(tmp_path):
     store = _make_store(tmp_path)
 
-    # A ref pointing at an object that was never written.
-    (store.refs_dir / "dangling.ref").write_text("deadbeef", encoding="utf-8")
+    # A ref pointing at a valid-looking hash whose object was never written.
+    store._ref_path("dangling").write_text("de" * 32, encoding="utf-8")
 
     with pytest.raises(SnapshotCorruptionError) as exc_info:
         store.get_snapshot("dangling")
@@ -162,9 +162,9 @@ def test_get_snapshot_corrupted_object_raises_corruption(tmp_path):
     store = _make_store(tmp_path)
 
     store.save_snapshot("snap", _make_snapshot("snap"))
-    content_hash = (store.refs_dir / "snap.ref").read_text(encoding="utf-8").strip()
+    content_hash = store._ref_path("snap").read_text(encoding="utf-8").strip()
     (store.objects_dir / f"{content_hash}.json").write_text("{bad-json:", encoding="utf-8")
 
     with pytest.raises(SnapshotCorruptionError) as exc_info:
         store.get_snapshot("snap")
-    assert "is not valid JSON" in str(exc_info.value)
+    assert "Failed to read or parse snapshot object" in str(exc_info.value)
