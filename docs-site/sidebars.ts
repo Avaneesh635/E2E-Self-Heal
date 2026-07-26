@@ -1,4 +1,4 @@
-import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
+import type { SidebarsConfig } from "@docusaurus/plugin-content-docs";
 
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
@@ -8,76 +8,73 @@ import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
  * prominent. Keep this file the single source of truth for section order.
  */
 const sidebars: SidebarsConfig = {
-  tutorialSidebar: [
-    {
-      type: 'category',
-      label: 'Getting Started',
-      collapsed: false,
-      items: [
-        'getting-started/introduction',
-        'getting-started/quickstart-github-action',
-        'getting-started/quickstart-cli',
-        'getting-started/heal-vs-review',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Guides',
-      items: [
-        'guides/auto-heal-on-pr',
-        'guides/pr-review-bot',
-        'guides/selector-verification',
-        'guides/suite-vs-single',
-        'guides/resilient-selectors',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Safety & Guardrails',
-      items: [
-        'safety/scope-guardrail',
-        'safety/sandbox-modes',
-        'safety/human-in-the-loop',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'How it works',
-      items: [
-        'architecture/repair-loop',
-        'architecture/data-preprocessor',
-        'architecture/langgraph-agent',
-        'architecture/selector-verifier',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Reference',
-      items: [
-        'reference/cli',
-        'reference/github-action',
-        'reference/configuration',
-        'reference/exit-codes',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Examples & Recipes',
-      items: [
-        'examples/demo-walkthrough',
-        'examples/breakage-patterns',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Community',
-      items: [
-        'community/contributing',
-        'community/changelog',
-        'community/security',
-      ],
-    },
-  ],
+    tutorialSidebar: [
+        {
+            type: "category",
+            label: "Getting Started",
+            collapsed: false,
+            items: [
+                "getting-started/introduction",
+                "getting-started/quickstart-github-action",
+                "getting-started/quickstart-cli",
+                "getting-started/heal-vs-review",
+            ],
+        },
+        {
+            type: "category",
+            label: "Guides",
+            items: [
+                "guides/auto-heal-on-pr",
+                "guides/pr-review-bot",
+                "guides/selector-verification",
+                "guides/suite-vs-single",
+                "guides/resilient-selectors",
+            ],
+        },
+        {
+            type: "category",
+            label: "Safety & Guardrails",
+            items: [
+                "safety/scope-guardrail",
+                "safety/sandbox-modes",
+                "safety/human-in-the-loop",
+            ],
+        },
+        {
+            type: "category",
+            label: "How it works",
+            items: [
+                "architecture/repair-loop",
+                "architecture/data-preprocessor",
+                "architecture/langgraph-agent",
+                "architecture/selector-verifier",
+            ],
+        },
+        {
+            type: "category",
+            label: "Reference",
+            items: [
+                "reference/cli",
+                "reference/github-action",
+                "reference/configuration",
+                "reference/exit-codes",
+            ],
+        },
+        {
+            type: "category",
+            label: "Examples & Recipes",
+            items: ["examples/demo-walkthrough", "examples/breakage-patterns"],
+        },
+        {
+            type: "category",
+            label: "Community",
+            items: [
+                "community/contributing",
+                "community/changelog",
+                "community/security",
+            ],
+        },
+    ],
 };
 
 export default sidebars;
