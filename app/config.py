@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     nvidia_max_tokens: int = Field(default=4096, description="completion token cap (legacy)")
     max_loops: int = Field(default=3, description="repair loop cap (Router termination)")
     playwright_cmd: str = Field(default="npx playwright test", description="Playwright invocation")
+    test_timeout_seconds: int = Field(
+        default=120,
+        gt=0,
+        description="max seconds a Playwright test run may take before it is killed and "
+        "treated as a failure (prevents a hung run from blocking the repair loop)",
+    )
     verify_selectors: bool = Field(
         default=True, description="verify patched selectors against the live DOM before re-running"
     )

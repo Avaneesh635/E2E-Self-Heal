@@ -7,41 +7,69 @@ from app.runner import run_playwright
 from app.sandbox import SandboxViolation
 
 
-def test_run_playwright_success(monkeypatch):
-    called = []
+class FakePopen:
+    """Minimal ``subprocess.Popen`` stand-in driven by scripted communicate() results."""
 
-    def mock_run(cmd, **kwargs):
-        called.append(cmd)
-        return subprocess.CompletedProcess(
-            args=cmd,
-            returncode=0,
-            stdout="Success stdout\n",
-            stderr="Success stderr\n",
-        )
+    def __init__(
+        self,
+        *,
+        returncode: int = 0,
+        output: tuple[str, str] = ("", ""),
+        timeout_first: bool = False,
+    ) -> None:
+        self.pid = 4242
+        self.returncode = returncode
+        self._output = output
+        self._timeout_first = timeout_first
+        self.communicate_calls = 0
+        self.killed = False
 
-    monkeypatch.setattr(subprocess, "run", mock_run)
+    def communicate(self, timeout: float | None = None) -> tuple[str, str]:
+        self.communicate_calls += 1
+        if self._timeout_first and self.communicate_calls == 1:
+            raise subprocess.TimeoutExpired(
+                cmd="npx",
+                timeout=timeout or 0,
+                output="partial stdout\n",
+                stderr="partial stderr\n",
+            )
+        return self._output
+
+    def poll(self) -> int | None:
+        return None if not self.killed else -9
+
+    def kill(self) -> None:
+        self.killed = True
+
+
+def test_run_playwright_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    called: list[tuple[list[str], dict[str, object]]] = []
+
+    def mock_popen(cmd: list[str], **kwargs: object) -> FakePopen:
+        called.append((cmd, kwargs))
+        return FakePopen(returncode=0, output=("Success stdout\n", "Success stderr\n"))
+
+    monkeypatch.setattr(subprocess, "Popen", mock_popen)
     monkeypatch.setattr(settings, "playwright_cmd", "npx playwright test")
 
     passed, log = run_playwright("tests/login.spec.ts")
 
     assert passed is True
     assert log == "Success stdout\nSuccess stderr\n"
-    assert called == [["npx", "playwright", "test", "tests/login.spec.ts"]]
+    assert called[0][0] == ["npx", "playwright", "test", "tests/login.spec.ts"]
+    # Child must run in its own process group / session so timeouts can reap the tree.
+    kwargs = called[0][1]
+    assert kwargs.get("start_new_session") or "creationflags" in kwargs
 
 
-def test_run_playwright_failure(monkeypatch):
-    called = []
+def test_run_playwright_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    called: list[list[str]] = []
 
-    def mock_run(cmd, **kwargs):
+    def mock_popen(cmd: list[str], **kwargs: object) -> FakePopen:
         called.append(cmd)
-        return subprocess.CompletedProcess(
-            args=cmd,
-            returncode=1,
-            stdout="Failure stdout\n",
-            stderr="Failure stderr\n",
-        )
+        return FakePopen(returncode=1, output=("Failure stdout\n", "Failure stderr\n"))
 
-    monkeypatch.setattr(subprocess, "run", mock_run)
+    monkeypatch.setattr(subprocess, "Popen", mock_popen)
     monkeypatch.setattr(settings, "playwright_cmd", "npx playwright test")
 
     passed, log = run_playwright()
@@ -51,16 +79,49 @@ def test_run_playwright_failure(monkeypatch):
     assert called == [["npx", "playwright", "test"]]
 
 
-def test_run_playwright_sandbox_violation(monkeypatch):
+def test_run_playwright_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    timeouts: list[float | None] = []
+    fake = FakePopen(output=("", ""), timeout_first=True)
+
+    def mock_popen(cmd: list[str], **kwargs: object) -> FakePopen:
+        return fake
+
+    def fake_terminate(process: FakePopen) -> None:
+        process.killed = True
+
+    monkeypatch.setattr(subprocess, "Popen", mock_popen)
+    monkeypatch.setattr("app.runner._terminate_process_tree", fake_terminate)
+    monkeypatch.setattr(settings, "playwright_cmd", "npx playwright test")
+    monkeypatch.setattr(settings, "test_timeout_seconds", 5)
+
+    original_communicate = fake.communicate
+
+    def tracking_communicate(timeout: float | None = None) -> tuple[str, str]:
+        timeouts.append(timeout)
+        return original_communicate(timeout=timeout)
+
+    fake.communicate = tracking_communicate
+
+    passed, log = run_playwright("tests/login.spec.ts")
+
+    assert passed is False
+    assert timeouts[0] == 5
+    assert fake.killed is True
+    assert "partial stdout" in log
+    assert "partial stderr" in log
+    assert "timed out after 5s" in log
+
+
+def test_run_playwright_sandbox_violation(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "playwright_cmd", "npx playwright test && rm -rf")
     called = False
 
-    def mock_run(cmd, **kwargs):
+    def mock_popen(cmd: list[str], **kwargs: object) -> FakePopen:
         nonlocal called
         called = True
-        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+        return FakePopen(returncode=0, output=("", ""))
 
-    monkeypatch.setattr(subprocess, "run", mock_run)
+    monkeypatch.setattr(subprocess, "Popen", mock_popen)
 
     with pytest.raises(SandboxViolation):
         run_playwright("tests/login.spec.ts")
