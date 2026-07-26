@@ -21,6 +21,8 @@ makes the store dedupe "identical responses" rather than identical keys.
 
 import hashlib
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -69,6 +71,28 @@ class ContentAddressedSnapshotStore(ISnapshotStore):
         return self.objects_dir / f"{content_hash}.json"
 
     @staticmethod
+    def _atomic_write_text(path: Path, text: str) -> None:
+        """Write ``text`` to ``path`` atomically via a sibling temp file.
+
+        The temp file is fully written, flushed, and fsync'd before being
+        ``os.replace``'d onto the target, so a reader never observes a partial
+        file. The temp file is removed if anything fails before the replace.
+        """
+        fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(text)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_name, path)
+        except BaseException:
+            try:
+                os.unlink(tmp_name)
+            except FileNotFoundError:
+                pass
+            raise
+
+    @staticmethod
     def _to_content(data: Any) -> dict[str, Any]:
         """Validate input and reduce it to hashable content (without the id)."""
         if isinstance(data, ShadowSnapshot):
@@ -101,12 +125,12 @@ class ContentAddressedSnapshotStore(ISnapshotStore):
         if not deduped:
             try:
                 serialized = json.dumps(content, sort_keys=True, indent=2)
-                object_path.write_text(serialized, encoding="utf-8")
+                self._atomic_write_text(object_path, serialized)
             except Exception as e:
                 raise SnapshotStoreError(f"Failed to write snapshot object to disk: {e}")
 
         try:
-            self._ref_path(snapshot_id).write_text(content_hash, encoding="utf-8")
+            self._atomic_write_text(self._ref_path(snapshot_id), content_hash)
         except Exception as e:
             raise SnapshotStoreError(f"Failed to write snapshot reference to disk: {e}")
 
