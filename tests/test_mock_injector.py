@@ -3,9 +3,19 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.shadow.config import MissPolicy
 from app.shadow.injector import MockInjector
 from app.shadow.matcher import NoMatchError, SnapshotMatcher
 from app.shadow.schemas import CapturedRequest, CapturedResponse, NetworkSnapshot
+
+
+def _make_request(url: str = "https://api.example.com/miss", method: str = "GET") -> MagicMock:
+    req = MagicMock()
+    req.method = method
+    req.url = url
+    req.headers = {}
+    req.post_data = None
+    return req
 
 
 def test_snapshot_matcher_exact_match():
@@ -217,3 +227,163 @@ def test_mock_injector_async_no_loop():
     # Since this test is sync and has no active event loop, inject_mock should raise RuntimeError
     with pytest.raises(RuntimeError, match="Cannot register async route"):
         injector.inject_mock("**/*", [])
+
+
+# --- Miss policy: strict (default) ---
+
+
+def test_miss_policy_defaults_to_strict():
+    injector = MockInjector(MagicMock())
+    assert injector.miss_policy is MissPolicy.STRICT
+
+
+def test_miss_policy_strict_aborts_sync():
+    mock_page = MagicMock()
+    mock_route = MagicMock()
+
+    injector = MockInjector(mock_page, miss_policy=MissPolicy.STRICT)
+    injector.inject_mock("**/*", [])
+
+    _, handler = mock_page.route.call_args[0]
+    handler(mock_route, _make_request())
+
+    mock_route.abort.assert_called_once_with("failed")
+    mock_route.continue_.assert_not_called()
+    mock_route.fetch.assert_not_called()
+    assert len(injector.unmatched_requests) == 1
+    assert injector.recorded_snapshots == []
+
+
+# --- Miss policy: lenient (fall back to live network) ---
+
+
+def test_miss_policy_lenient_continues_sync():
+    mock_page = MagicMock()
+    mock_route = MagicMock()
+
+    injector = MockInjector(mock_page, miss_policy=MissPolicy.LENIENT)
+    injector.inject_mock("**/*", [])
+
+    _, handler = mock_page.route.call_args[0]
+    handler(mock_route, _make_request())
+
+    mock_route.continue_.assert_called_once_with()
+    mock_route.abort.assert_not_called()
+    mock_route.fulfill.assert_not_called()
+    assert len(injector.unmatched_requests) == 1
+    assert injector.recorded_snapshots == []
+
+
+@pytest.mark.anyio
+async def test_miss_policy_lenient_continues_async():
+    mock_page = MagicMock()
+
+    async def async_route(pattern, handler):
+        mock_page.handler = handler
+
+    mock_page.route = async_route
+
+    injector = MockInjector(mock_page, miss_policy=MissPolicy.LENIENT)
+    task = injector.inject_mock("**/*", [])
+    assert task is not None
+    await task
+
+    mock_route = AsyncMock()
+    await mock_page.handler(mock_route, _make_request())
+
+    mock_route.continue_.assert_awaited_once_with()
+    mock_route.abort.assert_not_called()
+    assert len(injector.unmatched_requests) == 1
+
+
+# --- Miss policy: record-and-augment (capture the miss) ---
+
+
+def test_miss_policy_record_and_augment_sync():
+    req = CapturedRequest(method="GET", url="https://api.example.com/known")
+    res = CapturedResponse(status=200, body="cached")
+    existing = [NetworkSnapshot(request=req, response=res)]
+
+    mock_page = MagicMock()
+    mock_route = MagicMock()
+    api_response = MagicMock()
+    api_response.status = 201
+    api_response.headers = {"Content-Type": "application/json"}
+    api_response.body.return_value = b'{"live": true}'
+    mock_route.fetch.return_value = api_response
+
+    injector = MockInjector(mock_page, miss_policy=MissPolicy.RECORD_AND_AUGMENT)
+    injector.inject_mock("**/*", existing)
+
+    _, handler = mock_page.route.call_args[0]
+    handler(mock_route, _make_request(url="https://api.example.com/miss"))
+
+    # Live network was fetched and used to fulfil the request.
+    mock_route.fetch.assert_called_once_with()
+    mock_route.fulfill.assert_called_once_with(response=api_response)
+    mock_route.abort.assert_not_called()
+
+    # The miss was captured into the snapshot set (recorded + active matcher).
+    assert len(injector.recorded_snapshots) == 1
+    recorded = injector.recorded_snapshots[0]
+    assert recorded.request.url == "https://api.example.com/miss"
+    assert recorded.response.status == 201
+    assert recorded.response.body == '{"live": true}'
+    assert recorded.response.is_base64 is False
+    assert injector.matcher is not None
+    assert injector.matcher.snapshots[-1] is recorded
+    assert len(injector.matcher.snapshots) == 2
+    assert len(injector.unmatched_requests) == 1
+
+
+def test_miss_policy_record_and_augment_encodes_binary_sync():
+    raw_bytes = b"\xff\xfe\x00binary"
+
+    mock_page = MagicMock()
+    mock_route = MagicMock()
+    api_response = MagicMock()
+    api_response.status = 200
+    api_response.headers = {}
+    api_response.body.return_value = raw_bytes
+    mock_route.fetch.return_value = api_response
+
+    injector = MockInjector(mock_page, miss_policy=MissPolicy.RECORD_AND_AUGMENT)
+    injector.inject_mock("**/*", [])
+
+    _, handler = mock_page.route.call_args[0]
+    handler(mock_route, _make_request())
+
+    recorded = injector.recorded_snapshots[0]
+    assert recorded.response.is_base64 is True
+    assert base64.b64decode(recorded.response.body) == raw_bytes
+
+
+@pytest.mark.anyio
+async def test_miss_policy_record_and_augment_async():
+    mock_page = MagicMock()
+
+    async def async_route(pattern, handler):
+        mock_page.handler = handler
+
+    mock_page.route = async_route
+
+    injector = MockInjector(mock_page, miss_policy=MissPolicy.RECORD_AND_AUGMENT)
+    task = injector.inject_mock("**/*", [])
+    assert task is not None
+    await task
+
+    mock_route = AsyncMock()
+    api_response = MagicMock()
+    api_response.status = 200
+    api_response.headers = {"X-Live": "yes"}
+    api_response.body = AsyncMock(return_value=b"live-body")
+    mock_route.fetch = AsyncMock(return_value=api_response)
+
+    await mock_page.handler(mock_route, _make_request())
+
+    mock_route.fetch.assert_awaited_once_with()
+    mock_route.fulfill.assert_awaited_once_with(response=api_response)
+    assert len(injector.recorded_snapshots) == 1
+    assert injector.recorded_snapshots[0].response.body == "live-body"
+    assert injector.matcher is not None
+    assert len(injector.matcher.snapshots) == 1

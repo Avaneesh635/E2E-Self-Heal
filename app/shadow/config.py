@@ -11,6 +11,20 @@ class CleanupPolicy(str, Enum):
     NEVER = "never"
 
 
+class MissPolicy(str, Enum):
+    """How the mock injector reacts to a live request with no matching snapshot.
+
+    - ``STRICT``: abort the request so the miss surfaces as a test failure.
+    - ``LENIENT``: fall back to the live network and let the request through.
+    - ``RECORD_AND_AUGMENT``: fetch the live response, add it to the snapshot
+      set, and fulfil the request with the freshly recorded response.
+    """
+
+    STRICT = "strict"
+    LENIENT = "lenient"
+    RECORD_AND_AUGMENT = "record-and-augment"
+
+
 class ShadowConfig(BaseModel):
     """Shared, lightweight configuration for the Shadow Runtime.
 
@@ -44,4 +58,8 @@ class ShadowConfig(BaseModel):
     cleanup_policy: CleanupPolicy = Field(
         default=CleanupPolicy.ON_SUCCESS,
         description="when to remove workspace artifacts after a shadow run",
+    )
+    miss_policy: MissPolicy = Field(
+        default=MissPolicy.STRICT,
+        description="how to handle a live request with no matching snapshot",
     )

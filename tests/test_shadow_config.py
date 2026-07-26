@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.shadow import CleanupPolicy, ShadowConfig
+from app.shadow import CleanupPolicy, MissPolicy, ShadowConfig
 
 
 def test_shadow_config_is_importable_and_has_defaults():
@@ -12,6 +12,7 @@ def test_shadow_config_is_importable_and_has_defaults():
     assert config.tmp_dir == "tmp"
     assert config.offline is False
     assert config.cleanup_policy is CleanupPolicy.ON_SUCCESS
+    assert config.miss_policy is MissPolicy.STRICT
 
 
 def test_shadow_config_accepts_overrides():
@@ -39,3 +40,16 @@ def test_shadow_config_is_immutable():
 def test_invalid_cleanup_policy_is_rejected():
     with pytest.raises(ValidationError):
         ShadowConfig.model_validate({"cleanup_policy": "sometimes"})
+
+
+def test_miss_policy_accepts_string_value():
+    config = ShadowConfig.model_validate({"miss_policy": "record-and-augment"})
+    assert config.miss_policy is MissPolicy.RECORD_AND_AUGMENT
+
+    lenient = ShadowConfig.model_validate({"miss_policy": "lenient"})
+    assert lenient.miss_policy is MissPolicy.LENIENT
+
+
+def test_invalid_miss_policy_is_rejected():
+    with pytest.raises(ValidationError):
+        ShadowConfig.model_validate({"miss_policy": "ignore"})
