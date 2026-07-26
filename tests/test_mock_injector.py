@@ -355,6 +355,7 @@ def test_miss_policy_record_and_augment_encodes_binary_sync():
 
     recorded = injector.recorded_snapshots[0]
     assert recorded.response.is_base64 is True
+    assert recorded.response.body is not None
     assert base64.b64decode(recorded.response.body) == raw_bytes
 
 
