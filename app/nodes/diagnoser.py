@@ -14,8 +14,19 @@ from app.state import AgentState
 logger = structlog.get_logger(__name__)
 
 
+_DIAGNOSIS_UNAVAILABLE = (
+    "Diagnosis unavailable: the diagnosis provider call failed. "
+    "Proceed with the raw error log and DOM changes when generating a patch."
+)
+
+
 def diagnoser(state: AgentState) -> dict:
-    """Map the failing selector to the DOM change and produce an ``analysis_report``."""
+    """Map the failing selector to the DOM change and produce an ``analysis_report``.
+
+    On any LLM/provider failure, log and return a degraded but valid ``analysis_report``
+    rather than crashing the graph (Rule 10) — the Router can then still advance or
+    terminate gracefully.
+    """
     logger.info("diagnoser_started", loop_count=state["loop_count"])
     user_prompt = (
         f"Error log:\n{state['error_log']}\n\n"
@@ -34,6 +45,10 @@ def diagnoser(state: AgentState) -> dict:
         f"Current test code context ({fallback_note}, lines {chunk.start_line}-{chunk.end_line}):\n"
         f"{chunk.source}"
     )
-    report = generate_diagnosis(SYSTEM_PROMPT, user_prompt)
+    try:
+        report = generate_diagnosis(SYSTEM_PROMPT, user_prompt)
+    except Exception:
+        logger.exception("diagnosis_failed")
+        return {"analysis_report": _DIAGNOSIS_UNAVAILABLE}
     logger.info("diagnoser_finished")
     return {"analysis_report": report}
