@@ -4,8 +4,11 @@ Used both by the CLI's initial failure capture and by the Test Runner node, so t
 subprocess invocation lives in exactly one place.
 """
 
+import os
 import shlex
+import signal
 import subprocess
+import sys
 
 import structlog
 
@@ -24,6 +27,28 @@ def _as_text(stream: str | bytes | None) -> str:
     return stream
 
 
+def _terminate_process_tree(process: subprocess.Popen) -> None:
+    """Kill the process and all its descendants (Playwright browsers, helpers).
+
+    ``subprocess.run`` only kills the immediate child on timeout, which leaves orphaned
+    browser and helper processes behind. We launch the child in its own process group /
+    session (see ``run_playwright``) so the whole tree can be signalled at once.
+    """
+    if process.poll() is not None:
+        return
+    if sys.platform == "win32":
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+            capture_output=True,
+            check=False,
+        )
+        return
+    try:
+        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        process.kill()
+
+
 def run_playwright(test_path: str = "") -> tuple[bool, str]:
     """Run Playwright against a single test file, or the whole suite if ``test_path`` is empty.
 
@@ -34,18 +59,43 @@ def run_playwright(test_path: str = "") -> tuple[bool, str]:
     assert_command_allowed(cmd, reason="playwright")
     timeout = settings.test_timeout_seconds
     logger.info("playwright_run_started", cmd=cmd, timeout=timeout)
+    # Launch in its own process group (POSIX) / group (Windows) so a timeout can reap the
+    # entire tree — Playwright spawns browser and helper descendants that ``subprocess.run``
+    # would otherwise leave orphaned.
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        **(
+            {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+            if sys.platform == "win32"
+            else {"start_new_session": True}
+        ),
+    )
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        stdout, stderr = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired as exc:
         # A hung run (dead dev server, deadlocked waitForSelector, orphaned browser) must not
-        # block the repair loop. Kill it and surface it as an ordinary test failure so the
-        # caller refreshes error_log and increments loop_count — never crash the graph.
+        # block the repair loop. Kill the whole process tree and surface it as an ordinary
+        # test failure so the caller refreshes error_log and increments loop_count — never
+        # crash the graph.
+        _terminate_process_tree(process)
+        try:
+            drained_out, drained_err = process.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            drained_out, drained_err = "", ""
         logger.warning("test_run_timeout", path=test_path, timeout=timeout)
-        partial = _as_text(exc.stdout) + _as_text(exc.stderr)
+        partial = (
+            _as_text(exc.stdout)
+            + _as_text(exc.stderr)
+            + _as_text(drained_out)
+            + _as_text(drained_err)
+        )
         log = f"{partial}\nError: test run timed out after {timeout}s and was killed.".strip()
         return False, log
 
-    passed = result.returncode == 0
-    log = result.stdout + result.stderr
-    logger.info("playwright_run_finished", passed=passed, returncode=result.returncode)
+    passed = process.returncode == 0
+    log = _as_text(stdout) + _as_text(stderr)
+    logger.info("playwright_run_finished", passed=passed, returncode=process.returncode)
     return passed, log
