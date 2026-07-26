@@ -10,7 +10,13 @@ from app.sandbox import SandboxViolation
 class FakePopen:
     """Minimal ``subprocess.Popen`` stand-in driven by scripted communicate() results."""
 
-    def __init__(self, *, returncode=0, output=("", ""), timeout_first=False):
+    def __init__(
+        self,
+        *,
+        returncode: int = 0,
+        output: tuple[str, str] = ("", ""),
+        timeout_first: bool = False,
+    ) -> None:
         self.pid = 4242
         self.returncode = returncode
         self._output = output
@@ -18,25 +24,28 @@ class FakePopen:
         self.communicate_calls = 0
         self.killed = False
 
-    def communicate(self, timeout=None):
+    def communicate(self, timeout: float | None = None) -> tuple[str, str]:
         self.communicate_calls += 1
         if self._timeout_first and self.communicate_calls == 1:
             raise subprocess.TimeoutExpired(
-                cmd="npx", timeout=timeout, output="partial stdout\n", stderr="partial stderr\n"
+                cmd="npx",
+                timeout=timeout or 0,
+                output="partial stdout\n",
+                stderr="partial stderr\n",
             )
         return self._output
 
-    def poll(self):
+    def poll(self) -> int | None:
         return None if not self.killed else -9
 
-    def kill(self):
+    def kill(self) -> None:
         self.killed = True
 
 
-def test_run_playwright_success(monkeypatch):
-    called = []
+def test_run_playwright_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    called: list[tuple[list[str], dict[str, object]]] = []
 
-    def mock_popen(cmd, **kwargs):
+    def mock_popen(cmd: list[str], **kwargs: object) -> FakePopen:
         called.append((cmd, kwargs))
         return FakePopen(returncode=0, output=("Success stdout\n", "Success stderr\n"))
 
@@ -53,10 +62,10 @@ def test_run_playwright_success(monkeypatch):
     assert kwargs.get("start_new_session") or "creationflags" in kwargs
 
 
-def test_run_playwright_failure(monkeypatch):
-    called = []
+def test_run_playwright_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    called: list[list[str]] = []
 
-    def mock_popen(cmd, **kwargs):
+    def mock_popen(cmd: list[str], **kwargs: object) -> FakePopen:
         called.append(cmd)
         return FakePopen(returncode=1, output=("Failure stdout\n", "Failure stderr\n"))
 
@@ -70,14 +79,14 @@ def test_run_playwright_failure(monkeypatch):
     assert called == [["npx", "playwright", "test"]]
 
 
-def test_run_playwright_timeout(monkeypatch):
-    timeouts = []
+def test_run_playwright_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    timeouts: list[float | None] = []
     fake = FakePopen(output=("", ""), timeout_first=True)
 
-    def mock_popen(cmd, **kwargs):
+    def mock_popen(cmd: list[str], **kwargs: object) -> FakePopen:
         return fake
 
-    def fake_terminate(process):
+    def fake_terminate(process: FakePopen) -> None:
         process.killed = True
 
     monkeypatch.setattr(subprocess, "Popen", mock_popen)
@@ -87,7 +96,7 @@ def test_run_playwright_timeout(monkeypatch):
 
     original_communicate = fake.communicate
 
-    def tracking_communicate(timeout=None):
+    def tracking_communicate(timeout: float | None = None) -> tuple[str, str]:
         timeouts.append(timeout)
         return original_communicate(timeout=timeout)
 
@@ -103,11 +112,11 @@ def test_run_playwright_timeout(monkeypatch):
     assert "timed out after 5s" in log
 
 
-def test_run_playwright_sandbox_violation(monkeypatch):
+def test_run_playwright_sandbox_violation(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "playwright_cmd", "npx playwright test && rm -rf")
     called = False
 
-    def mock_popen(cmd, **kwargs):
+    def mock_popen(cmd: list[str], **kwargs: object) -> FakePopen:
         nonlocal called
         called = True
         return FakePopen(returncode=0, output=("", ""))
