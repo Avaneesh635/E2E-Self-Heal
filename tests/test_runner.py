@@ -51,6 +51,28 @@ def test_run_playwright_failure(monkeypatch):
     assert called == [["npx", "playwright", "test"]]
 
 
+def test_run_playwright_timeout(monkeypatch):
+    called = []
+
+    def mock_run(cmd, **kwargs):
+        called.append(kwargs.get("timeout"))
+        raise subprocess.TimeoutExpired(
+            cmd=cmd, timeout=kwargs["timeout"], output="partial stdout\n", stderr="partial stderr\n"
+        )
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    monkeypatch.setattr(settings, "playwright_cmd", "npx playwright test")
+    monkeypatch.setattr(settings, "test_timeout_seconds", 5)
+
+    passed, log = run_playwright("tests/login.spec.ts")
+
+    assert passed is False
+    assert called == [5]
+    assert "partial stdout" in log
+    assert "partial stderr" in log
+    assert "timed out after 5s" in log
+
+
 def test_run_playwright_sandbox_violation(monkeypatch):
     monkeypatch.setattr(settings, "playwright_cmd", "npx playwright test && rm -rf")
     called = False
