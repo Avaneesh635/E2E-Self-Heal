@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Any
 
+from app.shadow.match_options import MatchOptions
 from app.shadow.normalizer import RequestNormalizer
 from app.shadow.schemas import CapturedRequest
 
@@ -28,8 +29,10 @@ class MatchScorer:
         self,
         normalizer: RequestNormalizer | None = None,
         weights: ScoringWeights | None = None,
+        options: MatchOptions | None = None,
     ):
-        self.normalizer = normalizer or RequestNormalizer()
+        self.options = options or MatchOptions()
+        self.normalizer = normalizer or RequestNormalizer(self.options)
         self.weights = weights or ScoringWeights()
 
     def calculate_score(self, req1: CapturedRequest, req2: CapturedRequest) -> float:
@@ -74,6 +77,12 @@ class MatchScorer:
         headers1 = self.normalizer.normalize_headers(req1.headers)
         headers2 = self.normalizer.normalize_headers(req2.headers)
 
+        # Hard constraint: required headers must be present and equal on both sides.
+        for name in self.options.required_headers:
+            key = name.lower()
+            if key not in headers1 or key not in headers2 or headers1[key] != headers2[key]:
+                return -1.0
+
         if not headers1 and not headers2:
             score += self.weights.headers_max
         elif headers1 and headers2:
@@ -89,6 +98,10 @@ class MatchScorer:
         # 5. Request Body Match (up to body_max points)
         body1_norm = self.normalizer.normalize_body(req1.body)
         body2_norm = self.normalizer.normalize_body(req2.body)
+
+        # Hard constraint: bodies must match exactly (post-normalization).
+        if self.options.require_body_match and body1_norm != body2_norm:
+            return -1.0
 
         if not body1_norm and not body2_norm:
             score += self.weights.body_max

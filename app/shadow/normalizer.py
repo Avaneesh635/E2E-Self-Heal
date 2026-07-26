@@ -5,6 +5,8 @@ import re
 import urllib.parse
 from typing import Any
 
+from app.shadow.match_options import MatchOptions
+
 # Regex patterns for dynamic fields
 UUID_RE = re.compile(
     r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
@@ -47,6 +49,9 @@ DYNAMIC_HEADER_KEYS = {
 class RequestNormalizer:
     """Normalizes request parameters, paths, headers, and bodies to allow fuzzy matching."""
 
+    def __init__(self, options: MatchOptions | None = None):
+        self.options = options or MatchOptions()
+
     def normalize_value(self, val: str) -> str:
         """Replace UUIDs, timestamps, and nonces with placeholder tokens in strings."""
         if not isinstance(val, str):
@@ -67,22 +72,26 @@ class RequestNormalizer:
 
         # Normalize query params
         query_params = urllib.parse.parse_qs(parsed.query)
+        extra_ignored = {p.lower() for p in self.options.ignored_query_params}
         normalized_query = {}
         for k, vals in query_params.items():
             k_lower = k.lower()
-            if k_lower in DYNAMIC_PARAM_KEYS:
-                # Key is completely dynamic, skip it to prevent mismatching on dynamic nonces
+            if k_lower in DYNAMIC_PARAM_KEYS or k_lower in extra_ignored:
+                # Key is completely dynamic (or explicitly ignored), skip it to
+                # prevent mismatching on dynamic nonces.
                 continue
-            normalized_query[k] = [self.normalize_value(v) for v in vals]
+            key = k_lower if self.options.case_insensitive_query_keys else k
+            normalized_query[key] = [self.normalize_value(v) for v in vals]
 
         return normalized_path, normalized_query
 
     def normalize_headers(self, headers: dict[str, str]) -> dict[str, str]:
         """Normalize header values and filter out unstable headers."""
+        extra_ignored = {h.lower() for h in self.options.ignored_headers}
         normalized = {}
         for k, v in headers.items():
             k_lower = k.lower()
-            if k_lower in DYNAMIC_HEADER_KEYS:
+            if k_lower in DYNAMIC_HEADER_KEYS or k_lower in extra_ignored:
                 continue
             normalized[k_lower] = self.normalize_value(v)
         return normalized
@@ -112,7 +121,14 @@ class RequestNormalizer:
                     new_dict[k] = self._normalize_json_node(v)
             return new_dict
         elif isinstance(node, list):
-            return [self._normalize_json_node(item) for item in node]
+            items = [self._normalize_json_node(item) for item in node]
+            if self.options.order_insensitive_arrays:
+                # Canonicalize element order so a reordered array still compares
+                # equal. Serialize each element to a stable key for sorting.
+                items = sorted(
+                    items, key=lambda item: json.dumps(item, sort_keys=True, default=str)
+                )
+            return items
         elif isinstance(node, str):
             return self.normalize_value(node)
         else:
