@@ -92,7 +92,8 @@ def run_playwright(test_path: str = "") -> tuple[bool, str]:
             + _as_text(drained_out)
             + _as_text(drained_err)
         )
-        log = f"{partial}\nError: test run timed out after {timeout}s and was killed.".strip()
+        timeout_note = f"Error: test run timed out after {timeout}s and was killed."
+        log = f"{partial}\n{timeout_note}" if partial else timeout_note
         return False, log
 
     passed = process.returncode == 0
