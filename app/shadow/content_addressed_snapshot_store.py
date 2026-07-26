@@ -22,6 +22,7 @@ makes the store dedupe "identical responses" rather than identical keys.
 import hashlib
 import json
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,8 @@ from app.shadow.snapshot_store import (
 from app.shadow.workspace import ShadowWorkspace
 
 logger = structlog.get_logger(__name__)
+
+_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 
 
 class ContentAddressedSnapshotStore(ISnapshotStore):
@@ -149,6 +152,14 @@ class ContentAddressedSnapshotStore(ISnapshotStore):
             raise SnapshotNotFoundError(f"Snapshot '{snapshot_id}' does not exist.")
 
         content_hash = ref_path.read_text(encoding="utf-8").strip()
+        if not _SHA256_HEX.match(content_hash):
+            logger.exception(
+                "snapshot_ref_invalid", snapshot_id=snapshot_id, content_hash=content_hash
+            )
+            raise SnapshotCorruptionError(
+                f"Snapshot '{snapshot_id}' has an invalid content hash reference."
+            )
+
         object_path = self._object_path(content_hash)
         if not object_path.exists():
             logger.exception(
