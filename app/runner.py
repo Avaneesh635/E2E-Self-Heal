@@ -17,6 +17,10 @@ from app.sandbox import assert_command_allowed
 
 logger = structlog.get_logger(__name__)
 
+# Cleanup commands (e.g. Windows ``taskkill``) should return promptly; cap them so a
+# stalled kill cannot block ``run_playwright`` indefinitely.
+_TERMINATE_TIMEOUT_SECONDS = 10
+
 
 def _as_text(stream: str | bytes | None) -> str:
     """Coerce captured subprocess output to text (it is bytes when a timeout kills the run)."""
@@ -37,11 +41,15 @@ def _terminate_process_tree(process: subprocess.Popen) -> None:
     if process.poll() is not None:
         return
     if sys.platform == "win32":
-        subprocess.run(
-            ["taskkill", "/F", "/T", "/PID", str(process.pid)],
-            capture_output=True,
-            check=False,
-        )
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                capture_output=True,
+                check=False,
+                timeout=_TERMINATE_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired:
+            logger.warning("taskkill_timed_out", pid=process.pid)
         return
     try:
         os.killpg(os.getpgid(process.pid), signal.SIGKILL)
