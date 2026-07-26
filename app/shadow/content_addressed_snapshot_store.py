@@ -171,11 +171,13 @@ class ContentAddressedSnapshotStore(ISnapshotStore):
 
         try:
             content = json.loads(object_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError) as e:
             logger.exception(
                 "snapshot_object_corrupted", snapshot_id=snapshot_id, content_hash=content_hash
             )
-            raise SnapshotCorruptionError(f"Snapshot object is not valid JSON: {e}")
+            raise SnapshotCorruptionError(
+                f"Failed to read or parse snapshot object '{content_hash}': {e}"
+            ) from e
 
         try:
             return ShadowSnapshot(snapshot_id=snapshot_id, **content)
