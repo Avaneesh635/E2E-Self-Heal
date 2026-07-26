@@ -241,6 +241,7 @@ def test_cli_bad_diff_base_exits_2(monkeypatch, tmp_path) -> None:
     assert result.exit_code == 2
     assert "Cannot read git diff" in _strip_ansi(result.stderr)
     assert "bad revision" in _strip_ansi(result.stderr)
+    assert "Traceback" not in _strip_ansi(result.output)
 
 
 def test_cli_git_not_found_exits_2(monkeypatch, tmp_path) -> None:
@@ -257,6 +258,7 @@ def test_cli_git_not_found_exits_2(monkeypatch, tmp_path) -> None:
     result = runner.invoke(app, [str(test_file), "--log", str(log_file)])
     assert result.exit_code == 2
     assert "git executable not found" in _strip_ansi(result.stderr)
+    assert "Traceback" not in _strip_ansi(result.output)
 
 
 def test_cli_sandbox_violation_exits_2(monkeypatch, tmp_path) -> None:

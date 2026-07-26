@@ -98,7 +98,7 @@ def _read_diff(diff_file: Optional[Path], diff_base: Optional[str]) -> str:
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
     except FileNotFoundError as exc:
-        logger.exception("git_diff_failed", cmd=cmd, reason="git_not_found")
+        logger.error("git_diff_failed", cmd=cmd, reason="git_not_found", error=str(exc))
         console.print(
             Panel(
                 "git executable not found — is git installed and on PATH?",
@@ -108,8 +108,14 @@ def _read_diff(diff_file: Optional[Path], diff_base: Optional[str]) -> str:
         )
         raise typer.Exit(code=2) from exc
     except subprocess.CalledProcessError as exc:
-        logger.exception("git_diff_failed", cmd=cmd, returncode=exc.returncode)
         detail = (exc.stderr or "").strip() or "git exited with a non-zero status."
+        logger.error(
+            "git_diff_failed",
+            cmd=cmd,
+            returncode=exc.returncode,
+            error=str(exc),
+            stderr=detail,
+        )
         console.print(
             Panel(
                 f"{detail}\n\n"
