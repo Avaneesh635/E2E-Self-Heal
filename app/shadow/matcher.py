@@ -2,6 +2,7 @@
 
 import urllib.parse
 
+from app.shadow.match_options import MatchOptions
 from app.shadow.scoring import MatchScorer
 from app.shadow.schemas import CapturedRequest, CapturedResponse, NetworkSnapshot
 
@@ -23,15 +24,21 @@ class SnapshotMatcher:
         self,
         snapshots: list[NetworkSnapshot],
         scorer: MatchScorer | None = None,
+        options: MatchOptions | None = None,
     ):
         self.snapshots = snapshots
-        self.scorer = scorer or MatchScorer()
+        self.options = options or MatchOptions()
+        # An explicit scorer wins; otherwise build one configured with the options.
+        self.scorer = scorer or MatchScorer(options=self.options)
 
-    def match(self, request: CapturedRequest) -> CapturedResponse:
-        """Resolves the given captured request to the best-matching captured response.
+    def _best(self, request: CapturedRequest) -> tuple[NetworkSnapshot, float]:
+        """Scores all snapshots and returns the winning (snapshot, score) pair.
 
-        Scans all snapshots, scores them using the MatchScorer, and returns the response
-        of the highest scoring candidate. Resolves ties deterministically.
+        Deterministic conflict resolution/tie-breaking, sorting candidates by:
+        1. Score descending (highest score first)
+        2. Exact URL match (True comes before False)
+        3. Exact URL path match (True comes before False)
+        4. Original snapshot index ascending (stable, deterministic ordering)
         """
         candidates = []
 
@@ -43,12 +50,6 @@ class SnapshotMatcher:
         if not candidates:
             raise NoMatchError(request)
 
-        # Deterministic conflict resolution/tie-breaking:
-        # Sort candidates by:
-        # 1. Score descending (highest score first)
-        # 2. Exact URL match (True comes before False)
-        # 3. Exact URL path match (True comes before False)
-        # 4. Original snapshot index ascending (stable, deterministic ordering)
         def sort_key(item):
             score, idx, snapshot = item
             exact_url = request.url == snapshot.request.url
@@ -62,33 +63,19 @@ class SnapshotMatcher:
             return (-score, -int(exact_url), -int(exact_path), idx)
 
         candidates.sort(key=sort_key)
-        best_candidate = candidates[0]
+        score, _, snapshot = candidates[0]
+        return snapshot, score
 
-        return best_candidate[2].response
+    def match(self, request: CapturedRequest) -> CapturedResponse:
+        """Resolves the given captured request to the best-matching captured response.
+
+        Scans all snapshots, scores them using the MatchScorer, and returns the response
+        of the highest scoring candidate. Resolves ties deterministically.
+        """
+        snapshot, _ = self._best(request)
+        return snapshot.response
 
     def match_with_score(self, request: CapturedRequest) -> tuple[CapturedResponse, float]:
         """Resolves the given captured request and returns the response plus its similarity score."""
-        candidates = []
-
-        for idx, snapshot in enumerate(self.snapshots):
-            score = self.scorer.calculate_score(request, snapshot.request)
-            if score >= 0:
-                candidates.append((score, idx, snapshot))
-
-        if not candidates:
-            raise NoMatchError(request)
-
-        def sort_key(item):
-            score, idx, snapshot = item
-            exact_url = request.url == snapshot.request.url
-
-            p1 = urllib.parse.urlparse(request.url).path
-            p2 = urllib.parse.urlparse(snapshot.request.url).path
-            exact_path = p1 == p2
-
-            return (-score, -int(exact_url), -int(exact_path), idx)
-
-        candidates.sort(key=sort_key)
-        best_candidate = candidates[0]
-
-        return best_candidate[2].response, best_candidate[0]
+        snapshot, score = self._best(request)
+        return snapshot.response, score
