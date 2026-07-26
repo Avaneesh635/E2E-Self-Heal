@@ -222,6 +222,43 @@ def test_cli_diff_base_usage(mock_graph_success, monkeypatch, tmp_path) -> None:
     assert called_cmd == [["git", "diff", "origin/main...HEAD"]]
 
 
+def test_cli_bad_diff_base_exits_2(monkeypatch, tmp_path) -> None:
+    test_file = tmp_path / "test.spec.ts"
+    test_file.write_text("await page.click('#old')")
+    log_file = tmp_path / "error.log"
+    log_file.write_text("Timeout error")
+
+    def mock_run(cmd, **kwargs):
+        import subprocess
+
+        raise subprocess.CalledProcessError(
+            returncode=128, cmd=cmd, stderr="fatal: bad revision 'nope...HEAD'"
+        )
+
+    monkeypatch.setattr(cli_module.subprocess, "run", mock_run)
+    runner = CliRunner()
+    result = runner.invoke(app, [str(test_file), "--log", str(log_file), "--diff-base", "nope"])
+    assert result.exit_code == 2
+    assert "Cannot read git diff" in _strip_ansi(result.stderr)
+    assert "bad revision" in _strip_ansi(result.stderr)
+
+
+def test_cli_git_not_found_exits_2(monkeypatch, tmp_path) -> None:
+    test_file = tmp_path / "test.spec.ts"
+    test_file.write_text("await page.click('#old')")
+    log_file = tmp_path / "error.log"
+    log_file.write_text("Timeout error")
+
+    def mock_run(cmd, **kwargs):
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr(cli_module.subprocess, "run", mock_run)
+    runner = CliRunner()
+    result = runner.invoke(app, [str(test_file), "--log", str(log_file)])
+    assert result.exit_code == 2
+    assert "git executable not found" in _strip_ansi(result.stderr)
+
+
 def test_cli_sandbox_violation_exits_2(monkeypatch, tmp_path) -> None:
     test_file = tmp_path / "test.spec.ts"
     test_file.write_text("await page.click('#old')")

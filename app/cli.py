@@ -95,7 +95,30 @@ def _read_diff(diff_file: Optional[Path], diff_base: Optional[str]) -> str:
         return diff_file.read_text()
     cmd = ["git", "diff", f"{diff_base}...HEAD"] if diff_base else ["git", "diff"]
     assert_command_allowed(cmd, reason="git_diff")
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except FileNotFoundError as exc:
+        logger.exception("git_diff_failed", cmd=cmd, reason="git_not_found")
+        console.print(
+            Panel(
+                "git executable not found — is git installed and on PATH?",
+                title="Cannot read git diff",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(code=2) from exc
+    except subprocess.CalledProcessError as exc:
+        logger.exception("git_diff_failed", cmd=cmd, returncode=exc.returncode)
+        detail = (exc.stderr or "").strip() or "git exited with a non-zero status."
+        console.print(
+            Panel(
+                f"{detail}\n\n"
+                "Check that --diff-base is a valid ref and that this is a git repository.",
+                title="Cannot read git diff",
+                border_style="red",
+            )
+        )
+        raise typer.Exit(code=2) from exc
     return result.stdout
 
 
