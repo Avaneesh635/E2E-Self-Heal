@@ -55,8 +55,13 @@ class ContentAddressedSnapshotStore(ISnapshotStore):
         self.refs_dir.mkdir(parents=True, exist_ok=True)
 
     def _ref_path(self, snapshot_id: str) -> Path:
-        """Return the reference file path for a snapshot id (traversal-safe)."""
-        safe_id = Path(snapshot_id).name
+        """Return the reference file path for a snapshot id (traversal-safe).
+
+        The filename is a sha256 of the full ``snapshot_id`` so distinct ids map
+        to distinct refs (no collisions from stripping path components) while the
+        hex digest keeps the path traversal-safe.
+        """
+        safe_id = hashlib.sha256(snapshot_id.encode("utf-8")).hexdigest()
         return self.refs_dir / f"{safe_id}.ref"
 
     def _object_path(self, content_hash: str) -> Path:
