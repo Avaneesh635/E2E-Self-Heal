@@ -47,7 +47,7 @@ class ContentAddressedSnapshotStore(ISnapshotStore):
     :class:`ShadowSnapshot`.
     """
 
-    def __init__(self, workspace: ShadowWorkspace):
+    def __init__(self, workspace: ShadowWorkspace) -> None:
         self.workspace = workspace
         self.objects_dir = workspace.snapshots_dir / "objects"
         self.refs_dir = workspace.snapshots_dir / "refs"
