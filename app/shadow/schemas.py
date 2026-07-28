@@ -3,11 +3,11 @@
 import re
 from ipaddress import ip_address
 
-from typing import Annotated, Any, Literal, TypeAlias
+from typing import Annotated, Any, Literal, Self, TypeAlias
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import AwareDatetime, BaseModel, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, Field, field_validator, model_validator
 
 
 class CapturedRequest(BaseModel):
@@ -134,6 +134,13 @@ class CookieSnapshot(BaseModel):
         if value != -1.0 and value < 0:
             raise ValueError("cookie expires must be -1 or a non-negative Unix timestamp")
         return value
+
+    @model_validator(mode="after")
+    def validate_same_site_security(self) -> Self:
+        """Reject SameSite=None cookies that browsers would discard as insecure."""
+        if self.same_site == "None" and not self.secure:
+            raise ValueError("cookies with same_site='None' must set secure=True")
+        return self
 
 
 class ClockSnapshot(BaseModel):

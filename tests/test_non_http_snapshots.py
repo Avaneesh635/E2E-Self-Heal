@@ -80,6 +80,26 @@ def test_cookie_snapshot_rejects_invalid_fields(field: str, value: object) -> No
         CookieSnapshot.model_validate(data)
 
 
+def test_cookie_snapshot_requires_secure_for_same_site_none() -> None:
+    with pytest.raises(ValidationError):
+        CookieSnapshot(
+            name="cross-site",
+            value="token",
+            domain="example.com",
+            same_site="None",
+            secure=False,
+        )
+
+    cookie = CookieSnapshot(
+        name="cross-site",
+        value="token",
+        domain="example.com",
+        same_site="None",
+        secure=True,
+    )
+    assert cookie.secure is True
+
+
 def test_clock_snapshot_requires_aware_time_and_valid_timezone() -> None:
     snapshot = ClockSnapshot(
         fixed_at=datetime(2026, 7, 28, tzinfo=timezone.utc),
