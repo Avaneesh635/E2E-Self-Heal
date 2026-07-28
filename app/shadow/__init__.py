@@ -3,6 +3,8 @@
 Provides workspaces, snapshots, matching, and playwright mock injection.
 """
 
+from app.shadow.browser_state import capture_browser_state, to_playwright_storage_state
+
 from app.shadow.config import CleanupPolicy, MissPolicy, ShadowConfig
 from app.shadow.injector import MockInjector
 from app.shadow.in_memory_snapshot_store import InMemorySnapshotStore
@@ -20,9 +22,13 @@ from app.shadow.runtime import ShadowRuntime
 from app.shadow.schemas import (
     CapturedRequest,
     CapturedResponse,
+    ClockSnapshot,
+    CookieSnapshot,
+    LocalStorageSnapshot,
     NetworkSnapshot,
     ShadowRunResult,
     ShadowSnapshot,
+    StateSnapshot,
 )
 from app.shadow.scoring import MatchScorer, ScoringWeights
 from app.shadow.snapshot_store import (
@@ -48,6 +54,8 @@ __all__ = [
     "CleanupPolicy",
     "MissPolicy",
     "MockInjector",
+    "capture_browser_state",
+    "to_playwright_storage_state",
     "ShadowConfig",
     "ShadowRuntime",
     "SnapshotMatcher",
@@ -58,7 +66,11 @@ __all__ = [
     "ScoringWeights",
     "CapturedRequest",
     "CapturedResponse",
+    "ClockSnapshot",
+    "CookieSnapshot",
+    "LocalStorageSnapshot",
     "NetworkSnapshot",
+    "StateSnapshot",
     "ShadowSnapshot",
     "ShadowRunResult",
     "SnapshotStore",

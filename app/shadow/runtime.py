@@ -19,6 +19,7 @@ from playwright.sync_api import sync_playwright
 
 from app.config import settings
 from app.sandbox import assert_command_allowed, assert_read_allowed, assert_write_allowed
+from app.shadow.browser_state import to_playwright_storage_state
 from app.shadow.config import ShadowConfig
 from app.shadow.context import ShadowContext
 from app.shadow.injector import MockInjector
@@ -168,7 +169,11 @@ def run_shadow(
             # network request made by the test is intercepted and fulfilled from
             # the snapshot data.
             injector = MockInjector(miss_policy=cfg.miss_policy)
-            context = browser.new_context()
+            storage_state = to_playwright_storage_state(snapshot.state_snapshots)
+            if storage_state is None:
+                context = browser.new_context()
+            else:
+                context = browser.new_context(storage_state=storage_state)
             try:
                 injector.inject_mock(context, snapshot.network_snapshots)
 
