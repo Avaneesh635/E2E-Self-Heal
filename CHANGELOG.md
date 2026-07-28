@@ -6,14 +6,100 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.5.0-pre] - 2026-07-28
+
+Preview release. Everything below is shipped and tested, but the surfaces added here
+(registry, notifications, selector hints, Shadow extensions) may still change before `0.5.0`.
+
 ### Added
-- `e2e-healer init` command — scaffolds a starter GitHub Actions workflow so a repo can wire
-  the healer into CI in one step (#144).
-- Architecture-boundary enforcement in the Patch Generator — patches are constrained to stay
-  within configured module boundaries and can no longer leak across architectural lines.
+- **Failed Test Registry** (`app/registry.py`) — aggregate failure statistics for the heal
+  loop: per-component and per-selector-pattern tracking, with categorized `FailureCause`
+  (id rename, className change, text change, structural change) and `SelectorKind`
+  (css id/class, role, test id, xpath, text) models (#122).
+- **Slack notifications** for heal outcomes — posts a block-formatted summary to an incoming
+  webhook set via `E2E_HEALER_SLACK_WEBHOOK_URL` (a no-op when unset). Retries are handled by
+  tenacity and deliberately only fire on transient failures (network errors, HTTP 429/5xx);
+  4xx responses fail fast instead of hammering a bad webhook (#124).
+- **`e2e-healer init` readiness report** — inspects the repo (Playwright config, discovered
+  spec files and their directories, `playwright` in `package.json`, configured LLM provider
+  and API key) and prints a rich status table. `--scaffold` additionally writes a starter
+  GitHub Actions workflow so a repo can wire the healer into CI in one step, and `--force`
+  overwrites an existing one (#126, #144).
+- **`--selector-hint`** on `heal` — accepts a JSON `SelectorHint` (`role` / `testid` / `text`
+  / `css`, plus the original selector and a confidence score) so a human, or a DOM picker,
+  can pinpoint the intended target instead of leaving it to inference (#119).
+- **Framework-adaptive patch prompts** — the Patch Generator detects React / Vue / Svelte
+  (from the diff's file extensions, the test's imports, and nearby `package.json`
+  dependencies) and appends framework-specific selector guidance to the system prompt.
+  Detection is token-aware so an unrelated dependency name can't shadow the real framework,
+  and unknown stacks fall back to generic guidance. The core integrity guardrail is
+  appended to, never weakened.
+- **Semantic JSX chunker** (`app/preprocess/jsx_chunker.py`) — locates the failing line and
+  sends only the enclosing JSX element to the LLM instead of the whole file, bounding context
+  cost. Configurable via `E2E_HEALER_JSX_CHUNK_MARGIN_LINES`, with a line-window fallback
+  when tree-sitter is unavailable.
+- **Architecture-boundary enforcement** in the Patch Generator — `E2E_HEALER_ARCHITECTURE_ALLOW_GLOBS`
+  / `E2E_HEALER_ARCHITECTURE_DENY_GLOBS` constrain which paths a generated patch may touch.
+  A violation is recorded to the new `boundary_report` state field and aborts the patch
+  rather than letting it leak across architectural lines.
+- **Markdown report generator** (`app/core/report/generator.ts`) — renders a run summary
+  (problem, before/after DOM, diagnosis, patch, pass/fail) as Markdown, with absolute-path
+  redaction and code-fence escaping so report content can't break the surrounding document
+  (#136).
+- **Configurable test-run timeout** — `E2E_HEALER_TEST_TIMEOUT_SECONDS` (default 120) caps a
+  Playwright run so a hung test (dead dev server, deadlocked `waitForSelector`) can no longer
+  stall the repair loop.
+- Shadow Testing extension points, behind the `I*` interfaces:
+  - **HAR trace parser** (`har_parser.py`, `har_entry.py`) — build snapshots from a standard
+    HTTP Archive file, alongside the existing Playwright trace parser.
+  - **Content-addressed snapshot store** — payloads are stored under a SHA-256 of their
+    canonical content with a small per-id ref pointing at it, so identical responses
+    deduplicate to one object and snapshot sets become diffable. Implements the existing
+    `ISnapshotStore` contract, so it drops in without touching call sites.
+  - **Configurable miss policy** — `strict`, `lenient`, or `record-and-augment` for requests
+    with no matching snapshot.
+  - **Opt-in richer matching** (`MatchOptions`) — extra ignored/case-insensitive query params,
+    headers promoted to hard match requirements, exact normalized-body matching, and
+    order-insensitive JSON array comparison. Every field defaults to the previous behavior,
+    so an unconfigured matcher is unchanged.
+  - **Non-HTTP snapshots** — cookies, `localStorage`, and clock state captured from and
+    restored to a Playwright browser context, so replay covers more than the network layer.
 - Real **React + Vite** demo app under `examples/` with an id-rename breakage scenario, for
   reproducible end-to-end tests.
 - Documentation site (Docusaurus) with GitHub Pages deploy, SEO/GEO metadata, and analytics.
+- RFC for a Chrome Extension ↔ CLI bridge (DOM picker → `--selector-hint`), in
+  `docs/rfc_dom_picker_cli_bridge.md` (#140).
+
+### Changed
+- Test Runner rebuilt on `subprocess.Popen` with an explicit process group (POSIX
+  `start_new_session`, Windows `CREATE_NEW_PROCESS_GROUP`), so a timed-out run can reap the
+  entire tree — Playwright's browser and helper descendants included — instead of orphaning
+  them. A timeout surfaces as an ordinary test failure (refreshing `error_log` and
+  incrementing `loop_count`) rather than an exception, keeping the graph alive.
+- Patch application hardened: patch instructions are validated against the current code
+  before being applied, with the outcome recorded in the new `patch_application_report`
+  state field, plus line-ending preservation and a safety net for malformed edits.
+- `examples/` migrated from npm to pnpm; CI pinned to Node 22+ with a matching pnpm version.
+- Docs and roadmap reconciled with what actually shipped; READMEs updated.
+- Reviewer auto-assignment workflow made resilient to non-collaborators.
+
+### Fixed
+- Diff/HAR robustness: HAR scalar fields are validated and compatibility edge cases handled
+  before a snapshot is built.
+- Snapshot store correctness: objects and refs publish atomically, a referenced hash is
+  validated before it is turned into a path, snapshot-id normalization is no longer lossy,
+  and unreadable objects are normalized into the store's error hierarchy instead of raising
+  raw I/O errors.
+- Framework detection reads `package.json` as explicit UTF-8.
+- The JSX chunk margin is validated instead of trusted.
+- Diagnoser LLM calls are wrapped in `try/except`; subprocess failures are caught and logged
+  with `logger.exception()` rather than `logger.error()`.
+- `ContentAddressedSnapshotStore` is exported from `app.shadow`.
+
+### Security
+- Browser-state snapshots hardened — cookie and storage entries returned by Playwright are
+  validated on the way in, and `Secure` / `SameSite` attributes are enforced on restore so a
+  replayed cookie can't be downgraded relative to how it was captured.
 
 ## [0.4.0] - 2026-07-17
 
@@ -93,7 +179,8 @@ All notable changes to this project are documented here. The format is based on
 - LLM provider migrated from OpenAI to NVIDIA NIM (`openai/gpt-oss-120b`) via the
   OpenAI-compatible endpoint; Structured Outputs guardrail retained.
 
-[Unreleased]: https://github.com/Lee-Dongwook/E2E-Self-Heal/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Lee-Dongwook/E2E-Self-Heal/compare/v0.5-pre...HEAD
+[0.5.0-pre]: https://github.com/Lee-Dongwook/E2E-Self-Heal/compare/v0.4.0...v0.5-pre
 [0.4.0]: https://github.com/Lee-Dongwook/E2E-Self-Heal/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Lee-Dongwook/E2E-Self-Heal/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/Lee-Dongwook/E2E-Self-Heal/compare/v0.2.0...v0.2.2
