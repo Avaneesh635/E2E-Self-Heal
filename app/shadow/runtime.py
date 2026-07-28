@@ -167,7 +167,7 @@ def run_shadow(
             # Attach a MockInjector to a fresh browser context so that every
             # network request made by the test is intercepted and fulfilled from
             # the snapshot data.
-            injector = MockInjector()
+            injector = MockInjector(miss_policy=cfg.miss_policy)
             context = browser.new_context()
             try:
                 injector.inject_mock(context, snapshot.network_snapshots)
