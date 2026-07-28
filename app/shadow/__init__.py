@@ -13,6 +13,7 @@ from app.shadow.interfaces import (
     ISnapshotStore,
     ITraceParser,
 )
+from app.shadow.match_options import MatchOptions
 from app.shadow.matcher import NoMatchError, SnapshotMatcher
 from app.shadow.normalizer import RequestNormalizer
 from app.shadow.runtime import ShadowRuntime
@@ -51,6 +52,7 @@ __all__ = [
     "ShadowRuntime",
     "SnapshotMatcher",
     "NoMatchError",
+    "MatchOptions",
     "RequestNormalizer",
     "MatchScorer",
     "ScoringWeights",
@@ -70,4 +72,5 @@ __all__ = [
     "InvalidHarFileError",
     "ShadowWorkspace",
     "InMemorySnapshotStore",
+    "ContentAddressedSnapshotStore",
 ]
