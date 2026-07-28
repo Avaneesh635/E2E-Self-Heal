@@ -42,12 +42,7 @@ def _extract_jsx_elements_regex(code_text: str) -> list[dict[str, Any]]:
         attrs: dict[str, str] = {}
         for attr_match in _ATTR_RE.finditer(body):
             name = attr_match.group(1)
-            value = (
-                attr_match.group(2)
-                or attr_match.group(3)
-                or attr_match.group(4)
-                or ""
-            )
+            value = attr_match.group(2) or attr_match.group(3) or attr_match.group(4) or ""
             attrs[name] = value
         elements.append({"tag": tag, "attributes": attrs})
     return elements
@@ -92,16 +87,14 @@ def _extract_jsx_elements_tree_sitter(code_text: str) -> list[dict[str, Any]]:
                             "property_identifier",
                             "jsx_namespace_name",
                         ):
-                            name = code_bytes[
-                                attr_child.start_byte : attr_child.end_byte
-                            ].decode("utf-8", errors="ignore")
+                            name = code_bytes[attr_child.start_byte : attr_child.end_byte].decode(
+                                "utf-8", errors="ignore"
+                            )
                         elif attr_child.type == "string":
                             val_text = code_bytes[
                                 attr_child.start_byte : attr_child.end_byte
                             ].decode("utf-8", errors="ignore")
-                            if val_text.startswith(('"', "'")) and val_text.endswith(
-                                ('"', "'")
-                            ):
+                            if val_text.startswith(('"', "'")) and val_text.endswith(('"', "'")):
                                 value = val_text[1:-1]
                             else:
                                 value = val_text
@@ -188,9 +181,7 @@ def _analyze(git_diff: str, extract: Extractor) -> list[DomDiff]:
                 rem_el = extract(rem_text)
                 add_el = extract(add_text)
                 for prev, curr in _pair_elements(rem_el, add_el):
-                    diffs.append(
-                        DomDiff(file=current_file, previous=prev, current=curr)
-                    )
+                    diffs.append(DomDiff(file=current_file, previous=prev, current=curr))
         hunks.clear()
 
     for line in git_diff.splitlines():
