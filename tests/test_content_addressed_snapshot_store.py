@@ -38,7 +38,7 @@ def test_implements_isnapshot_store_interface(tmp_path):
     assert isinstance(store, ISnapshotStore)
 
 
-def test_content_addressed_store_is_publicly_exported():
+def test_content_addressed_store_is_publicly_exported() -> None:
     assert shadow.ContentAddressedSnapshotStore is ContentAddressedSnapshotStore
 
 
