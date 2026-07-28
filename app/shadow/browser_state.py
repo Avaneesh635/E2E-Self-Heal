@@ -48,6 +48,7 @@ def capture_browser_state(context: SupportsStorageState) -> list[StateSnapshot]:
                     "http_only": cookie.get("httpOnly", False),
                     "secure": cookie.get("secure", False),
                     "same_site": cookie.get("sameSite", "Lax"),
+                    "partition_key": cookie.get("partitionKey"),
                 }
             )
         )
@@ -79,18 +80,19 @@ def to_playwright_storage_state(
 
     for snapshot in snapshots:
         if isinstance(snapshot, CookieSnapshot):
-            cookies.append(
-                {
-                    "name": snapshot.name,
-                    "value": snapshot.value,
-                    "domain": snapshot.domain,
-                    "path": snapshot.path,
-                    "expires": snapshot.expires,
-                    "httpOnly": snapshot.http_only,
-                    "secure": snapshot.secure,
-                    "sameSite": snapshot.same_site,
-                }
-            )
+            cookie: dict[str, Any] = {
+                "name": snapshot.name,
+                "value": snapshot.value,
+                "domain": snapshot.domain,
+                "path": snapshot.path,
+                "expires": snapshot.expires,
+                "httpOnly": snapshot.http_only,
+                "secure": snapshot.secure,
+                "sameSite": snapshot.same_site,
+            }
+            if snapshot.partition_key is not None:
+                cookie["partitionKey"] = snapshot.partition_key
+            cookies.append(cookie)
         elif isinstance(snapshot, LocalStorageSnapshot):
             local_storage_by_origin.setdefault(snapshot.origin, {}).update(snapshot.items)
 

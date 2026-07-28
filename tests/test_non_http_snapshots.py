@@ -1,6 +1,7 @@
 """Validation tests for non-HTTP Shadow snapshot scopes."""
 
 from datetime import datetime, timezone
+from math import inf, nan
 
 import pytest
 from pydantic import ValidationError
@@ -15,7 +16,7 @@ from app.shadow.schemas import (
 
 def test_local_storage_snapshot_validates_and_normalizes_origin() -> None:
     snapshot = LocalStorageSnapshot(
-        origin="https://app.example.com:8443/",
+        origin="HTTPS://APP.EXAMPLE.COM:8443/",
         items={"theme": "dark", "session": "abc"},
     )
 
@@ -58,6 +59,13 @@ def test_cookie_snapshot_validates_playwright_fields() -> None:
     [
         ("path", "app"),
         ("expires", -2),
+        ("expires", nan),
+        ("expires", inf),
+        ("domain", "bad domain"),
+        ("domain", "https://example.com"),
+        ("domain", "example.com/path"),
+        ("domain", "."),
+        ("domain", "..example.com"),
         ("same_site", "Invalid"),
     ],
 )

@@ -1,5 +1,8 @@
 """Pydantic schemas for Shadow Runtime application-state capture and replay."""
 
+import re
+from ipaddress import ip_address
+
 from typing import Annotated, Any, Literal, TypeAlias
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -46,10 +49,12 @@ class LocalStorageSnapshot(BaseModel):
     @classmethod
     def validate_origin(cls, value: str) -> str:
         """Require an HTTP(S) origin without credentials, path, query, or fragment."""
+        if value != value.strip():
+            raise ValueError("origin must not contain surrounding whitespace")
         parsed = urlsplit(value)
         try:
             hostname = parsed.hostname
-            parsed.port
+            port = parsed.port
         except ValueError as exc:
             raise ValueError("origin must contain a valid host and optional port") from exc
 
@@ -63,7 +68,12 @@ class LocalStorageSnapshot(BaseModel):
             or parsed.fragment
         ):
             raise ValueError("origin must be an HTTP(S) origin without a path, query, or fragment")
-        return value[:-1] if value.endswith("/") else value
+
+        normalized_host = hostname.lower()
+        if ":" in normalized_host:
+            normalized_host = f"[{normalized_host}]"
+        normalized_port = f":{port}" if port is not None else ""
+        return f"{parsed.scheme.lower()}://{normalized_host}{normalized_port}"
 
 
 class CookieSnapshot(BaseModel):
@@ -74,10 +84,40 @@ class CookieSnapshot(BaseModel):
     value: str
     domain: str = Field(min_length=1)
     path: str = "/"
-    expires: float = -1.0
+    expires: float = Field(default=-1.0, allow_inf_nan=False)
     http_only: bool = False
     secure: bool = False
     same_site: Literal["Strict", "Lax", "None"] = "Lax"
+    partition_key: str | None = None
+
+    @field_validator("domain")
+    @classmethod
+    def validate_domain(cls, value: str) -> str:
+        """Require a hostname or IP cookie domain without URL components."""
+        if value != value.strip() or any(char in value for char in "/?#@"):
+            raise ValueError("cookie domain must be a hostname or IP address")
+
+        candidate = value[1:] if value.startswith(".") else value
+        if not candidate or candidate.startswith(".") or candidate.endswith("."):
+            raise ValueError("cookie domain must contain a valid host")
+
+        ip_candidate = (
+            candidate[1:-1] if candidate.startswith("[") and candidate.endswith("]") else candidate
+        )
+        try:
+            ip_address(ip_candidate)
+        except ValueError:
+            labels = candidate.split(".")
+            if any(
+                not label
+                or len(label) > 63
+                or label.startswith("-")
+                or label.endswith("-")
+                or re.fullmatch(r"[A-Za-z0-9-]+", label) is None
+                for label in labels
+            ):
+                raise ValueError("cookie domain must contain a valid host")
+        return value.lower()
 
     @field_validator("path")
     @classmethod

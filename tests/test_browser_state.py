@@ -1,12 +1,19 @@
 """End-to-end coverage for Playwright browser-state capture and replay."""
 
+from datetime import datetime, timezone
+
 from typing import Any
 
 import pytest
 
 from app.shadow.browser_state import capture_browser_state, to_playwright_storage_state
 from app.shadow.config import ShadowConfig
-from app.shadow.schemas import CookieSnapshot, LocalStorageSnapshot, ShadowSnapshot
+from app.shadow.schemas import (
+    ClockSnapshot,
+    CookieSnapshot,
+    LocalStorageSnapshot,
+    ShadowSnapshot,
+)
 from app.shadow.snapshot_store import SnapshotStore
 from app.shadow.workspace import ShadowWorkspace
 
@@ -78,6 +85,7 @@ def test_cookie_capture_round_trips_playwright_field_names() -> None:
                     "httpOnly": True,
                     "secure": True,
                     "sameSite": "Lax",
+                    "partitionKey": "https://top-level.example",
                 }
             ],
             "origins": [],
@@ -91,6 +99,12 @@ def test_cookie_capture_round_trips_playwright_field_names() -> None:
 
 def test_empty_or_schema_only_state_does_not_seed_playwright() -> None:
     assert to_playwright_storage_state([]) is None
+    assert (
+        to_playwright_storage_state(
+            [ClockSnapshot(fixed_at=datetime(2026, 7, 28, tzinfo=timezone.utc))]
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize(
