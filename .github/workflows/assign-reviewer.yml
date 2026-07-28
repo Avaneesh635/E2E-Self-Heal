@@ -18,7 +18,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const MAINTAINERS = ['Lee-Dongwook', 'Avaneesh635', 'Adityai1411'];
+            const MAINTAINERS = ['Lee-Dongwook', 'Avaneesh635', 'Adityai1411','kamleshkc2002'];
             const { owner, repo } = context.repo;
             const pull_number = context.payload.pull_request.number;
             const author = context.payload.pull_request.user.login;
