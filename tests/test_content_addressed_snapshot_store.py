@@ -2,6 +2,7 @@
 
 import pytest
 
+from app import shadow
 from app.shadow.config import ShadowConfig
 from app.shadow.content_addressed_snapshot_store import ContentAddressedSnapshotStore
 from app.shadow.interfaces import ISnapshotStore
@@ -35,6 +36,10 @@ def _make_snapshot(snapshot_id: str, body: str = "hello-world") -> ShadowSnapsho
 def test_implements_isnapshot_store_interface(tmp_path):
     store = _make_store(tmp_path)
     assert isinstance(store, ISnapshotStore)
+
+
+def test_content_addressed_store_is_publicly_exported():
+    assert shadow.ContentAddressedSnapshotStore is ContentAddressedSnapshotStore
 
 
 def test_save_and_get_shadow_snapshot_object(tmp_path):
