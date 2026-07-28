@@ -1,10 +1,12 @@
 import subprocess
 from unittest.mock import MagicMock
+import pytest
 
 from app.shadow import (
     CapturedRequest,
     CapturedResponse,
     IShadowRuntime,
+    LocalStorageSnapshot,
     MockInjector,
     NetworkSnapshot,
     ShadowConfig,
@@ -86,7 +88,35 @@ def test_run_shadow_exercises_lifecycle_and_returns_message():
     assert run_shadow() == SHADOW_PLACEHOLDER_MESSAGE
 
 
-def test_run_shadow_with_mock_playwright_and_snapshots(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("state_snapshots", "expected_context_kwargs"),
+    [
+        ([], {}),
+        (
+            [
+                LocalStorageSnapshot(
+                    origin="https://app.example.com",
+                    items={"theme": "dark"},
+                )
+            ],
+            {
+                "storage_state": {
+                    "cookies": [],
+                    "origins": [
+                        {
+                            "origin": "https://app.example.com",
+                            "localStorage": [{"name": "theme", "value": "dark"}],
+                        }
+                    ],
+                }
+            },
+        ),
+    ],
+    ids=["legacy-http-only", "local-storage"],
+)
+def test_run_shadow_with_mock_playwright_and_snapshots(
+    tmp_path, monkeypatch, state_snapshots, expected_context_kwargs
+):
     ws_dir = tmp_path / "shadow"
     config = ShadowConfig(workspace_dir=str(ws_dir))
     ws = ShadowWorkspace(config)
@@ -100,6 +130,7 @@ def test_run_shadow_with_mock_playwright_and_snapshots(tmp_path, monkeypatch):
                 response=CapturedResponse(status=200, body="mocked_body"),
             )
         ],
+        state_snapshots=state_snapshots,
     )
     store.save_snapshot("test_snap", snapshot)
 
@@ -169,3 +200,4 @@ def test_run_shadow_with_mock_playwright_and_snapshots(tmp_path, monkeypatch):
     assert result.score > 0
     assert len(subprocess_called) == 1
     assert "--config" in subprocess_called[0]
+    mock_browser.new_context.assert_called_once_with(**expected_context_kwargs)

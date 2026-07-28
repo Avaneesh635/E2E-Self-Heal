@@ -1,8 +1,10 @@
-"""Pydantic schemas for the Shadow Runtime network mock capturing and replay."""
+"""Pydantic schemas for Shadow Runtime application-state capture and replay."""
 
-from typing import Any
+from typing import Annotated, Any, Literal, TypeAlias
+from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field, field_validator
 
 
 class CapturedRequest(BaseModel):
@@ -33,6 +35,93 @@ class NetworkSnapshot(BaseModel):
     duration_ms: float | None = None  # request→response duration in ms
 
 
+class LocalStorageSnapshot(BaseModel):
+    """Captured localStorage values for one browser origin."""
+
+    scope: Literal["local_storage"] = "local_storage"
+    origin: str
+    items: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("origin")
+    @classmethod
+    def validate_origin(cls, value: str) -> str:
+        """Require an HTTP(S) origin without credentials, path, query, or fragment."""
+        parsed = urlsplit(value)
+        try:
+            hostname = parsed.hostname
+            parsed.port
+        except ValueError as exc:
+            raise ValueError("origin must contain a valid host and optional port") from exc
+
+        if (
+            parsed.scheme.lower() not in {"http", "https"}
+            or hostname is None
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("origin must be an HTTP(S) origin without a path, query, or fragment")
+        return value[:-1] if value.endswith("/") else value
+
+
+class CookieSnapshot(BaseModel):
+    """Captured browser cookie in Playwright storage-state form."""
+
+    scope: Literal["cookie"] = "cookie"
+    name: str = Field(min_length=1)
+    value: str
+    domain: str = Field(min_length=1)
+    path: str = "/"
+    expires: float = -1.0
+    http_only: bool = False
+    secure: bool = False
+    same_site: Literal["Strict", "Lax", "None"] = "Lax"
+
+    @field_validator("path")
+    @classmethod
+    def validate_path(cls, value: str) -> str:
+        """Require the cookie path form accepted by Playwright."""
+        if not value.startswith("/"):
+            raise ValueError("cookie path must start with '/'")
+        return value
+
+    @field_validator("expires")
+    @classmethod
+    def validate_expires(cls, value: float) -> float:
+        """Accept session cookies (-1) or non-negative Unix timestamps."""
+        if value != -1.0 and value < 0:
+            raise ValueError("cookie expires must be -1 or a non-negative Unix timestamp")
+        return value
+
+
+class ClockSnapshot(BaseModel):
+    """Captured fixed wall-clock state for deterministic replay."""
+
+    scope: Literal["clock"] = "clock"
+    fixed_at: AwareDatetime
+    timezone_id: str | None = None
+
+    @field_validator("timezone_id")
+    @classmethod
+    def validate_timezone_id(cls, value: str | None) -> str | None:
+        """Validate optional IANA timezone identifiers."""
+        if value is None:
+            return None
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(f"unknown IANA timezone: {value}") from exc
+        return value
+
+
+StateSnapshot: TypeAlias = Annotated[
+    LocalStorageSnapshot | CookieSnapshot | ClockSnapshot,
+    Field(discriminator="scope"),
+]
+
+
 class SnapshotMetadata(BaseModel):
     """Optional typed view of ShadowSnapshot.metadata; the field itself stays a
     permissive dict, so arbitrary keys still round-trip untouched."""
@@ -50,6 +139,7 @@ class ShadowSnapshot(BaseModel):
     snapshot_id: str
     metadata: dict[str, Any] = Field(default_factory=dict)
     network_snapshots: list[NetworkSnapshot] = Field(default_factory=list)
+    state_snapshots: list[StateSnapshot] = Field(default_factory=list)
 
 
 class ShadowRunResult(BaseModel):
