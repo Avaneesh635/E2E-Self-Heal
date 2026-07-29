@@ -113,9 +113,7 @@ def test_workspace_rejects_artifact_directory_at_ownership_marker(tmp_path):
     root = tmp_path / "ws"
 
     with pytest.raises(ValueError, match="ownership marker"):
-        ShadowWorkspace(
-            ShadowConfig(workspace_dir=str(root), cache_dir=_OWNERSHIP_MARKER)
-        )
+        ShadowWorkspace(ShadowConfig(workspace_dir=str(root), cache_dir=_OWNERSHIP_MARKER))
 
     assert not root.exists()
 

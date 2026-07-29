@@ -216,7 +216,9 @@ class ShadowWorkspace(IShadowWorkspace):
         for part in relative_path.parts:
             current /= part
             if current.is_symlink():
-                raise ValueError(f"Shadow workspace managed directory cannot be a symlink: {current}")
+                raise ValueError(
+                    f"Shadow workspace managed directory cannot be a symlink: {current}"
+                )
 
     def _validate_cleanup_target(self, directory: Path) -> None:
         """Ensure a disposable target is an ordinary directory inside the owned root."""
