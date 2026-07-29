@@ -1,5 +1,5 @@
-from app.preprocess.diff_ast_analyzer import analyze_diff
 import app.preprocess.diff_ast_analyzer as analyzer_module
+from app.preprocess.diff_ast_analyzer import analyze_diff
 
 SAMPLE_DIFF = """diff --git a/components/SubmitButton.tsx b/components/SubmitButton.tsx
 index abc1234..def5678 100644
@@ -138,3 +138,121 @@ def test_fallback_to_regex_on_tree_sitter_exception(monkeypatch):
     assert diffs[0].file == "components/SubmitButton.tsx"
     assert diffs[0].previous["attributes"]["id"] == "old-id"
     assert diffs[0].current["attributes"]["id"] == "new-id"
+
+
+NO_PREFIX_DIFF = """diff --git components/SubmitButton.tsx components/SubmitButton.tsx
+--- components/SubmitButton.tsx
++++ components/SubmitButton.tsx
+@@ -1,3 +1,3 @@
+ export function SubmitButton() {
+-  return <button id="old-id">Submit</button>
++  return <button id="new-id">Submit</button>
+ }
+"""
+
+RENAME_DIFF = """diff --git a/components/OldButton.tsx b/components/NewButton.tsx
+rename from components/OldButton.tsx
+rename to components/NewButton.tsx
+--- a/components/OldButton.tsx
++++ b/components/NewButton.tsx
+@@ -1,3 +1,3 @@
+ export function SubmitButton() {
+-  return <button id="old">Submit</button>
++  return <button id="new">Submit</button>
+ }
+"""
+
+DELETION_DIFF = """diff --git a/components/DeadButton.tsx b/components/DeadButton.tsx
+deleted file mode 100644
+--- a/components/DeadButton.tsx
++++ /dev/null
+@@ -1,3 +0,0 @@
+-export function DeadButton() {
+-  return <button id="dead">Submit</button>
+-}
+"""
+
+UNEVEN_HUNK_DIFF = """diff --git a/components/List.tsx b/components/List.tsx
+--- a/components/List.tsx
++++ b/components/List.tsx
+@@ -1,5 +1,4 @@
+ export function List() {
+   return (
+-    <ul>
+-      <li id="item-1">One</li>
+-      <li id="item-2">Two</li>
++    <ul data-testid="list">
++      <li id="item-1">One</li>
+     </ul>
+   )
+ }
+"""
+
+
+def test_parses_no_prefix_diff():
+    diffs = analyze_diff(NO_PREFIX_DIFF)
+    assert len(diffs) == 1
+    assert diffs[0].file == "components/SubmitButton.tsx"
+    assert diffs[0].previous["attributes"]["id"] == "old-id"
+    assert diffs[0].current["attributes"]["id"] == "new-id"
+
+
+def test_parses_diff_with_spaces_in_path():
+    diff_text = """diff --git a/components/Submit Button.tsx b/components/Submit Button.tsx
+index abc1234..def5678 100644
+--- a/components/Submit Button.tsx
++++ b/components/Submit Button.tsx
+@@ -1,3 +1,3 @@
+ export function SubmitButton() {
+-  return <button id=\"old-id\" className=\"btn\">Submit</button>
++  return <button id=\"new-id\" className=\"btn\">Submit</button>
+ }
+"""
+    diffs = analyze_diff(diff_text)
+    assert len(diffs) == 1
+    assert diffs[0].file == "components/Submit Button.tsx"
+    assert diffs[0].previous["attributes"]["id"] == "old-id"
+    assert diffs[0].current["attributes"]["id"] == "new-id"
+
+
+def test_parses_rename_diff():
+    diffs = analyze_diff(RENAME_DIFF)
+    assert len(diffs) == 1
+    assert diffs[0].file == "components/NewButton.tsx"
+    assert diffs[0].previous["attributes"]["id"] == "old"
+    assert diffs[0].current["attributes"]["id"] == "new"
+
+
+def test_parses_deletion_diff():
+    diffs = analyze_diff(DELETION_DIFF)
+    assert len(diffs) == 1
+    assert diffs[0].file == "components/DeadButton.tsx"
+    assert diffs[0].previous["attributes"]["id"] == "dead"
+    assert diffs[0].current == {}
+
+
+def test_uneven_hunk_does_not_mispair():
+    diffs = analyze_diff(UNEVEN_HUNK_DIFF)
+    # SequenceMatcher yields 3 pairs: ul changed, li item-1 equal (emitted,
+    # same contract as test_nested_jsx_parsing), li item-2 removed. The key
+    # guarantees are that item-2 is NOT discarded and no li is mis-paired
+    # against the ul.
+    assert len(diffs) == 3
+
+    ul_diff = next((d for d in diffs if d.previous.get("tag") == "ul"), None)
+    assert ul_diff is not None
+    assert ul_diff.current.get("tag") == "ul"
+    assert ul_diff.current["attributes"].get("data-testid") == "list"
+
+    # The removed li item-2 must be represented as a deletion, not dropped.
+    li_deleted = next(
+        (d for d in diffs if d.previous.get("tag") == "li" and d.current == {}),
+        None,
+    )
+    assert li_deleted is not None
+    assert li_deleted.previous["attributes"]["id"] == "item-2"
+
+    # No mis-pairing: whenever both sides are present, tags must agree.
+    for d in diffs:
+        if d.previous and d.current:
+            assert d.previous.get("tag") == d.current.get("tag")

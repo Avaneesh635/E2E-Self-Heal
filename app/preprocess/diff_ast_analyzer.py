@@ -4,16 +4,22 @@ Uses tree-sitter (tree-sitter-typescript) for robust JSX/TSX element and attribu
 extraction, with a regex-based fallback if tree-sitter is unavailable.
 """
 
+import difflib
 import importlib.util
 import re
+from collections.abc import Callable
+from typing import Any
+
 import structlog
+
 from app.schemas import DomDiff
 
 logger = structlog.get_logger(__name__)
 
-_FILE_RE = re.compile(r"^\+\+\+ b/(.+)$")
 _JSX_TAG_RE = re.compile(
-    r"<([A-Za-z][\w.]*)((?:\s+[\w-]+=(?:\"[^\"]*\"|'[^']*'|\{[^}]*\}))*)\s*/?>"
+    r"<([A-Za-z][\w.]*)"
+    r"(?:\s+[\w-]+(?:=(?:\"[^\"]*\"|'[^']*'|\{[^}]*\}))?)*"
+    r"\s*/?>"
 )
 _ATTR_RE = re.compile(r"([\w-]+)=(?:\"([^\"]*)\"|'([^']*)'|\{([^}]*)\})")
 _JSX_SUFFIXES = (".tsx", ".jsx")
@@ -23,64 +29,39 @@ _HAS_TREE_SITTER = (
     and importlib.util.find_spec("tree_sitter_typescript") is not None
 )
 
-
-def _parse_element_regex(line: str) -> dict | None:
-    tag_match = _JSX_TAG_RE.search(line)
-    if not tag_match:
-        return None
-    attrs: dict[str, str] = {}
-    for attr_match in _ATTR_RE.finditer(tag_match.group(2)):
-        name = attr_match.group(1)
-        value = attr_match.group(2) or attr_match.group(3) or attr_match.group(4) or ""
-        attrs[name] = value
-    return {"tag": tag_match.group(1), "attributes": attrs}
+Extractor = Callable[[str], list[dict[str, Any]]]
 
 
-def _analyze_diff_regex(git_diff: str) -> list[DomDiff]:
-    diffs: list[DomDiff] = []
-    current_file = ""
-    removed: list[dict] = []
-    added: list[dict] = []
-
-    def flush(file: str) -> None:
-        for previous, current in zip(removed, added):
-            diffs.append(DomDiff(file=file, previous=previous, current=current))
-        removed.clear()
-        added.clear()
-
-    for line in git_diff.splitlines():
-        file_match = _FILE_RE.match(line)
-        if file_match:
-            flush(current_file)
-            current_file = file_match.group(1)
-            continue
-        if not current_file.endswith(_JSX_SUFFIXES):
-            continue
-        if line.startswith("-") and not line.startswith("---"):
-            element = _parse_element_regex(line[1:])
-            if element:
-                removed.append(element)
-        elif line.startswith("+") and not line.startswith("+++"):
-            element = _parse_element_regex(line[1:])
-            if element:
-                added.append(element)
-    flush(current_file)
-    return diffs
+def _extract_jsx_elements_regex(code_text: str) -> list[dict[str, Any]]:
+    """Extract JSX elements from a (possibly multi-line) code fragment."""
+    elements: list[dict[str, Any]] = []
+    for match in _JSX_TAG_RE.finditer(code_text):
+        tag = match.group(1)
+        # Everything after ``<tag``; _ATTR_RE skips the trailing ``>``/``/>``.
+        body = match.group(0)[len(tag) + 1 :]
+        attrs: dict[str, str] = {}
+        for attr_match in _ATTR_RE.finditer(body):
+            name = attr_match.group(1)
+            value = attr_match.group(2) or attr_match.group(3) or attr_match.group(4) or ""
+            attrs[name] = value
+        elements.append({"tag": tag, "attributes": attrs})
+    return elements
 
 
-def _extract_jsx_elements_tree_sitter(code_bytes: bytes) -> list[dict]:
+def _extract_jsx_elements_tree_sitter(code_text: str) -> list[dict[str, Any]]:
+    """Extract JSX elements from a code fragment via tree-sitter."""
     if not _HAS_TREE_SITTER:
         return []
-
     import tree_sitter_typescript as ts_typescript
     from tree_sitter import Language, Parser
 
+    code_bytes = code_text.encode("utf-8")
     tsx_language = Language(ts_typescript.language_tsx())
     parser = Parser(tsx_language)
     tree = parser.parse(code_bytes)
-    elements = []
+    elements: list[dict[str, Any]] = []
 
-    def walk(node):
+    def walk(node) -> None:
         if node.type in ("jsx_opening_element", "jsx_self_closing_element"):
             tag = ""
             for child in node.children:
@@ -96,14 +77,16 @@ def _extract_jsx_elements_tree_sitter(code_bytes: bytes) -> list[dict]:
                         "utf-8", errors="ignore"
                     )
                     break
-
-            attrs = {}
+            attrs: dict[str, str] = {}
             for child in node.children:
                 if child.type == "jsx_attribute":
                     name = ""
                     value = ""
                     for attr_child in child.children:
-                        if attr_child.type in ("property_identifier", "jsx_namespace_name"):
+                        if attr_child.type in (
+                            "property_identifier",
+                            "jsx_namespace_name",
+                        ):
                             name = code_bytes[attr_child.start_byte : attr_child.end_byte].decode(
                                 "utf-8", errors="ignore"
                             )
@@ -125,7 +108,6 @@ def _extract_jsx_elements_tree_sitter(code_bytes: bytes) -> list[dict]:
                                 value = val_text
                     if name:
                         attrs[name] = value
-
             elements.append({"tag": tag, "attributes": attrs})
         for child in node.children:
             walk(child)
@@ -134,68 +116,143 @@ def _extract_jsx_elements_tree_sitter(code_bytes: bytes) -> list[dict]:
     return elements
 
 
-def _analyze_diff_tree_sitter(git_diff: str) -> list[DomDiff]:
+def _elem_to_str(elem: dict[str, Any]) -> str:
+    """Deterministic string representation for SequenceMatcher."""
+    tag = elem.get("tag", "")
+    attrs = elem.get("attributes", {})
+    attr_str = ",".join(f"{k}={v}" for k, v in sorted(attrs.items()))
+    return f"<{tag} {attr_str}>"
+
+
+def _pair_elements(
+    removed: list[dict[str, Any]], added: list[dict[str, Any]]
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """Pair removed/added elements via SequenceMatcher to handle N!=M hunks."""
+    pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    rem_strs = [_elem_to_str(e) for e in removed]
+    add_strs = [_elem_to_str(e) for e in added]
+    # autojunk=False keeps matching deterministic on large hunks.
+    matcher = difflib.SequenceMatcher(None, rem_strs, add_strs, autojunk=False)
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            for i, j in zip(range(i1, i2), range(j1, j2)):
+                pairs.append((removed[i], added[j]))
+        elif tag == "replace":
+            n = min(i2 - i1, j2 - j1)
+            for k in range(n):
+                pairs.append((removed[i1 + k], added[j1 + k]))
+            for i in range(i1 + n, i2):
+                pairs.append((removed[i], {}))
+            for j in range(j1 + n, j2):
+                pairs.append(({}, added[j]))
+        elif tag == "delete":
+            for i in range(i1, i2):
+                pairs.append((removed[i], {}))
+        elif tag == "insert":
+            for j in range(j1, j2):
+                pairs.append(({}, added[j]))
+    return pairs
+
+
+def _strip_timestamp(path: str) -> str:
+    """Drop a trailing tab-delimited timestamp from a diff header path."""
+    return path.split("\t")[0] if "\t" in path else path
+
+
+def _analyze(git_diff: str, extract: Extractor) -> list[DomDiff]:
+    """Walk diff headers; pair extracted elements per hunk via ``extract``."""
     diffs: list[DomDiff] = []
     current_file = ""
-    hunks = []
+    pending_minus = ""
+    cur_rem: list[str] = []
+    cur_add: list[str] = []
+    hunks: list[tuple[str, str]] = []
 
-    current_removed = []
-    current_added = []
+    def flush_hunk() -> None:
+        if cur_rem or cur_add:
+            hunks.append(("\n".join(cur_rem), "\n".join(cur_add)))
+        cur_rem.clear()
+        cur_add.clear()
 
-    def flush_hunk(file: str) -> None:
-        if current_removed or current_added:
-            rem_str = "\n".join(current_removed)
-            add_str = "\n".join(current_added)
-            hunks.append((rem_str, add_str))
-            current_removed.clear()
-            current_added.clear()
-
-    def process_file_hunks(file: str) -> None:
-        flush_hunk(file)
-        for rem_str, add_str in hunks:
-            rem_elements = _extract_jsx_elements_tree_sitter(rem_str.encode("utf-8"))
-            add_elements = _extract_jsx_elements_tree_sitter(add_str.encode("utf-8"))
-            for prev, curr in zip(rem_elements, add_elements):
-                diffs.append(DomDiff(file=file, previous=prev, current=curr))
+    def process_file() -> None:
+        flush_hunk()
+        if current_file.endswith(_JSX_SUFFIXES):
+            for rem_text, add_text in hunks:
+                rem_el = extract(rem_text)
+                add_el = extract(add_text)
+                for prev, curr in _pair_elements(rem_el, add_el):
+                    diffs.append(DomDiff(file=current_file, previous=prev, current=curr))
         hunks.clear()
 
     for line in git_diff.splitlines():
-        file_match = _FILE_RE.match(line)
-        if file_match:
-            process_file_hunks(current_file)
-            current_file = file_match.group(1)
+        if line.startswith("diff --git "):
+            process_file()
+            current_file = ""
+            pending_minus = ""
+            header = line[len("diff --git ") :]
+            sep_index = header.rfind(" b/")
+            if sep_index != -1:
+                current_file = header[sep_index + 1 :].removeprefix("b/")
+            else:
+                parts = header.split(" ", 1)
+                if len(parts) == 2:
+                    current_file = parts[1].removeprefix("b/")
+        elif line.startswith("--- "):
+            path = _strip_timestamp(line[4:].strip()).removeprefix("a/")
+            if path != "/dev/null":
+                pending_minus = path
+                if not current_file or current_file == "/dev/null":
+                    current_file = path
+        elif line.startswith("+++ "):
+            path = _strip_timestamp(line[4:].strip()).removeprefix("b/")
+            if path != "/dev/null":
+                current_file = path
+            else:
+                current_file = pending_minus
+        elif line.startswith("rename to "):
+            process_file()
+            current_file = line[10:].strip()
             continue
 
         if not current_file.endswith(_JSX_SUFFIXES):
             continue
-
         if line.startswith("-") and not line.startswith("---"):
-            current_removed.append(line[1:])
+            cur_rem.append(line[1:])
         elif line.startswith("+") and not line.startswith("+++"):
-            current_added.append(line[1:])
-        elif line.startswith(" "):
-            flush_hunk(current_file)
-        elif line.startswith("@@"):
-            flush_hunk(current_file)
+            cur_add.append(line[1:])
+        elif line.startswith((" ", "@@")):
+            flush_hunk()
 
-    process_file_hunks(current_file)
+    process_file()
     return diffs
+
+
+def _analyze_diff_regex(git_diff: str) -> list[DomDiff]:
+    """Regex backend: multi-line-capable element extraction per hunk."""
+    return _analyze(git_diff, _extract_jsx_elements_regex)
+
+
+def _analyze_diff_tree_sitter(git_diff: str) -> list[DomDiff]:
+    """Tree-sitter backend: AST element extraction per hunk."""
+    return _analyze(
+        git_diff,
+        lambda t: _extract_jsx_elements_tree_sitter(t),
+    )
 
 
 def analyze_diff(git_diff: str) -> list[DomDiff]:
     """Parse the JSX/TSX regions of a git diff into lightweight DOM diffs.
 
-    Uses Tree-sitter if available to pair changed elements, and falls back to
-    regex line pairing on import or parsing failures.
+    Uses tree-sitter when available and falls back to regex on import or
+    parsing failure.
     """
     if _HAS_TREE_SITTER:
         try:
             diffs = _analyze_diff_tree_sitter(git_diff)
             logger.debug("diff_analyzed_tree_sitter", dom_changes=len(diffs))
             return diffs
-        except Exception as exc:
-            logger.warning("tree_sitter_diff_analysis_failed_falling_back", error=str(exc))
-
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("tree_sitter_diff_failed_falling_back", error=str(exc))
     diffs = _analyze_diff_regex(git_diff)
     logger.debug("diff_analyzed_regex", dom_changes=len(diffs))
     return diffs
