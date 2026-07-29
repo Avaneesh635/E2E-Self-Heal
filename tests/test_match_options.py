@@ -359,6 +359,15 @@ def test_absolute_url_without_a_host_is_a_safe_miss():
         matcher.match(CapturedRequest(method="GET", url="https:///api"))
 
 
+def test_scheme_less_urls_are_safe_misses():
+    matcher = SnapshotMatcher(
+        [_snapshot(CapturedRequest(method="GET", url="/api?page=1"), body="ok")]
+    )
+
+    with pytest.raises(NoMatchError):
+        matcher.match(CapturedRequest(method="GET", url="/api?page=1"))
+
+
 @pytest.mark.parametrize("min_score", [-1.0, float("nan"), float("inf"), float("-inf")])
 def test_invalid_minimum_scores_are_rejected(min_score: float):
     with pytest.raises(ValueError, match="finite, non-negative"):

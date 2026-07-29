@@ -132,7 +132,7 @@ class MatchScorer:
             port = parsed.port
         except ValueError:
             return None
-        if parsed.scheme and host is None:
+        if not parsed.scheme or host is None:
             return None
         if host is not None:
             try:
