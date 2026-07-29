@@ -22,8 +22,11 @@ jobs:
       - name: Set up Python
         run: uv python install 3.13
 
+      - name: Check lockfile is up to date
+        run: uv lock --check
+
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync --locked --extra dev
 
       - name: Lint
         run: uv run ruff check .
@@ -122,8 +125,11 @@ jobs:
       - name: Set up Python
         run: uv python install 3.13
 
+      - name: Check lockfile is up to date
+        run: uv lock --check
+
       - name: Install Python dependencies
-        run: uv sync --extra dev
+        run: uv sync --locked --extra dev
 
       - uses: pnpm/action-setup@v4
         with:
