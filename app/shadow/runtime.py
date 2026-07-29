@@ -112,6 +112,24 @@ class ShadowRuntime(IShadowRuntime):
         logger.info("shadow_runtime_shutdown")
 
 
+def _build_run_result(is_success: bool, injector: MockInjector) -> ShadowRunResult:
+    """Summarize replay metrics, averaging confidence across matched requests only."""
+    matched_count = len(injector.matched_requests)
+    missed_requests: list[CapturedRequest] = list(injector.unmatched_requests)
+    average_score = (
+        sum(score for _, score in injector.matched_requests) / matched_count
+        if matched_count
+        else 0.0
+    )
+    return ShadowRunResult(
+        is_success=is_success,
+        matched_count=matched_count,
+        missed_count=len(missed_requests),
+        missed_requests=missed_requests,
+        score=average_score,
+    )
+
+
 def run_shadow(
     test_path: str | Path | None = None,
     snapshot_id: str | None = None,
@@ -219,20 +237,4 @@ def run_shadow(
             if config_path is not None:
                 config_path.unlink(missing_ok=True)
             workspace.cleanup(is_success=is_success)
-
-    # Compute replay result summary.
-    matched_count = len(injector.matched_requests)
-    missed_requests: list[CapturedRequest] = list(injector.unmatched_requests)
-    missed_count = len(missed_requests)
-    total_requests = matched_count + missed_count
-    avg_score = 0.0
-    if total_requests > 0:
-        avg_score = sum(s for _, s in injector.matched_requests) / total_requests
-
-    return ShadowRunResult(
-        is_success=is_success,
-        matched_count=matched_count,
-        missed_count=missed_count,
-        missed_requests=missed_requests,
-        score=avg_score,
-    )
+    return _build_run_result(is_success, injector)

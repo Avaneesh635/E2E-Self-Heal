@@ -16,7 +16,7 @@ from app.shadow import (
     ShadowWorkspace,
 )
 from app.shadow.context import ShadowContext
-from app.shadow.runtime import SHADOW_PLACEHOLDER_MESSAGE, run_shadow
+from app.shadow.runtime import SHADOW_PLACEHOLDER_MESSAGE, _build_run_result, run_shadow
 from app.shadow.snapshot_store import SnapshotStore
 
 
@@ -86,6 +86,39 @@ def test_context_carries_injected_collaborators(tmp_path):
 
 def test_run_shadow_exercises_lifecycle_and_returns_message():
     assert run_shadow() == SHADOW_PLACEHOLDER_MESSAGE
+
+
+@pytest.mark.parametrize(
+    ("matched_scores", "missed_count", "expected_score"),
+    [
+        ([80.0, 100.0], 0, 90.0),
+        ([80.0, 100.0], 3, 90.0),
+        ([], 2, 0.0),
+    ],
+    ids=["matched-only", "mixed", "zero-match"],
+)
+def test_build_run_result_averages_only_matched_requests(
+    matched_scores: list[float], missed_count: int, expected_score: float
+) -> None:
+    injector = MockInjector()
+    injector.matched_requests = [
+        (
+            CapturedRequest(method="GET", url=f"https://api.example.com/matched/{index}"),
+            score,
+        )
+        for index, score in enumerate(matched_scores)
+    ]
+    injector.unmatched_requests = [
+        CapturedRequest(method="GET", url=f"https://api.example.com/missed/{index}")
+        for index in range(missed_count)
+    ]
+
+    result = _build_run_result(is_success=True, injector=injector)
+
+    assert result.matched_count == len(matched_scores)
+    assert result.missed_count == missed_count
+    assert result.missed_requests == injector.unmatched_requests
+    assert result.score == pytest.approx(expected_score)
 
 
 @pytest.mark.parametrize(
