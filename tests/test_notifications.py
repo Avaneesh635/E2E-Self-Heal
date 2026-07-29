@@ -1,10 +1,15 @@
 """Tests for the Slack notifier (Issue #124)."""
 
 import json
+from email.message import Message
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 
-from app.notifications import notify_heal_outcome
+import pytest
+from tenacity import wait_none
+
+from app.notifications import _is_transient_error, _post_to_slack, notify_heal_outcome
 from app.schemas import PatchInstruction, RepairSummary
 
 
@@ -16,6 +21,16 @@ def make_summary(
         is_success=is_success,
         loop_count=2,
         instructions=instructions or [],
+    )
+
+
+def make_http_error(status: int) -> HTTPError:
+    return HTTPError(
+        url="https://hooks.slack.com/services/FAKE",
+        code=status,
+        msg="error",
+        hdrs=Message(),
+        fp=None,
     )
 
 
@@ -93,3 +108,46 @@ def test_retry_on_transient_error(mock_urlopen: MagicMock) -> None:
 
         # tenacity should have retried exactly 3 times
         assert mock_urlopen.call_count == 3
+
+
+@pytest.mark.parametrize("status", [429, 500, 503, 599])
+def test_http_status_retry_policy_treats_429_and_5xx_as_transient(status: int) -> None:
+    """Should retry only rate limits and server errors."""
+    assert _is_transient_error(make_http_error(status))
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 431, 451])
+def test_http_status_retry_policy_treats_other_4xx_as_permanent(status: int) -> None:
+    """Should not retry permanent client errors."""
+    assert not _is_transient_error(make_http_error(status))
+
+
+@pytest.mark.parametrize(
+    ("status", "expected_attempts"),
+    [
+        (429, 3),
+        (500, 3),
+        (599, 3),
+        (431, 1),
+        (451, 1),
+    ],
+)
+@patch("app.notifications.urllib.request.urlopen")
+def test_http_retry_attempt_count_matches_status_policy(
+    mock_urlopen: MagicMock, status: int, expected_attempts: int
+) -> None:
+    """Should retry configured transient HTTP statuses and attempt permanent 4xx once."""
+    mock_urlopen.side_effect = make_http_error(status)
+    retry_config = cast(Any, _post_to_slack).retry
+    original_wait = retry_config.wait
+    retry_config.wait = wait_none()
+
+    try:
+        with patch("app.notifications.settings") as mock_settings:
+            mock_settings.slack_webhook_url = "https://hooks.slack.com/services/FAKE"
+
+            notify_heal_outcome(make_summary())
+
+            assert mock_urlopen.call_count == expected_attempts
+    finally:
+        retry_config.wait = original_wait

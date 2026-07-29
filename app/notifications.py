@@ -31,7 +31,7 @@ def _is_transient_error(exception: BaseException) -> bool:
     """
     if isinstance(exception, urllib.error.HTTPError):
         # Only retry rate limits (429) and server errors (5xx)
-        return exception.code >= 429
+        return exception.code == 429 or 500 <= exception.code <= 599
     return isinstance(exception, (urllib.error.URLError, TimeoutError, ConnectionError))
 
 
