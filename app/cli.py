@@ -39,6 +39,7 @@ from app.schemas import (
     SuiteSummary,
 )
 from app.shadow.runtime import run_shadow
+from app.shadow.schemas import ShadowRunResult
 from app.state import AgentState
 from app.utils.files import atomic_write
 
@@ -74,7 +75,6 @@ def main(
         return
     configure_logging(settings.log_level)
     logger.info("shadow_mode_invoked")
-    from app.shadow.schemas import ShadowRunResult
 
     result = run_shadow()
     if isinstance(result, ShadowRunResult):

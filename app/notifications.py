@@ -131,4 +131,4 @@ def notify_heal_outcome(summary: RepairSummary) -> None:
         _post_to_slack(payload)
     except Exception as e:
         # Log failure without exposing credentials
-        logger.error("notification_failed", error=str(e))
+        logger.exception("notification_failed", error=str(e))
