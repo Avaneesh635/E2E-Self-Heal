@@ -27,8 +27,9 @@ class SnapshotMatcher:
         options: MatchOptions | None = None,
     ):
         self.snapshots = snapshots
-        self.options = options or MatchOptions()
-        # An explicit scorer wins; otherwise build one configured with the options.
+        if scorer is not None and options is not None and scorer.options != options:
+            raise ValueError("scorer and matcher must use the same MatchOptions")
+        self.options = options or (scorer.options if scorer is not None else MatchOptions())
         self.scorer = scorer or MatchScorer(options=self.options)
 
     def _best(self, request: CapturedRequest) -> tuple[NetworkSnapshot, float]:
@@ -44,7 +45,7 @@ class SnapshotMatcher:
 
         for idx, snapshot in enumerate(self.snapshots):
             score = self.scorer.calculate_score(request, snapshot.request)
-            if score >= 0:
+            if score >= 0 and score >= self.options.min_score:
                 candidates.append((score, idx, snapshot))
 
         if not candidates:

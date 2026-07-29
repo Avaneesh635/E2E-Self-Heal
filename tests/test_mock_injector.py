@@ -5,6 +5,7 @@ import pytest
 
 from app.shadow.config import MissPolicy
 from app.shadow.injector import MockInjector
+from app.shadow.match_options import MatchOptions
 from app.shadow.matcher import NoMatchError, SnapshotMatcher
 from app.shadow.schemas import CapturedRequest, CapturedResponse, NetworkSnapshot
 
@@ -30,12 +31,12 @@ def test_snapshot_matcher_exact_match():
     assert matcher.match(match_req) == res1
 
 
-def test_snapshot_matcher_path_fallback():
+def test_snapshot_matcher_path_fallback_with_explicit_threshold():
     req1 = CapturedRequest(method="GET", url="https://api.example.com/data?id=1")
     res1 = CapturedResponse(status=200, headers={"Content-Type": "application/json"}, body="{}")
 
     snapshots = [NetworkSnapshot(request=req1, response=res1)]
-    matcher = SnapshotMatcher(snapshots)
+    matcher = SnapshotMatcher(snapshots, options=MatchOptions(min_score=170.0))
 
     # Different query string, same path
     match_req = CapturedRequest(method="GET", url="https://api.example.com/data?id=2")
@@ -58,6 +59,26 @@ def test_snapshot_matcher_no_match():
     req_other_path = CapturedRequest(method="GET", url="https://api.example.com/other")
     with pytest.raises(NoMatchError):
         matcher.match(req_other_path)
+
+
+def test_mock_injector_applies_match_options_to_snapshot_lists():
+    snapshot = NetworkSnapshot(
+        request=CapturedRequest(method="GET", url="https://captured.example/data"),
+        response=CapturedResponse(status=200, body="captured"),
+    )
+    mock_page = MagicMock()
+    injector = MockInjector(
+        page_or_context=mock_page,
+        match_options=MatchOptions(allow_cross_origin=True),
+    )
+
+    injector.inject_mock("**/*", [snapshot])
+
+    assert injector.matcher is not None
+    response = injector.matcher.match(
+        CapturedRequest(method="GET", url="https://other.example/data")
+    )
+    assert response.body == "captured"
 
 
 def test_mock_injector_sync_fulfill():

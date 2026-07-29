@@ -1,7 +1,9 @@
 """Scoring engine to compute similarity between incoming and captured network requests."""
 
 from dataclasses import dataclass
+from ipaddress import ip_address
 from typing import Any
+from urllib.parse import urlparse
 
 from app.shadow.match_options import MatchOptions
 from app.shadow.normalizer import RequestNormalizer
@@ -42,6 +44,13 @@ class MatchScorer:
         """
         # 1. HTTP Method must match exactly (case-insensitive)
         if req1.method.upper() != req2.method.upper():
+            return -1.0
+
+        origin1 = self._origin(req1.url)
+        origin2 = self._origin(req2.url)
+        if origin1 is None or origin2 is None:
+            return -1.0
+        if not self.options.allow_cross_origin and origin1 != origin2:
             return -1.0
 
         # Normalize path and query
@@ -113,6 +122,27 @@ class MatchScorer:
                 score += dict_score * self.weights.body_max
 
         return score
+
+    @staticmethod
+    def _origin(url: str) -> tuple[str, str | None, int | None] | None:
+        """Return a normalized (scheme, host, effective port) origin tuple."""
+        try:
+            parsed = urlparse(url)
+            host = parsed.hostname
+            port = parsed.port
+        except ValueError:
+            return None
+        if parsed.scheme and host is None:
+            return None
+        if host is not None:
+            try:
+                host = ip_address(host).compressed
+            except ValueError:
+                pass
+        default_ports = {"http": 80, "https": 443}
+        scheme = parsed.scheme.lower()
+        effective_port = port if port is not None else default_ports.get(scheme)
+        return scheme, host, effective_port
 
     def _compare_normalized_dicts(self, d1: dict[str, Any], d2: dict[str, Any]) -> float:
         """Returns a similarity ratio between 0.0 and 1.0 for two normalized dictionaries."""
