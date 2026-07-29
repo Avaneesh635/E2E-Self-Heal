@@ -1,6 +1,7 @@
 """Assemble the repair StateGraph and its conditional Router edge."""
 
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
 from app.config import settings
 from app.nodes.diagnoser import diagnoser
@@ -53,7 +54,7 @@ def route_after_verify(state: AgentState) -> str:
     return "patch_generator"
 
 
-def build_graph():
+def build_graph() -> CompiledStateGraph:
     """Build and compile the Diagnoser → Patch Generator → Shadow Verifier → Selector Verifier → Test Runner loop."""
     graph = StateGraph(AgentState)
     graph.add_node("diagnoser", diagnoser)
@@ -84,7 +85,7 @@ def build_graph():
     return graph.compile()
 
 
-def build_review_graph():
+def build_review_graph() -> CompiledStateGraph:
     """Build the review-mode graph: Diagnoser → Reviewer → END.
 
     Reuses the Diagnoser to infer the root cause, then advises a source-level fix. No patch,
