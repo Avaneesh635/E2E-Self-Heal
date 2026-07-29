@@ -120,16 +120,19 @@ runs:
         # Heal mode (default): patch the test in place.
         uv run e2e-healer "${{ inputs.test-path }}" --log playwright.log $diff_flag $url_flag --json > "$summary"
         healed_rc=$?
-        echo "summary-path=repair-summary.json" >> "$GITHUB_OUTPUT"
         echo "review-path=" >> "$GITHUB_OUTPUT"
         # 0 = fixed, 1 = ran but still failing, >=2 = config/sandbox/path error (the
         # heal loop never ran). Keep "errored" distinct so a red build isn't blamed on
         # an un-healable test when the real cause is misconfiguration.
         if [ "$healed_rc" -eq 0 ]; then
+          echo "summary-path=repair-summary.json" >> "$GITHUB_OUTPUT"
           echo "outcome=healed" >> "$GITHUB_OUTPUT"
         elif [ "$healed_rc" -eq 1 ]; then
+          echo "summary-path=repair-summary.json" >> "$GITHUB_OUTPUT"
           echo "outcome=unhealed" >> "$GITHUB_OUTPUT"
         else
           echo "::error::e2e-healer exited $healed_rc — this is a configuration or sandbox error, not a healing failure. Check the NVIDIA API key, test-path, diff inputs, and sandbox settings."
+          # No usable summary was produced — don't advertise the empty/garbled file.
+          echo "summary-path=" >> "$GITHUB_OUTPUT"
           echo "outcome=errored" >> "$GITHUB_OUTPUT"
         fi
