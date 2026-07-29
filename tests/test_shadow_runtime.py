@@ -234,3 +234,7 @@ def test_run_shadow_with_mock_playwright_and_snapshots(
     assert len(subprocess_called) == 1
     assert "--config" in subprocess_called[0]
     mock_browser.new_context.assert_called_once_with(**expected_context_kwargs)
+    assert store.get_snapshot("test_snap").snapshot_id == "test_snap"
+    assert ws.snapshots_dir.is_dir()
+    assert not ws.cache_dir.exists()
+    assert not ws.tmp_dir.exists()

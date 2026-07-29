@@ -64,3 +64,42 @@ def test_match_options_accept_nested_configuration():
 
     assert config.match_options.allow_cross_origin is True
     assert config.match_options.min_score == 120.0
+
+
+@pytest.mark.parametrize("field", ["cache_dir", "snapshots_dir", "tmp_dir"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        ".",
+        "../outside",
+        "nested/../../outside",
+        "/absolute",
+        r"C:\absolute",
+        r"C:relative-to-drive",
+        ".git/artifacts",
+    ],
+)
+def test_artifact_directories_reject_unsafe_paths(field: str, value: str) -> None:
+    with pytest.raises(ValidationError):
+        ShadowConfig.model_validate({field: value})
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"cache_dir": "artifacts", "snapshots_dir": "artifacts"},
+        {"cache_dir": "artifacts", "snapshots_dir": "artifacts/snapshots"},
+        {"snapshots_dir": "artifacts", "tmp_dir": r"artifacts\tmp"},
+    ],
+)
+def test_artifact_directories_reject_overlapping_roles(overrides: dict[str, str]) -> None:
+    with pytest.raises(ValidationError):
+        ShadowConfig.model_validate(overrides)
+
+
+def test_artifact_directories_are_normalized_for_portable_reuse() -> None:
+    config = ShadowConfig(cache_dir=r"artifacts\cache", snapshots_dir="snapshots/./saved")
+
+    assert config.cache_dir == "artifacts/cache"
+    assert config.snapshots_dir == "snapshots/saved"

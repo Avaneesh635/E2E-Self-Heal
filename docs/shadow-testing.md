@@ -135,19 +135,22 @@ observability.
 ### 5. Shadow Runtime
 
 **Purpose:** the environment that hosts an isolated run. It owns the temporary workspace
-(scratch dirs, cached artifacts, the `snapshots/` directory the Store writes into) and is
-where the Trace Parser, Snapshot Store, and Mock Injector are wired together for a single
-shadow execution.
+(scratch dirs and cached artifacts) and the durable `snapshots/` directory the Store writes
+into. It is where the Trace Parser, Snapshot Store, and Mock Injector are wired together
+for a single shadow execution.
 
 **Consumes:** a snapshot id / snapshot set + a test path.
 **Produces:** a configured, sandboxed context ready for Playwright to run in, and cleans
 it up afterward.
 
 **Current state:** implemented. [`ShadowWorkspace`](../app/shadow/workspace.py) provides the
-workspace substrate — it creates and resolves `base_dir/{cache,snapshots,tmp}` and tears the
-whole tree down on `cleanup()` — and [`ShadowRuntime`](../app/shadow/runtime.py) composes
-workspace + store + injector + a Playwright run into a runnable shadow context, invoked by
-the `shadow_verifier` heal-graph node.
+workspace substrate. It validates relative, non-overlapping artifact directories; claims
+new or empty roots with an ownership marker; rejects dangerous or unowned roots and path
+escapes; and creates `base_dir/{cache,snapshots,tmp}`. Cleanup validates ownership again,
+then removes only disposable `cache/` and `tmp/` data according to the configured policy.
+The root and `snapshots/` survive for later replay. [`ShadowRuntime`](../app/shadow/runtime.py)
+composes workspace + store + injector + a Playwright run into a runnable shadow context,
+invoked by the `shadow_verifier` heal-graph node.
 
 ### 6. Playwright Execution (output)
 
