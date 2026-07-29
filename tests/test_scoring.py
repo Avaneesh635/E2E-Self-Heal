@@ -22,6 +22,8 @@ def scorer():
 
 
 def make_request(method="GET", url="/api/x", headers=None, body=None) -> CapturedRequest:
+    if url.startswith("/"):
+        url = f"https://example.test{url}"
     return CapturedRequest(method=method, url=url, headers=headers or {}, body=body)
 
 

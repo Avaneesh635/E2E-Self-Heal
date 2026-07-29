@@ -13,6 +13,8 @@ def test_shadow_config_is_importable_and_has_defaults():
     assert config.offline is False
     assert config.cleanup_policy is CleanupPolicy.ON_SUCCESS
     assert config.miss_policy is MissPolicy.STRICT
+    assert config.match_options.allow_cross_origin is False
+    assert config.match_options.min_score == 180.0
 
 
 def test_shadow_config_accepts_overrides():
@@ -53,3 +55,12 @@ def test_miss_policy_accepts_string_value():
 def test_invalid_miss_policy_is_rejected():
     with pytest.raises(ValidationError):
         ShadowConfig.model_validate({"miss_policy": "ignore"})
+
+
+def test_match_options_accept_nested_configuration():
+    config = ShadowConfig.model_validate(
+        {"match_options": {"allow_cross_origin": True, "min_score": 120.0}}
+    )
+
+    assert config.match_options.allow_cross_origin is True
+    assert config.match_options.min_score == 120.0

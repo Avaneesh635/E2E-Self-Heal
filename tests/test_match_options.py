@@ -253,3 +253,197 @@ def test_order_insensitive_arrays_reorder_wins_tie_breaker():
 
     incoming = CapturedRequest(method="POST", url="http://test.com/x", body='{"ids": [1, 2, 3]}')
     assert matcher.match(incoming).body == "reordered-set"
+
+
+# ---------------------------------------------------------------------------
+# Origin and confidence constraints
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("captured_url", "incoming_url"),
+    [
+        ("https://captured.example/api", "https://other.example/api"),
+        ("https://example.com/api", "http://example.com/api"),
+        ("https://example.com:444/api", "https://example.com/api"),
+    ],
+)
+def test_different_origins_do_not_match_by_default(captured_url: str, incoming_url: str):
+    matcher = SnapshotMatcher(
+        [_snapshot(CapturedRequest(method="GET", url=captured_url), body="captured")]
+    )
+
+    with pytest.raises(NoMatchError):
+        matcher.match(CapturedRequest(method="GET", url=incoming_url))
+
+
+def test_default_ports_are_equivalent_origins():
+    matcher = SnapshotMatcher(
+        [_snapshot(CapturedRequest(method="GET", url="https://example.com:443/api"), body="ok")]
+    )
+
+    response = matcher.match(CapturedRequest(method="GET", url="https://example.com/api"))
+
+    assert response.body == "ok"
+
+
+def test_explicit_zero_port_is_not_treated_as_the_default_port():
+    matcher = SnapshotMatcher(
+        [_snapshot(CapturedRequest(method="GET", url="https://example.com/api"), body="ok")]
+    )
+
+    with pytest.raises(NoMatchError):
+        matcher.match(CapturedRequest(method="GET", url="https://example.com:0/api"))
+
+
+def test_cross_origin_matching_requires_explicit_opt_in():
+    matcher = SnapshotMatcher(
+        [
+            _snapshot(
+                CapturedRequest(method="GET", url="https://captured.example/api"),
+                body="captured",
+            )
+        ],
+        options=MatchOptions(allow_cross_origin=True),
+    )
+
+    response = matcher.match(CapturedRequest(method="GET", url="https://other.example/api"))
+
+    assert response.body == "captured"
+
+
+def test_malformed_port_is_a_safe_miss():
+    matcher = SnapshotMatcher(
+        [_snapshot(CapturedRequest(method="GET", url="https://example.com/api"), body="ok")]
+    )
+
+    with pytest.raises(NoMatchError):
+        matcher.match(CapturedRequest(method="GET", url="https://example.com:bad/api"))
+
+
+def test_malformed_ipv6_is_a_safe_miss():
+    matcher = SnapshotMatcher(
+        [_snapshot(CapturedRequest(method="GET", url="https://[::1]/api"), body="ok")]
+    )
+
+    with pytest.raises(NoMatchError):
+        matcher.match(CapturedRequest(method="GET", url="https://[::1/api"))
+
+
+def test_cross_origin_opt_in_does_not_bypass_url_validation():
+    matcher = SnapshotMatcher(
+        [_snapshot(CapturedRequest(method="GET", url="https://example.com/api"), body="ok")],
+        options=MatchOptions(allow_cross_origin=True),
+    )
+
+    with pytest.raises(NoMatchError):
+        matcher.match(CapturedRequest(method="GET", url="https://[::1/api"))
+
+
+def test_equivalent_ipv6_spellings_share_an_origin():
+    matcher = SnapshotMatcher(
+        [_snapshot(CapturedRequest(method="GET", url="https://[::1]/api"), body="ok")]
+    )
+
+    response = matcher.match(CapturedRequest(method="GET", url="https://[0:0:0:0:0:0:0:1]/api"))
+
+    assert response.body == "ok"
+
+
+def test_absolute_url_without_a_host_is_a_safe_miss():
+    matcher = SnapshotMatcher(
+        [_snapshot(CapturedRequest(method="GET", url="https:///api"), body="ok")]
+    )
+
+    with pytest.raises(NoMatchError):
+        matcher.match(CapturedRequest(method="GET", url="https:///api"))
+
+
+def test_scheme_less_urls_are_safe_misses():
+    matcher = SnapshotMatcher(
+        [_snapshot(CapturedRequest(method="GET", url="/api?page=1"), body="ok")]
+    )
+
+    with pytest.raises(NoMatchError):
+        matcher.match(CapturedRequest(method="GET", url="/api?page=1"))
+
+
+@pytest.mark.parametrize("min_score", [-1.0, float("nan"), float("inf"), float("-inf")])
+def test_invalid_minimum_scores_are_rejected(min_score: float):
+    with pytest.raises(ValueError, match="finite, non-negative"):
+        MatchOptions(min_score=min_score)
+
+
+def test_explicit_scorer_supplies_matcher_options_when_options_are_omitted():
+    options = MatchOptions(allow_cross_origin=True, min_score=120.0)
+    matcher = SnapshotMatcher(
+        [
+            _snapshot(
+                CapturedRequest(method="GET", url="https://captured.example/api"),
+                body="captured",
+            )
+        ],
+        scorer=MatchScorer(options=options),
+    )
+
+    response = matcher.match(CapturedRequest(method="GET", url="https://other.example/api"))
+
+    assert response.body == "captured"
+
+
+def test_conflicting_explicit_scorer_and_options_are_rejected():
+    with pytest.raises(ValueError, match="same MatchOptions"):
+        SnapshotMatcher(
+            [],
+            scorer=MatchScorer(options=MatchOptions(allow_cross_origin=False)),
+            options=MatchOptions(allow_cross_origin=True),
+        )
+
+
+def test_default_threshold_rejects_low_confidence_query_and_body_mismatch():
+    captured = CapturedRequest(
+        method="POST",
+        url="https://example.com/api?page=1",
+        body='{"kind": "captured"}',
+    )
+    incoming = CapturedRequest(
+        method="POST",
+        url="https://example.com/api?page=2",
+        body='{"kind": "incoming"}',
+    )
+    matcher = SnapshotMatcher([_snapshot(captured, body="captured")])
+
+    assert MatchScorer().calculate_score(incoming, captured) == 120.0
+    with pytest.raises(NoMatchError):
+        matcher.match(incoming)
+
+
+def test_default_threshold_rejects_query_only_mismatch():
+    captured = CapturedRequest(method="GET", url="https://example.com/api?page=1")
+    incoming = CapturedRequest(method="GET", url="https://example.com/api?page=2")
+    matcher = SnapshotMatcher([_snapshot(captured, body="captured")])
+
+    assert MatchScorer().calculate_score(incoming, captured) == 170.0
+    with pytest.raises(NoMatchError):
+        matcher.match(incoming)
+
+
+def test_minimum_score_boundary_is_inclusive_and_configurable():
+    captured = CapturedRequest(
+        method="POST",
+        url="https://example.com/api?page=1",
+        body='{"kind": "captured"}',
+    )
+    incoming = CapturedRequest(
+        method="POST",
+        url="https://example.com/api?page=2",
+        body='{"kind": "incoming"}',
+    )
+    snapshots = [_snapshot(captured, body="captured")]
+
+    accepted = SnapshotMatcher(snapshots, options=MatchOptions(min_score=120.0))
+    rejected = SnapshotMatcher(snapshots, options=MatchOptions(min_score=120.01))
+
+    assert accepted.match(incoming).body == "captured"
+    with pytest.raises(NoMatchError):
+        rejected.match(incoming)

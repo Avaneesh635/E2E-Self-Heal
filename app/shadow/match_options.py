@@ -1,11 +1,7 @@
-"""Opt-in configuration for richer request↔snapshot matching.
-
-Every field defaults to the matching engine's original behavior, so building a
-matcher with no options — or with a bare ``MatchOptions()`` — changes nothing.
-Callers opt in to stricter or fuzzier matching by flipping individual fields.
-"""
+"""Configuration for request↔snapshot matching."""
 
 from dataclasses import dataclass
+from math import isfinite
 
 
 @dataclass(frozen=True)
@@ -18,6 +14,7 @@ class MatchOptions:
     * Header-aware matching — promote chosen headers to hard match requirements.
     * Body-aware matching — require an exact normalized body match.
     * Fuzzy / order-insensitive matching — compare JSON arrays as multisets.
+    * Safety constraints — require matching origins and a minimum confidence.
     """
 
     # --- Query-param normalization (opt-in extensions) ---
@@ -43,3 +40,15 @@ class MatchOptions:
     # Compare JSON arrays inside request bodies as multisets, so a reordered list
     # still matches. Off by default (arrays stay order-sensitive).
     order_insensitive_arrays: bool = False
+
+    # --- Safety constraints ---
+    # Permit matching requests across schemes, hosts, or effective ports. Off by
+    # default so a captured response cannot leak to another origin accidentally.
+    allow_cross_origin: bool = False
+    # Inclusive score floor for accepting a candidate. A same-path request with
+    # mismatched queries and otherwise empty metadata scores 170.
+    min_score: float = 180.0
+
+    def __post_init__(self) -> None:
+        if not isfinite(self.min_score) or self.min_score < 0:
+            raise ValueError("min_score must be a finite, non-negative number")

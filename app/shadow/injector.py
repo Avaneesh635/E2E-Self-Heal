@@ -9,6 +9,7 @@ import structlog
 
 from app.shadow.config import MissPolicy
 from app.shadow.interfaces import IMockInjector
+from app.shadow.match_options import MatchOptions
 from app.shadow.matcher import NoMatchError, SnapshotMatcher
 from app.shadow.schemas import CapturedRequest, CapturedResponse, NetworkSnapshot
 
@@ -33,9 +34,11 @@ class MockInjector(IMockInjector):
         self,
         page_or_context: Any = None,
         miss_policy: MissPolicy = MissPolicy.STRICT,
+        match_options: MatchOptions | None = None,
     ):
         self.page_or_context = page_or_context
         self.miss_policy = miss_policy
+        self.match_options = match_options or MatchOptions()
         self.unmatched_requests: list[CapturedRequest] = []
         self.matched_requests: list[tuple[CapturedRequest, float]] = []
         self.recorded_snapshots: list[NetworkSnapshot] = []
@@ -62,9 +65,9 @@ class MockInjector(IMockInjector):
                     snapshots.append(NetworkSnapshot(**item))
                 else:
                     snapshots.append(item)
-            self.matcher = SnapshotMatcher(snapshots)
+            self.matcher = SnapshotMatcher(snapshots, options=self.match_options)
         else:
-            self.matcher = SnapshotMatcher([mock_data])
+            self.matcher = SnapshotMatcher([mock_data], options=self.match_options)
 
         # 2. Resolve target and pattern
         pattern = "**/*"

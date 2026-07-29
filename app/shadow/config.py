@@ -2,6 +2,8 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.shadow.match_options import MatchOptions
+
 
 class CleanupPolicy(str, Enum):
     """When the Shadow Runtime should remove its workspace artifacts."""
@@ -62,4 +64,8 @@ class ShadowConfig(BaseModel):
     miss_policy: MissPolicy = Field(
         default=MissPolicy.STRICT,
         description="how to handle a live request with no matching snapshot",
+    )
+    match_options: MatchOptions = Field(
+        default_factory=MatchOptions,
+        description="request origin and confidence matching options",
     )
