@@ -42,6 +42,7 @@ def _patch_output() -> PatchOutput:
 
 
 def test_loop_heals_on_first_rerun(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
     spec = tmp_path / "t.spec.ts"
     spec.write_text(ORIGINAL)
 
@@ -62,6 +63,7 @@ def test_loop_heals_on_first_rerun(monkeypatch, tmp_path):
 
 
 def test_loop_gives_up_at_cap(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
     spec = tmp_path / "t.spec.ts"
     spec.write_text(ORIGINAL)
 

@@ -55,6 +55,16 @@ The snapshot lands as JSON under `.shadow_workspace/snapshots/login-happy-path.j
 [`ShadowConfig`](../app/shadow/config.py)). Deterministic, diff-friendly serialization
 means re-running this against the same trace always produces the same file.
 
+On first use, `ShadowWorkspace` claims a new or empty root with a versioned ownership
+marker. It refuses filesystem, home, and repository roots, as well as non-empty
+directories without that marker. This prevents a mistaken `workspace_dir` from adopting
+an unrelated directory. A workspace created by an older version without the marker must
+be moved aside or emptied before it can be claimed.
+
+Snapshots are durable: `ON_SUCCESS` and `ALWAYS` cleanup remove only the workspace's
+`cache/` and `tmp/` directories. The owned root and `snapshots/` remain available for
+later replays. `NEVER` preserves all three artifact directories.
+
 ## 3. Replay the test with `e2e-healer --shadow`
 
 Today, `e2e-healer --shadow` on its own only exercises the runtime lifecycle as a
