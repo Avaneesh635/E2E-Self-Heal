@@ -439,13 +439,10 @@ def init(
     test_dirs = list(set(f.parent for f in test_files))
     test_dir_str = ", ".join(str(d) for d in test_dirs) if test_dirs else "Not found"
 
-    llm_provider = os.getenv("E2E_HEALER_LLM_PROVIDER", "nvidia (default)")
-    has_api_key = bool(
-        os.getenv("E2E_HEALER_LLM_API_KEY")
-        or os.getenv("NVIDIA_API_KEY")
-        or os.getenv("OPENAI_API_KEY")
-        or os.getenv("ANTHROPIC_API_KEY")
-    )
+    llm_provider = settings.llm_provider
+    has_api_key = bool(settings.llm_api_key)
+
+    is_provider_ready = (llm_provider == "ollama") or has_api_key
 
     pw_installed = False
     pkg_json = Path("package.json")
@@ -477,18 +474,21 @@ def init(
         table.add_row("Test Directories", f"[dim]{test_dir_str}[/dim]")
 
     table.add_row("LLM Provider", f"[green]✓ {llm_provider}[/green]")
-    table.add_row(
-        "API Key",
-        "[green]✓ Configured[/green]"
-        if has_api_key
-        else "[red]✗ Missing (set E2E_HEALER_LLM_API_KEY or provider-specific key)[/red]",
-    )
+    if llm_provider == "ollama":
+        api_key_status = "[green]✓ Not required (local model)[/green]" if not has_api_key else "[green]✓ Configured[/green]"
+    else:
+        api_key_status = (
+            "[green]✓ Configured[/green]"
+            if has_api_key
+            else "[red]✗ Missing (set E2E_HEALER_LLM_API_KEY in .env)[/red]"
+        )
+    table.add_row("API Key", api_key_status)
 
     console.print(table)
     console.print()
 
     is_playwright_present = has_pw_config or pw_installed or test_count > 0
-    is_ready = has_api_key and is_playwright_present
+    is_ready = is_provider_ready and is_playwright_present
 
     if not is_playwright_present:
         console.print(
@@ -500,11 +500,11 @@ def init(
             )
         )
 
-    if not has_api_key:
+    if not is_provider_ready:
         console.print(
             Panel(
-                "[yellow]Action Required:[/yellow] Please set your LLM API key in the environment or a `.env` file.\n"
-                "Example: `export E2E_HEALER_LLM_API_KEY=your_key_here`\n"
+                "[yellow]Action Required:[/yellow] Please set your LLM API key in your `.env` file or environment.\n"
+                "Example: `E2E_HEALER_LLM_API_KEY=your_key_here`\n"
                 "See: https://github.com/Lee-Dongwook/E2E-Self-Heal#configuration",
                 title="Configuration Needed",
                 border_style="yellow",
@@ -533,7 +533,7 @@ def init(
                 border_style="yellow",
             )
         )
-        exit_code = 1 if not is_playwright_present else 0
+        exit_code = 1
 
     if scaffold:
         if WORKFLOW_TARGET_PATH.exists() and not force:
