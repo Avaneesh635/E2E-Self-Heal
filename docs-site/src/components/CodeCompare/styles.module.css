@@ -1,0 +1,15 @@
+/**
+ * CodeCompare — spacing only; the tab and code-block chrome stays Docusaurus's
+ * so the component renders identically to the hand-written <Tabs> markup it
+ * replaces. Tokens only (DESIGN.md §1.1).
+ */
+
+.wrapper {
+    margin: var(--eeh-space-5) 0;
+}
+
+/* The tab panel's last code block already carries Infima's bottom margin;
+   drop it so the wrapper owns the outer rhythm. */
+.wrapper :last-child > pre:last-child {
+    margin-bottom: 0;
+}

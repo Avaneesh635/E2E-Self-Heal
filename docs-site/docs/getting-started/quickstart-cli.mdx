@@ -3,8 +3,7 @@ title: "Quickstart — Local CLI"
 description: "Run the same engine locally: pipx/uv install, point it at a failing spec, watch it heal."
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
+import CodeCompare from '@site/src/components/CodeCompare';
 
 # Quickstart — Local CLI
 
@@ -46,32 +45,21 @@ The default provider is [NVIDIA NIM](https://build.nvidia.com/) (free key,
 The CLI (Python) reads and rewrites your **JS/TS Playwright spec** — here's the command
 alongside the file it operates on:
 
-<Tabs groupId="cli-vs-spec">
-  <TabItem value="cli" label="Engine (CLI)" default>
-
-```bash
-# Heal one failing test. With no --log, the engine runs the test to capture the failure:
+<CodeCompare
+  specFilename="tests/login.spec.ts"
+  cli={`# Heal one failing test. With no --log, the engine runs the test to capture the failure:
 e2e-healer tests/login.spec.ts
 
 # Preview only — run the loop but write nothing to disk:
-e2e-healer tests/login.spec.ts --dry-run
-```
-
-  </TabItem>
-  <TabItem value="spec" label="Your test (tests/login.spec.ts)">
-
-```ts title="tests/login.spec.ts"
-import { test, expect } from '@playwright/test';
+e2e-healer tests/login.spec.ts --dry-run`}
+  spec={`import { test, expect } from '@playwright/test';
 
 test('user logs in from the header', async ({ page }) => {
   await page.goto('/');
   await page.click('#login-btn');        // ⛔ id renamed → healer patches this line
-  await expect(page).toHaveURL(/\/app/); // ✅ assertion — never touched
-});
-```
-
-  </TabItem>
-</Tabs>
+  await expect(page).toHaveURL(/\\/app/); // ✅ assertion — never touched
+});`}
+/>
 
 The engine only ever rewrites the **selector/wait** line; the `expect(...)` assertion is
 out of scope by design.
