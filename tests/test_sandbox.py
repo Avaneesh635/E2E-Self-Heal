@@ -5,6 +5,7 @@ import pytest
 from app.config import settings
 from app.sandbox import (
     SandboxViolation,
+    assert_auto_discovered_target,
     assert_command_allowed,
     assert_read_allowed,
     assert_write_allowed,
@@ -104,6 +105,76 @@ def test_strict_allows_selector_verifier_temp_helper(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "allow_temp_helper", True)
 
     assert_write_allowed(root / ".e2e-healer-verify.mjs", reason="selector_verifier_helper")
+
+
+def _relaxed(monkeypatch, root: Path) -> None:
+    monkeypatch.setattr(settings, "sandbox_mode", "relaxed")
+    monkeypatch.setattr(settings, "workspace_root", str(root))
+    monkeypatch.setattr(settings, "write_globs", "*.spec.ts,**/*.spec.ts")
+
+
+def test_auto_discovered_allows_in_workspace_target(monkeypatch, tmp_path):
+    root = tmp_path / "repo"
+    target = root / "tests" / "login.spec.ts"
+    target.parent.mkdir(parents=True)
+    target.write_text("x")
+    _relaxed(monkeypatch, root)
+
+    assert_auto_discovered_target(target)
+
+
+def test_auto_discovered_rejects_absolute_external_in_relaxed(monkeypatch, tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    outside = tmp_path / "victim.spec.ts"
+    outside.write_text("x")
+    _relaxed(monkeypatch, root)
+
+    with pytest.raises(SandboxViolation):
+        assert_auto_discovered_target(outside)
+
+
+def test_auto_discovered_rejects_relative_external_in_relaxed(monkeypatch, tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    _relaxed(monkeypatch, root)
+
+    # ../victim.spec.ts resolves above the workspace root -> rejected.
+    with pytest.raises(SandboxViolation):
+        assert_auto_discovered_target(root / ".." / "victim.spec.ts")
+
+
+def test_auto_discovered_rejects_symlink_escape(monkeypatch, tmp_path):
+    root = tmp_path / "repo"
+    outside = tmp_path / "victim.spec.ts"
+    link = root / "tests" / "linked.spec.ts"
+    link.parent.mkdir(parents=True)
+    outside.write_text("x")
+    import app.sandbox as sandbox_module
+
+    original_resolve = sandbox_module._resolve
+
+    def mock_resolve(path):
+        if Path(path).resolve() == link.resolve():
+            return outside.resolve()
+        return original_resolve(path)
+
+    monkeypatch.setattr(sandbox_module, "_resolve", mock_resolve)
+    _relaxed(monkeypatch, root)
+
+    with pytest.raises(SandboxViolation):
+        assert_auto_discovered_target(link)
+
+
+def test_auto_discovered_off_mode_bypasses(monkeypatch, tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    outside = tmp_path / "victim.spec.ts"
+    outside.write_text("x")
+    monkeypatch.setattr(settings, "sandbox_mode", "off")
+    monkeypatch.setattr(settings, "workspace_root", str(root))
+
+    assert_auto_discovered_target(outside)
 
 
 def test_command_guard_rejects_shell_chaining(monkeypatch):

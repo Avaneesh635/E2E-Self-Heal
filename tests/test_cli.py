@@ -307,6 +307,8 @@ def test_cli_suite_failure_no_tests(monkeypatch) -> None:
 def test_cli_suite_healing_success(mock_graph_success, monkeypatch, tmp_path) -> None:
     test_file = tmp_path / "test.spec.ts"
     test_file.write_text("await page.click('#old')")
+    # Auto-discovered targets must resolve under workspace_root (Issue #211).
+    monkeypatch.setattr(cli_module.settings, "workspace_root", str(tmp_path))
     run_count = 0
 
     def mock_run_playwright(path):

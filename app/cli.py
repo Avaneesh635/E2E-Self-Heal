@@ -26,6 +26,7 @@ from app.preprocess.failure_scanner import scan_failing_tests
 from app.runner import run_playwright
 from app.sandbox import (
     SandboxViolation,
+    assert_auto_discovered_target,
     assert_command_allowed,
     assert_read_allowed,
     assert_write_allowed,
@@ -183,20 +184,27 @@ def _heal_suite(suite_target: str, dom_diff_context: list[dict], dry_run: bool) 
     results: list[RepairSummary] = []
     for rel in scan_failing_tests(raw_log):
         path = Path(rel)
+        # Targets parsed from reporter output are untrusted: require them to resolve inside
+        # the workspace (all modes except off) rather than authorizing an external path by
+        # its basename (Issue #211).
         try:
-            assert_read_allowed(path)
-            assert_write_allowed(path, reason="suite_repair_target")
+            resolved = assert_auto_discovered_target(path)
         except SandboxViolation as exc:
             logger.warning("failing_test_sandbox_denied", path=rel, error=str(exc))
+            # Keep the denied failure visible as an unresolved suite result rather than
+            # silently dropping it, so the suite is not reported as fully healed.
+            results.append(RepairSummary(test_script_path=rel, is_success=False, loop_count=0))
             continue
-        if not path.exists():
+        # Use the validated canonical path for all filesystem access; keep the
+        # workspace-relative value only for logging/display.
+        if not resolved.exists():
             logger.warning("failing_test_not_found", path=rel)
             continue
-        rerun_passed, focused_log = run_playwright(rel)
+        rerun_passed, focused_log = run_playwright(str(resolved))
         if rerun_passed:
             results.append(RepairSummary(test_script_path=rel, is_success=True, loop_count=0))
             continue
-        results.append(_heal_file(path, focused_log, dom_diff_context, dry_run))
+        results.append(_heal_file(resolved, focused_log, dom_diff_context, dry_run))
     healed = sum(1 for r in results if r.is_success)
     return SuiteSummary(
         total_failed=len(results),
@@ -279,7 +287,15 @@ def heal(
         help='JSON selector hint for pinpoint healing (e.g. \'{"type":"role","value":"button[name=Submit]","original":"#old-btn"}\')',
     ),
 ) -> None:
-    """Repair a failing test (or the whole suite). Exit 0 if everything is fixed, else non-zero."""
+    """Repair a failing test (or the whole suite). Exit 0 if everything is fixed, else non-zero.
+
+    Target authorization differs by how the target was obtained. An explicit ``test_path`` a
+    developer typed is trusted input and is authorized only by the sandbox read/write globs
+    (so, in relaxed mode, an explicit path may live outside ``workspace_root``). Targets the
+    suite healer auto-discovers from Playwright reporter output are untrusted and are held to
+    the stricter ``assert_auto_discovered_target`` rule — they must resolve inside
+    ``workspace_root`` in every mode except ``off`` (Issue #211).
+    """
     configure_logging(settings.log_level)
     try:
         if app_url is not None:
