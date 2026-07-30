@@ -1,11 +1,22 @@
 """Suite-mode orchestration, with Playwright and per-file healing mocked out."""
 
+import pytest
+
 import app.cli as cli
+from app.config import settings
 from app.schemas import RepairSummary
 
 
 def _combined(*paths) -> str:
     return "".join(f"  {i + 1}) {p}:1:1 › t\n" for i, p in enumerate(paths))
+
+
+@pytest.fixture(autouse=True)
+def _workspace(monkeypatch, tmp_path):
+    # Auto-discovered targets must resolve under workspace_root, so anchor it to tmp_path
+    # where the fixtures live (Issue #211).
+    monkeypatch.setattr(settings, "sandbox_mode", "relaxed")
+    monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
 
 
 def test_suite_passes_nothing_to_heal(monkeypatch):
@@ -70,3 +81,54 @@ def test_suite_skips_heal_when_file_passes_on_rerun(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "_heal_file", _must_not_heal)
     summary = cli._heal_suite("", [], dry_run=False)
     assert (summary.total_failed, summary.healed, summary.is_success) == (1, 1, True)
+
+
+def test_suite_denies_external_path_but_keeps_it_visible(monkeypatch, tmp_path):
+    # An absolute path outside the workspace (attacker-influenced reporter output) must not
+    # be patched, yet must stay visible as an unresolved suite result (Issue #211).
+    inside = tmp_path / "a.spec.ts"
+    inside.write_text("x")
+    outside = tmp_path.parent / "victim.spec.ts"
+    outside.write_text("secret")
+    combined = _combined(outside, inside)
+
+    def fake_run(target=""):
+        return (False, combined) if target == "" else (False, "focused")
+
+    def _heal(p, log, ctx, dry):
+        assert cli.Path(p) == inside, "only the in-workspace target may be healed"
+        return RepairSummary(test_script_path=str(p), is_success=True, loop_count=1)
+
+    monkeypatch.setattr(cli, "run_playwright", fake_run)
+    monkeypatch.setattr(cli, "_heal_file", _heal)
+    summary = cli._heal_suite("", [], dry_run=False)
+
+    # Both failures are reported; the external one is unresolved, so the suite is not success.
+    assert (summary.total_failed, summary.healed, summary.is_success) == (2, 1, False)
+    denied = next(r for r in summary.results if r.test_script_path == str(outside))
+    assert denied.is_success is False
+    assert outside.read_text() == "secret"
+
+
+def test_suite_denies_relative_external_path(monkeypatch, tmp_path):
+    # A relative path that resolves outside the workspace is rejected too.
+    inside = tmp_path / "a.spec.ts"
+    inside.write_text("x")
+    combined = _combined("../victim.spec.ts", inside)
+
+    def fake_run(target=""):
+        return (False, combined) if target == "" else (False, "focused")
+
+    monkeypatch.setattr(cli, "run_playwright", fake_run)
+    monkeypatch.setattr(
+        cli,
+        "_heal_file",
+        lambda p, log, ctx, dry: RepairSummary(
+            test_script_path=str(p), is_success=True, loop_count=1
+        ),
+    )
+    summary = cli._heal_suite("", [], dry_run=False)
+    assert (summary.total_failed, summary.healed, summary.is_success) == (2, 1, False)
+    assert any(
+        r.test_script_path == "../victim.spec.ts" and not r.is_success for r in summary.results
+    )

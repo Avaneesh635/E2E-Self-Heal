@@ -58,6 +58,16 @@ def assert_write_allowed(path: Path, reason: str = "write") -> None:
         raise SandboxViolation(f"unexpected helper write target: {path}")
 
 
+def assert_auto_discovered_target(path: Path) -> None:
+    if sandbox_mode() == "off":
+        return
+    resolved = _resolve(path)
+    _assert_not_denied(resolved)
+    _assert_inside_workspace(resolved)
+    if not _matches_any(_relative_to_workspace(resolved), _patterns(settings.write_globs)):
+        raise SandboxViolation(f"write denied by sandbox globs: {path}")
+
+
 def assert_patch_boundary_allowed(path: Path) -> None:
     """Reject generated patches outside the configured architecture boundary."""
     resolved = _resolve(path)
