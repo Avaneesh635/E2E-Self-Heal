@@ -188,21 +188,23 @@ def _heal_suite(suite_target: str, dom_diff_context: list[dict], dry_run: bool) 
         # the workspace (all modes except off) rather than authorizing an external path by
         # its basename (Issue #211).
         try:
-            assert_auto_discovered_target(path)
+            resolved = assert_auto_discovered_target(path)
         except SandboxViolation as exc:
             logger.warning("failing_test_sandbox_denied", path=rel, error=str(exc))
             # Keep the denied failure visible as an unresolved suite result rather than
             # silently dropping it, so the suite is not reported as fully healed.
             results.append(RepairSummary(test_script_path=rel, is_success=False, loop_count=0))
             continue
-        if not path.exists():
+        # Use the validated canonical path for all filesystem access; keep the
+        # workspace-relative value only for logging/display.
+        if not resolved.exists():
             logger.warning("failing_test_not_found", path=rel)
             continue
-        rerun_passed, focused_log = run_playwright(rel)
+        rerun_passed, focused_log = run_playwright(str(resolved))
         if rerun_passed:
             results.append(RepairSummary(test_script_path=rel, is_success=True, loop_count=0))
             continue
-        results.append(_heal_file(path, focused_log, dom_diff_context, dry_run))
+        results.append(_heal_file(resolved, focused_log, dom_diff_context, dry_run))
     healed = sum(1 for r in results if r.is_success)
     return SuiteSummary(
         total_failed=len(results),

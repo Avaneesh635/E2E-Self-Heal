@@ -58,14 +58,20 @@ def assert_write_allowed(path: Path, reason: str = "write") -> None:
         raise SandboxViolation(f"unexpected helper write target: {path}")
 
 
-def assert_auto_discovered_target(path: Path) -> None:
+def assert_auto_discovered_target(path: Path) -> Path:
+    """Validate an auto-discovered target and return its canonical resolved path.
+
+    Callers must use the returned path for filesystem access so what is validated
+    is exactly what is used; the raw input is only safe for logging/display.
+    """
     if sandbox_mode() == "off":
-        return
+        return _resolve(path)
     resolved = _resolve(path)
     _assert_not_denied(resolved)
     _assert_inside_workspace(resolved)
     if not _matches_any(_relative_to_workspace(resolved), _patterns(settings.write_globs)):
         raise SandboxViolation(f"write denied by sandbox globs: {path}")
+    return resolved
 
 
 def assert_patch_boundary_allowed(path: Path) -> None:
