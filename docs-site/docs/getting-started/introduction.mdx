@@ -4,6 +4,7 @@ description: "What e2e-healer is and why FE/QA teams use it: broken Playwright s
 ---
 
 import HealingDiff from '@site/src/components/HealingDiff';
+import ScopeGuardrailCallout from '@site/src/components/ScopeGuardrailCallout';
 
 # Introduction
 
@@ -41,12 +42,9 @@ One renamed selector, patched automatically — and **nothing else in the test i
 
 ![e2e-healer demo — diagnose, verify against the live DOM, re-run, fixed](https://raw.githubusercontent.com/Lee-Dongwook/E2E-Self-Heal/main/docs/demo.gif)
 
-:::warning Scope guardrail
-The engine **only** fixes failing **locators** and **wait conditions**. It **never** edits
-your assertions (`expect(...)`), test flow, or business logic — enforced at both the prompt
-and JSON-schema level. Every patch stays small and human-reviewable, so it's safe to run in
-an enterprise pipeline.
-:::
+<ScopeGuardrailCallout>
+  Every patch stays small and human-reviewable, so it's safe to run in an enterprise pipeline.
+</ScopeGuardrailCallout>
 
 ## Two modes: heal and review
 

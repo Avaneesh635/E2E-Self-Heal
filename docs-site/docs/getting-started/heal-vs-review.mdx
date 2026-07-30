@@ -4,6 +4,7 @@ description: "Two outputs from one diagnosis engine: patch the test (heal) or ad
 ---
 
 import HealingDiff from '@site/src/components/HealingDiff';
+import ScopeGuardrailCallout from '@site/src/components/ScopeGuardrailCallout';
 
 # heal vs review
 
@@ -64,10 +65,10 @@ In CI, select the mode with the `mode:` input:
     diff-base: ${{ github.event.pull_request.base.sha }}
 ```
 
-:::warning Scope guardrail
-Both modes are read-only toward your assertions and test logic. `heal` touches **only**
-selectors/waits; `review` touches **nothing** — it just advises.
-:::
+<ScopeGuardrailCallout variant="review">
+  `heal` is bound by the same guardrail from the other side: it touches only selectors and
+  wait conditions, never your assertions or test flow.
+</ScopeGuardrailCallout>
 
 ## Next steps
 
