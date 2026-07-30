@@ -3,6 +3,8 @@ title: "Quickstart — GitHub Action"
 description: "Add self-healing to your PRs in ~5 minutes. No local setup — it runs in the cloud and opens a patch PR."
 ---
 
+import ScopeGuardrailCallout from '@site/src/components/ScopeGuardrailCallout';
+
 # Quickstart — GitHub Action
 
 Add self-healing to your PRs in **~5 minutes**. This is the recommended way to run
@@ -104,10 +106,10 @@ The healer changes **only the broken selector** — the assertion is left exactl
 The PR body is generated from the machine-readable `RepairSummary`
 (`steps.heal.outputs.summary-path`), so reviewers see exactly what changed and why.
 
-:::warning Scope guardrail
-Even in CI, the engine only patches **locators and wait conditions** — never `expect(...)`
-or control flow. The patch always lands as a reviewable PR; nothing is merged automatically.
-:::
+<ScopeGuardrailCallout>
+  This holds in CI too: the patch always lands as a reviewable PR, and nothing is merged
+  automatically.
+</ScopeGuardrailCallout>
 
 ## Next steps
 

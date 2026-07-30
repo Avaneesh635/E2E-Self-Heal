@@ -1,0 +1,90 @@
+/**
+ * ScopeGuardrailCallout — Docusaurus-admonition-shaped scope guardrail.
+ * Tokens only (--eeh-* / --ifm-*), per DESIGN.md §1.1 and §4.
+ *
+ * Accent choice: `heal` keeps the amber --eeh-warn of the :::warning blocks it
+ * replaces (the engine does write to your file — read this). `review` uses
+ * --eeh-healed because that mode writes nothing at all.
+ */
+
+.callout {
+    /* Per-variant accent; every color below derives from this one token. */
+    --eeh-guardrail-accent: var(--eeh-warn);
+
+    margin: var(--eeh-space-5) 0;
+    padding: var(--eeh-space-4);
+    border: 1px solid
+        color-mix(in srgb, var(--eeh-guardrail-accent) 35%, var(--eeh-border));
+    border-left: var(--eeh-space-1) solid var(--eeh-guardrail-accent);
+    border-radius: var(--eeh-radius-md);
+    background-color: color-mix(
+        in srgb,
+        var(--eeh-guardrail-accent) 8%,
+        var(--eeh-surface)
+    );
+    font-family: var(--eeh-font-sans);
+}
+
+.calloutHeal {
+    --eeh-guardrail-accent: var(--eeh-warn);
+}
+
+.calloutReview {
+    --eeh-guardrail-accent: var(--eeh-healed);
+}
+
+.heading {
+    display: flex;
+    align-items: center;
+    gap: var(--eeh-space-2);
+    margin: 0 0 var(--eeh-space-2);
+    color: var(--eeh-guardrail-accent);
+}
+
+.icon {
+    flex-shrink: 0;
+}
+
+.title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.body {
+    color: var(--eeh-text);
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+.copy {
+    margin: 0;
+}
+
+/* Page-supplied slot. MDX hands us its own <p>, so collapse the outer margins
+   and let the gap come from here. */
+.extra {
+    margin-top: var(--eeh-space-2);
+}
+
+.extra > :first-child {
+    margin-top: 0;
+}
+
+.extra > :last-child {
+    margin-bottom: 0;
+}
+
+/* Inline code inherits the site's mono token; keep it readable on the tint. */
+.body code {
+    font-family: var(--eeh-font-mono);
+    overflow-wrap: anywhere;
+}
+
+/* ~360px: tighter padding so the copy keeps its measure (DESIGN.md §1.4). */
+@media (max-width: 480px) {
+    .callout {
+        padding: var(--eeh-space-3);
+    }
+}
