@@ -9,12 +9,17 @@ import styles from "./styles.module.css";
  * --eeh-broken and "healed" always uses --eeh-healed (semantic colors are locked
  * in DESIGN.md rule §1.5).
  *
+ * The changed part is highlighted automatically: a small, dependency-free
+ * token-level diff between `before` and `after` marks removed fragments red in
+ * the Before panel and added fragments green in the After panel. Pass the
+ * optional `highlight` substring only when you want to override the auto-diff
+ * and pinpoint an exact fragment.
+ *
  * Example:
  *   <HealingDiff
  *     before={`await page.click('#submit-btn')`}
  *     after={`await page.click('#submit')`}
  *     reason="id changed: submit-btn → submit"
- *     highlight="submit"
  *   />
  */
 export interface HealingDiffProps {
@@ -24,21 +29,115 @@ export interface HealingDiffProps {
     after: string;
     /** Optional one-line explanation of what changed. */
     reason?: string;
-    /** Optional opt-in substring to precisely pinpoint the delta fragment. */
+    /** Optional override: pinpoint an exact substring instead of the auto-diff. */
     highlight?: string;
     /** Optional labels; default to "Before" / "After". */
     beforeLabel?: string;
     afterLabel?: string;
 }
 
-// Helper function to find the 'highlight' string and wrap it in the CSS span
+interface DiffPart {
+    text: string;
+    changed: boolean;
+}
+
+/**
+ * Split a selector line into diff tokens: selector-ish identifiers (letters,
+ * digits, `_ - # . $`) stay whole so we highlight `#submit-btn`/`.btn` as a
+ * unit, while whitespace runs and any other single char are their own tokens.
+ */
+function tokenize(value: string): string[] {
+    return value.match(/[\w#$.-]+|\s+|[^\w\s]/g) ?? [];
+}
+
+/** Collapse consecutive tokens that share the same changed flag into one part. */
+function mergeAdjacent(parts: DiffPart[]): DiffPart[] {
+    return parts.reduce<DiffPart[]>((acc, part) => {
+        const last = acc[acc.length - 1];
+        if (last && last.changed === part.changed) {
+            last.text += part.text;
+            return acc;
+        }
+        acc.push({ ...part });
+        return acc;
+    }, []);
+}
+
+/**
+ * Token-level LCS diff. Returns the parts to render in each panel: unchanged
+ * tokens are shared, removed tokens surface only in `before`, added tokens only
+ * in `after`. Both strings are short (single selector lines) so O(n·m) is fine.
+ */
+function diffTokens(before: string, after: string): {
+    before: DiffPart[];
+    after: DiffPart[];
+} {
+    const a = tokenize(before);
+    const b = tokenize(after);
+    const n = a.length;
+    const m = b.length;
+
+    const dp: number[][] = Array.from({ length: n + 1 }, () =>
+        new Array<number>(m + 1).fill(0),
+    );
+    for (let i = n - 1; i >= 0; i--) {
+        for (let j = m - 1; j >= 0; j--) {
+            dp[i][j] =
+                a[i] === b[j]
+                    ? dp[i + 1][j + 1] + 1
+                    : Math.max(dp[i + 1][j], dp[i][j + 1]);
+        }
+    }
+
+    const beforeParts: DiffPart[] = [];
+    const afterParts: DiffPart[] = [];
+    let i = 0;
+    let j = 0;
+    while (i < n && j < m) {
+        if (a[i] === b[j]) {
+            beforeParts.push({ text: a[i], changed: false });
+            afterParts.push({ text: b[j], changed: false });
+            i++;
+            j++;
+        } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+            beforeParts.push({ text: a[i], changed: true });
+            i++;
+        } else {
+            afterParts.push({ text: b[j], changed: true });
+            j++;
+        }
+    }
+    while (i < n) beforeParts.push({ text: a[i++], changed: true });
+    while (j < m) afterParts.push({ text: b[j++], changed: true });
+
+    return {
+        before: mergeAdjacent(beforeParts),
+        after: mergeAdjacent(afterParts),
+    };
+}
+
+/** Render diff parts, wrapping changed fragments in the variant highlight span. */
+function renderParts(parts: DiffPart[], variant: "broken" | "healed"): ReactNode {
+    const highlightClass =
+        variant === "broken" ? styles.highlightBroken : styles.highlightHealed;
+    return parts.map((part, index) =>
+        part.changed ? (
+            <span key={index} className={highlightClass}>
+                {part.text}
+            </span>
+        ) : (
+            <React.Fragment key={index}>{part.text}</React.Fragment>
+        ),
+    );
+}
+
+/** Manual override: wrap every occurrence of `highlight` in the variant span. */
 function renderHighlightedText(
     text: string,
-    highlight?: string,
-    variant?: "broken" | "healed",
+    highlight: string,
+    variant: "broken" | "healed",
 ): ReactNode {
-    // If no highlight is provided, or the text doesn't contain it, return plain text
-    if (!highlight || !text.includes(highlight)) {
+    if (!text.includes(highlight)) {
         return text;
     }
 
@@ -58,6 +157,26 @@ function renderHighlightedText(
             ))}
         </>
     );
+}
+
+/** Choose the highlighting strategy: manual override when `highlight` is set,
+ *  otherwise the automatic token-level diff. */
+function buildCode(
+    before: string,
+    after: string,
+    highlight?: string,
+): { before: ReactNode; after: ReactNode } {
+    if (highlight) {
+        return {
+            before: renderHighlightedText(before, highlight, "broken"),
+            after: renderHighlightedText(after, highlight, "healed"),
+        };
+    }
+    const diff = diffTokens(before, after);
+    return {
+        before: renderParts(diff.before, "broken"),
+        after: renderParts(diff.after, "healed"),
+    };
 }
 
 function Panel({
@@ -89,19 +208,12 @@ export default function HealingDiff({
     beforeLabel = "Before",
     afterLabel = "After",
 }: HealingDiffProps): ReactNode {
+    const code = buildCode(before, after, highlight);
     return (
         <figure className={styles.wrapper}>
             <div className={styles.panels}>
-                <Panel
-                    variant="broken"
-                    label={beforeLabel}
-                    code={renderHighlightedText(before, highlight, "broken")}
-                />
-                <Panel
-                    variant="healed"
-                    label={afterLabel}
-                    code={renderHighlightedText(after, highlight, "healed")}
-                />
+                <Panel variant="broken" label={beforeLabel} code={code.before} />
+                <Panel variant="healed" label={afterLabel} code={code.after} />
             </div>
             {reason ? (
                 <figcaption className={styles.reason}>{reason}</figcaption>
