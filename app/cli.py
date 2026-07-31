@@ -475,7 +475,11 @@ def init(
 
     table.add_row("LLM Provider", f"[green]✓ {llm_provider}[/green]")
     if llm_provider == "ollama":
-        api_key_status = "[green]✓ Not required (local model)[/green]" if not has_api_key else "[green]✓ Configured[/green]"
+        api_key_status = (
+            "[green]✓ Not required (local model)[/green]"
+            if not has_api_key
+            else "[green]✓ Configured[/green]"
+        )
     else:
         api_key_status = (
             "[green]✓ Configured[/green]"
@@ -503,7 +507,8 @@ def init(
     if not is_provider_ready:
         console.print(
             Panel(
-                "[yellow]Action Required:[/yellow] Please set your LLM API key in your `.env` file or environment.\n"
+                "[yellow]Action Required:[/yellow] Please set your LLM API key "
+                "in your `.env` file or environment.\n"
                 "Example: `E2E_HEALER_LLM_API_KEY=your_key_here`\n"
                 "See: https://github.com/Lee-Dongwook/E2E-Self-Heal#configuration",
                 title="Configuration Needed",
@@ -527,7 +532,7 @@ def init(
     else:
         console.print(
             Panel(
-                "Once you've configured your API key and have Playwright tests, "
+                "Once you have resolved the configuration issues and have Playwright tests, "
                 "you'll be ready to use E2E Self-Healing!",
                 title="Next Steps",
                 border_style="yellow",
