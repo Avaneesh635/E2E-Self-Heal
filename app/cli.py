@@ -2,10 +2,8 @@
 
 import difflib
 import json
-import os
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 import structlog
 import typer
@@ -90,7 +88,7 @@ def main(
     raise typer.Exit(code=0)
 
 
-def _read_diff(diff_file: Optional[Path], diff_base: Optional[str]) -> str:
+def _read_diff(diff_file: Path | None, diff_base: str | None) -> str:
     if diff_file is not None:
         assert_read_allowed(diff_file)
         return diff_file.read_text()
@@ -262,26 +260,26 @@ def _render_findings(report: ReviewReport) -> None:
 
 @app.command()
 def heal(
-    test_path: Optional[Path] = typer.Argument(
+    test_path: Path | None = typer.Argument(
         None, help="failing test file; a directory or omitting it heals the whole suite"
     ),
-    log_file: Optional[Path] = typer.Option(
+    log_file: Path | None = typer.Option(
         None, "--log", help="raw Playwright failure log (single-file mode); else the test is run"
     ),
-    diff_file: Optional[Path] = typer.Option(
+    diff_file: Path | None = typer.Option(
         None, "--diff", help="git diff file; defaults to `git diff`"
     ),
-    diff_base: Optional[str] = typer.Option(
+    diff_base: str | None = typer.Option(
         None, "--diff-base", help="git ref to diff against as base...HEAD (e.g. a PR base)"
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="run the loop but restore the original file; write nothing"
     ),
-    app_url: Optional[str] = typer.Option(
+    app_url: str | None = typer.Option(
         None, "--app-url", help="URL the Selector Verifier loads to check patched selectors"
     ),
     json_output: bool = typer.Option(False, "--json", help="emit JSON summary to stdout"),
-    selector_hint: Optional[str] = typer.Option(
+    selector_hint: str | None = typer.Option(
         None,
         "--selector-hint",
         help='JSON selector hint for pinpoint healing (e.g. \'{"type":"role","value":"button[name=Submit]","original":"#old-btn"}\')',
@@ -384,13 +382,13 @@ def heal(
 @app.command()
 def review(
     test_path: Path = typer.Argument(..., help="failing test file to review (never modified)"),
-    log_file: Optional[Path] = typer.Option(
+    log_file: Path | None = typer.Option(
         None, "--log", help="raw Playwright failure log; else the test is run to produce one"
     ),
-    diff_file: Optional[Path] = typer.Option(
+    diff_file: Path | None = typer.Option(
         None, "--diff", help="git diff file; defaults to `git diff`"
     ),
-    diff_base: Optional[str] = typer.Option(
+    diff_base: str | None = typer.Option(
         None, "--diff-base", help="git ref to diff against as base...HEAD (e.g. a PR base)"
     ),
     json_output: bool = typer.Option(
@@ -455,13 +453,10 @@ def init(
     test_dirs = list(set(f.parent for f in test_files))
     test_dir_str = ", ".join(str(d) for d in test_dirs) if test_dirs else "Not found"
 
-    llm_provider = os.getenv("E2E_HEALER_LLM_PROVIDER", "nvidia (default)")
-    has_api_key = bool(
-        os.getenv("E2E_HEALER_LLM_API_KEY")
-        or os.getenv("NVIDIA_API_KEY")
-        or os.getenv("OPENAI_API_KEY")
-        or os.getenv("ANTHROPIC_API_KEY")
-    )
+    llm_provider = settings.llm_provider
+    has_api_key = bool(settings.llm_api_key)
+
+    is_provider_ready = (llm_provider == "ollama") or has_api_key
 
     pw_installed = False
     pkg_json = Path("package.json")
@@ -493,18 +488,25 @@ def init(
         table.add_row("Test Directories", f"[dim]{test_dir_str}[/dim]")
 
     table.add_row("LLM Provider", f"[green]✓ {llm_provider}[/green]")
-    table.add_row(
-        "API Key",
-        "[green]✓ Configured[/green]"
-        if has_api_key
-        else "[red]✗ Missing (set E2E_HEALER_LLM_API_KEY or provider-specific key)[/red]",
-    )
+    if llm_provider == "ollama":
+        api_key_status = (
+            "[green]✓ Not required (local model)[/green]"
+            if not has_api_key
+            else "[green]✓ Configured[/green]"
+        )
+    else:
+        api_key_status = (
+            "[green]✓ Configured[/green]"
+            if has_api_key
+            else "[red]✗ Missing (set E2E_HEALER_LLM_API_KEY in .env)[/red]"
+        )
+    table.add_row("API Key", api_key_status)
 
     console.print(table)
     console.print()
 
     is_playwright_present = has_pw_config or pw_installed or test_count > 0
-    is_ready = has_api_key and is_playwright_present
+    is_ready = is_provider_ready and is_playwright_present
 
     if not is_playwright_present:
         console.print(
@@ -516,11 +518,12 @@ def init(
             )
         )
 
-    if not has_api_key:
+    if not is_provider_ready:
         console.print(
             Panel(
-                "[yellow]Action Required:[/yellow] Please set your LLM API key in the environment or a `.env` file.\n"
-                "Example: `export E2E_HEALER_LLM_API_KEY=your_key_here`\n"
+                "[yellow]Action Required:[/yellow] Please set your LLM API key "
+                "in your `.env` file or environment.\n"
+                "Example: `E2E_HEALER_LLM_API_KEY=your_key_here`\n"
                 "See: https://github.com/Lee-Dongwook/E2E-Self-Heal#configuration",
                 title="Configuration Needed",
                 border_style="yellow",
@@ -543,13 +546,13 @@ def init(
     else:
         console.print(
             Panel(
-                "Once you've configured your API key and have Playwright tests, "
+                "Once you have resolved the configuration issues and have Playwright tests, "
                 "you'll be ready to use E2E Self-Healing!",
                 title="Next Steps",
                 border_style="yellow",
             )
         )
-        exit_code = 1 if not is_playwright_present else 0
+        exit_code = 1
 
     if scaffold:
         if WORKFLOW_TARGET_PATH.exists() and not force:

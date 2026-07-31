@@ -329,6 +329,8 @@ def test_cli_suite_healing_success(mock_graph_success, monkeypatch, tmp_path) ->
 def test_cli_init_scaffolds_workflow_successfully(monkeypatch, tmp_path) -> None:
     # Change working directory to a temporary path so we don't overwrite your actual files
     monkeypatch.chdir(tmp_path)
+
+    monkeypatch.setattr("app.cli.settings.llm_provider", "ollama")
     # Create a dummy playwright config so the readiness check exits with code 0
     (tmp_path / "playwright.config.ts").write_text("export default {}")
     runner = CliRunner()
@@ -343,6 +345,7 @@ def test_cli_init_scaffolds_workflow_successfully(monkeypatch, tmp_path) -> None
 
 def test_cli_init_prevents_overwrite_unless_forced(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("app.cli.settings.llm_provider", "ollama")
     # Create a dummy playwright config so the readiness check exits with code 0 on success
     (tmp_path / "playwright.config.ts").write_text("export default {}")
     # Pre-create the file with dummy text
