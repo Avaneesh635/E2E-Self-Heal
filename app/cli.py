@@ -2,10 +2,8 @@
 
 import difflib
 import json
-import os
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 import structlog
 import typer
@@ -89,7 +87,7 @@ def main(
     raise typer.Exit(code=0)
 
 
-def _read_diff(diff_file: Optional[Path], diff_base: Optional[str]) -> str:
+def _read_diff(diff_file: Path | None, diff_base: str | None) -> str:
     if diff_file is not None:
         assert_read_allowed(diff_file)
         return diff_file.read_text()
@@ -254,26 +252,26 @@ def _render_findings(report: ReviewReport) -> None:
 
 @app.command()
 def heal(
-    test_path: Optional[Path] = typer.Argument(
+    test_path: Path | None = typer.Argument(
         None, help="failing test file; a directory or omitting it heals the whole suite"
     ),
-    log_file: Optional[Path] = typer.Option(
+    log_file: Path | None = typer.Option(
         None, "--log", help="raw Playwright failure log (single-file mode); else the test is run"
     ),
-    diff_file: Optional[Path] = typer.Option(
+    diff_file: Path | None = typer.Option(
         None, "--diff", help="git diff file; defaults to `git diff`"
     ),
-    diff_base: Optional[str] = typer.Option(
+    diff_base: str | None = typer.Option(
         None, "--diff-base", help="git ref to diff against as base...HEAD (e.g. a PR base)"
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="run the loop but restore the original file; write nothing"
     ),
-    app_url: Optional[str] = typer.Option(
+    app_url: str | None = typer.Option(
         None, "--app-url", help="URL the Selector Verifier loads to check patched selectors"
     ),
     json_output: bool = typer.Option(False, "--json", help="emit JSON summary to stdout"),
-    selector_hint: Optional[str] = typer.Option(
+    selector_hint: str | None = typer.Option(
         None,
         "--selector-hint",
         help='JSON selector hint for pinpoint healing (e.g. \'{"type":"role","value":"button[name=Submit]","original":"#old-btn"}\')',
@@ -368,13 +366,13 @@ def heal(
 @app.command()
 def review(
     test_path: Path = typer.Argument(..., help="failing test file to review (never modified)"),
-    log_file: Optional[Path] = typer.Option(
+    log_file: Path | None = typer.Option(
         None, "--log", help="raw Playwright failure log; else the test is run to produce one"
     ),
-    diff_file: Optional[Path] = typer.Option(
+    diff_file: Path | None = typer.Option(
         None, "--diff", help="git diff file; defaults to `git diff`"
     ),
-    diff_base: Optional[str] = typer.Option(
+    diff_base: str | None = typer.Option(
         None, "--diff-base", help="git ref to diff against as base...HEAD (e.g. a PR base)"
     ),
     json_output: bool = typer.Option(
