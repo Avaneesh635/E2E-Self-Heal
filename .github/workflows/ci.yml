@@ -97,6 +97,32 @@ jobs:
           fi
           echo "Demo correctly reproduces the broken-selector failure"
 
+  action-consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout action
+        uses: actions/checkout@v4
+        with:
+          path: action
+
+      - name: Create JavaScript-only consumer repository
+        run: |
+          cp -R action/ci/action-consumer "$GITHUB_WORKSPACE/consumer"
+          git -C "$GITHUB_WORKSPACE/consumer" init
+
+      - name: Run action from the consumer repository
+        id: healer
+        uses: ./action
+        with:
+          working-directory: consumer
+          test-path: tests/example.spec.js
+          playwright-cmd: node smoke.mjs
+          nvidia-api-key: unused-for-passing-smoke-test
+
+      - name: Verify action outcome
+        env:
+          ACTION_OUTCOME: ${{ steps.healer.outputs.outcome }}
+        run: test "$ACTION_OUTCOME" = "passed"
   check-secret:
     runs-on: ubuntu-latest
     outputs:
@@ -114,7 +140,7 @@ jobs:
 
   examples-heal:
     runs-on: ubuntu-latest
-    needs: [check, examples-repro, check-secret]
+    needs: [check, examples-repro, action-consumer, check-secret]
     if: needs.check-secret.outputs.has-key == 'true'
     steps:
       - uses: actions/checkout@v4
