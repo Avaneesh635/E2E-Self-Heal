@@ -99,11 +99,14 @@ jobs:
 
   action-consumer:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout action
         uses: actions/checkout@v4
         with:
           path: action
+          persist-credentials: false
 
       - name: Create JavaScript-only consumer repository
         run: |

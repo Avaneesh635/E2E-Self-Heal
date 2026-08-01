@@ -28,7 +28,9 @@ def test_ci_runs_the_action_from_the_separate_consumer_fixture() -> None:
     workflow = CI_WORKFLOW.read_text(encoding="utf-8")
 
     assert "action-consumer:" in workflow
+    assert "permissions:\n      contents: read" in workflow
     assert "path: action" in workflow
+    assert "persist-credentials: false" in workflow
     assert 'action/ci/action-consumer "$GITHUB_WORKSPACE/consumer"' in workflow
     assert 'git -C "$GITHUB_WORKSPACE/consumer" init' in workflow
     assert "uses: ./action" in workflow
