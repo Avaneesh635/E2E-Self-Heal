@@ -1,0 +1,8 @@
+{
+  "name": "e2e-healer-action-consumer",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@playwright/test": "^1.54.1"
+  }
+}

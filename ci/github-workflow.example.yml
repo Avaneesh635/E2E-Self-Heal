@@ -47,7 +47,9 @@ jobs:
         run: git apply scenarios/id-rename/change.patch
 
       # Runs examples/scenarios/id-rename/spec.ts (now failing on the renamed
-      # selector) and heals it using the scenario's change.patch.
+      # selector) and heals it using the scenario's change.patch. The action
+      # installs the Python healer from its own checkout; this working directory
+      # remains the JavaScript Playwright project.
       - name: E2E self-heal
         id: heal
         uses: ./
