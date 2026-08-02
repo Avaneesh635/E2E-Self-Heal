@@ -15,6 +15,7 @@ from app.prompts.patch_generator import (
 from app.sandbox import SandboxViolation, assert_patch_boundary_allowed
 from app.schemas import PatchInstruction
 from app.state import AgentState
+from app.utils.files import split_line_ending
 
 logger = structlog.get_logger(__name__)
 _ALLOWED_PATCH_CALL = re.compile(
@@ -28,15 +29,6 @@ _ASSERTION_CALL = re.compile(r"(?:\b(?:expect|assert)\s*\(|\.(?:toBe|toHave|toEq
 
 class PatchApplicationError(ValueError):
     """Raised when generated instructions do not match the current test code."""
-
-
-def _split_line_ending(line: str) -> tuple[str, str]:
-    """Return a line's content and exact line ending."""
-    if line.endswith("\r\n"):
-        return line[:-2], "\r\n"
-    if line.endswith(("\n", "\r")):
-        return line[:-1], line[-1:]
-    return line, ""
 
 
 def _validate_patch_scope(instruction: PatchInstruction) -> None:
@@ -73,7 +65,7 @@ def _apply(code: str, instructions: list[PatchInstruction]) -> str:
                 f"line {instruction.line} is outside the current file ({len(lines)} line(s))"
             )
 
-        current, line_ending = _split_line_ending(lines[index])
+        current, line_ending = split_line_ending(lines[index])
         if current != instruction.original:
             raise PatchApplicationError(
                 f"line {instruction.line} no longer matches the expected original text"

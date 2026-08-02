@@ -45,6 +45,12 @@ def test_revert_restores_original_line():
     assert _revert(PATCHED, [_instruction("#new")]) == ORIGINAL
 
 
+def test_revert_preserves_crlf_line_ending():
+    # Reverting must not silently normalize CRLF to LF (regression: "\r\n".endswith("\n")).
+    patched_crlf = "await page.click('#new')\r\n"
+    assert _revert(patched_crlf, [_instruction("#new")]) == "await page.click('#old')\r\n"
+
+
 def test_skips_when_disabled(monkeypatch):
     monkeypatch.setattr(settings, "verify_selectors", False)
     monkeypatch.setattr(settings, "app_url", "http://localhost:4173")

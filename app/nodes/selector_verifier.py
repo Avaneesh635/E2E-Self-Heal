@@ -14,6 +14,7 @@ import structlog
 from app.config import settings
 from app.schemas import PatchInstruction
 from app.state import AgentState
+from app.utils.files import split_line_ending
 from app.verify.selector_check import check_selectors
 
 logger = structlog.get_logger(__name__)
@@ -27,8 +28,8 @@ def _revert(code: str, instructions: list[PatchInstruction]) -> str:
     for instruction in instructions:
         index = instruction.line - 1
         if 0 <= index < len(lines):
-            newline = "\n" if lines[index].endswith("\n") else ""
-            lines[index] = instruction.original + newline
+            _, line_ending = split_line_ending(lines[index])
+            lines[index] = instruction.original + line_ending
     return "".join(lines)
 
 
