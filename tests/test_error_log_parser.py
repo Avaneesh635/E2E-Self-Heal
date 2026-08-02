@@ -73,6 +73,57 @@ def test_assertion_failure_with_get_by_role():
     assert "getByRole('heading'" in result
 
 
+def test_assertion_captures_locator_expected_received():
+    result = parse_error_log(ASSERTION_LOG)
+    assert "Locator: getByRole('heading', { name: 'Dashboard' })" in result
+    assert "Expected: visible" in result
+    assert "Received: hidden" in result
+
+
+TEXT_ASSERTION_LOG = """
+Error: expect(locator).toHaveText() failed
+Locator: getByTestId('total')
+Expected string: "$42.00"
+Received string: "$0.00"
+at tests/cart.spec.ts:31:7
+"""
+
+
+def test_assertion_captures_string_variant_expected_received():
+    result = parse_error_log(TEXT_ASSERTION_LOG)
+    assert 'Expected string: "$42.00"' in result
+    assert 'Received string: "$0.00"' in result
+    assert "Locator: getByTestId('total')" in result
+
+
+STRICT_MODE_CALL_LOG = """
+Error: locator.click: Timeout 5000ms exceeded.
+Call log:
+  - waiting for locator('.item')
+  - locator resolved to 3 elements
+at tests/list.spec.ts:20:5
+"""
+
+
+def test_strict_mode_resolved_captured_from_call_log():
+    result = parse_error_log(STRICT_MODE_CALL_LOG)
+    assert "resolved to 3 elements" in result
+    assert "at tests/list.spec.ts:20" in result
+
+
+def test_strict_mode_resolved_not_duplicated_when_in_error_line():
+    result = parse_error_log(STRICT_MODE_LOG)
+    # The phrase is already in the `Error:` reason; don't append a second copy.
+    assert result.count("resolved to 2 elements") == 1
+
+
+def test_long_received_line_is_bounded():
+    long_log = "Received: " + "<div>" * 500 + "\nat tests/x.spec.ts:1:1"
+    result = parse_error_log(long_log)
+    received_line = next(line for line in result.splitlines() if line.startswith("Received:"))
+    assert len(received_line) <= 200
+
+
 GET_BY_TEXT_LOG = """
 Error: locator.fill: Timeout 30000ms exceeded.
 Call log:
