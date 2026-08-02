@@ -110,6 +110,20 @@ def test_spread_and_boolean_attributes():
     assert "...props" not in diffs[0].previous["attributes"]
 
 
+def test_regex_fallback_handles_spread_and_boolean_attributes(monkeypatch):
+    # The regex backend must match the tree-sitter backend: skip {...props} spreads and
+    # capture bare boolean attributes (value ""), not silently drop them.
+    monkeypatch.setattr(analyzer_module, "_HAS_TREE_SITTER", False)
+    diffs = analyze_diff(SPREAD_PROP_DIFF)
+    assert len(diffs) == 1
+    assert diffs[0].previous["tag"] == "input"
+    assert diffs[0].previous["attributes"]["type"] == "text"
+    assert diffs[0].previous["attributes"]["id"] == "old-id"
+    assert diffs[0].previous["attributes"]["required"] == ""
+    assert "...props" not in diffs[0].previous["attributes"]
+    assert "props" not in diffs[0].previous["attributes"]
+
+
 def test_expression_attributes():
     diffs = analyze_diff(EXPRESSION_PROP_DIFF)
     assert len(diffs) == 1

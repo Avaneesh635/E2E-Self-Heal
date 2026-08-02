@@ -18,10 +18,17 @@ logger = structlog.get_logger(__name__)
 
 _JSX_TAG_RE = re.compile(
     r"<([A-Za-z][\w.]*)"
-    r"(?:\s+[\w-]+(?:=(?:\"[^\"]*\"|'[^']*'|\{[^}]*\}))?)*"
+    r"(?:\s+(?:\{[^}]*\}|[\w-]+(?:=(?:\"[^\"]*\"|'[^']*'|\{[^}]*\}))?))*"
     r"\s*/?>"
 )
-_ATTR_RE = re.compile(r"([\w-]+)=(?:\"([^\"]*)\"|'([^']*)'|\{([^}]*)\})")
+# Match one JSX attribute — ``name``, ``name="v"``, ``name='v'`` or ``name={expr}`` — or a
+# spread (``{...props}``). Spreads are skipped so their inner identifiers aren't misread as
+# boolean attributes; a bare ``name`` with no value is captured as a boolean attribute
+# (value ``""``), matching the tree-sitter backend.
+_ATTR_RE = re.compile(
+    r"(?P<spread>\{[^}]*\})"
+    r"|(?P<name>[\w-]+)(?:=(?:\"(?P<dq>[^\"]*)\"|'(?P<sq>[^']*)'|\{(?P<br>[^}]*)\}))?"
+)
 _JSX_SUFFIXES = (".tsx", ".jsx")
 
 _HAS_TREE_SITTER = (
@@ -41,8 +48,12 @@ def _extract_jsx_elements_regex(code_text: str) -> list[dict[str, Any]]:
         body = match.group(0)[len(tag) + 1 :]
         attrs: dict[str, str] = {}
         for attr_match in _ATTR_RE.finditer(body):
-            name = attr_match.group(1)
-            value = attr_match.group(2) or attr_match.group(3) or attr_match.group(4) or ""
+            if attr_match.group("spread"):
+                continue
+            name = attr_match.group("name")
+            if not name:
+                continue
+            value = attr_match.group("dq") or attr_match.group("sq") or attr_match.group("br") or ""
             attrs[name] = value
         elements.append({"tag": tag, "attributes": attrs})
     return elements

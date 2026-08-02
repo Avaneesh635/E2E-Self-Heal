@@ -1,4 +1,5 @@
 import pytest
+from langgraph.graph import END
 
 import app.nodes.patch_generator as patch_node
 from app.graph import route_after_patch
@@ -200,3 +201,15 @@ def test_generation_failure_clears_previous_rejection(
 
     state["patch_application_report"] = result["patch_application_report"]
     assert route_after_patch(state) == "shadow_verifier"
+
+
+def test_boundary_violation_ends_immediately() -> None:
+    # A boundary violation is permanent (the target path can't change mid-run), so the
+    # router must end rather than loop back and burn the loop budget on a dead condition.
+    state = _state()
+    state["boundary_report"] = {"ok": False, "error": "outside architecture boundary"}
+    state["patch_application_report"] = {"ok": True}
+    assert route_after_patch(state) == END
+    # Ends even well below the loop cap.
+    state["loop_count"] = 0
+    assert route_after_patch(state) == END
