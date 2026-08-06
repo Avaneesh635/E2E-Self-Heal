@@ -37,6 +37,7 @@ def test_build_system_prompt_preserves_guardrails() -> None:
 
     assert "You may ONLY fix failing locators" in prompt
     assert "NEVER change assertions" in prompt
+    assert "preserve every input value" in prompt
     assert "Detected framework: Vue 3" in prompt
 
 

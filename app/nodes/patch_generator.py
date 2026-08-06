@@ -21,10 +21,120 @@ logger = structlog.get_logger(__name__)
 _ALLOWED_PATCH_CALL = re.compile(
     r"(?:\bpage\.|\.)"
     r"(?:locator|getByRole|getByText|getByLabel|getByPlaceholder|getByAltText|"
-    r"getByTitle|getByTestId|click|dblclick|fill|check|uncheck|selectOption|"
-    r"press|hover|focus|waitFor[A-Za-z]*)\s*\("
+    r"getByTitle|getByTestId|click|dblclick|fill|type|check|uncheck|selectOption|"
+    r"setInputFiles|press|hover|focus|waitFor[A-Za-z]*)\s*\("
 )
 _ASSERTION_CALL = re.compile(r"(?:\b(?:expect|assert)\s*\(|\.(?:toBe|toHave|toEqual)\w*\s*\()")
+_VALUE_BEARING_CALL = re.compile(r"(?:\bpage\.)?(fill|type|selectOption|setInputFiles|press)\s*\(")
+_SELECTOR_CALL = re.compile(
+    r"(?:\bpage\.|\.)(locator|getByRole|getByText|getByLabel|getByPlaceholder|"
+    r"getByAltText|getByTitle|getByTestId)\s*\("
+)
+
+
+def _matching_paren(text: str, opening: int) -> int | None:
+    """Return the matching parenthesis, ignoring quoted JavaScript strings."""
+    depth = 0
+    quote = ""
+    escaped = False
+    for index in range(opening, len(text)):
+        char = text[index]
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = ""
+            continue
+        if char in {"'", '"', "`"}:
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return index
+    return None
+
+
+def _argument_spans(text: str, opening: int, closing: int) -> list[tuple[int, int]]:
+    """Find top-level argument spans in a JavaScript call."""
+    arguments: list[tuple[int, int]] = []
+    start = opening + 1
+    depth = 0
+    quote = ""
+    escaped = False
+    for index in range(start, closing + 1):
+        char = text[index] if index < closing else ","
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = ""
+            continue
+        if char in {"'", '"', "`"}:
+            quote = char
+        elif char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+        elif char == "," and depth == 0:
+            left = start
+            while left < index and text[left].isspace():
+                left += 1
+            right = index
+            while right > left and text[right - 1].isspace():
+                right -= 1
+            if left != right:
+                arguments.append((left, right))
+            start = index + 1
+    return arguments
+
+
+def _masked_selector_line(text: str) -> str | None:
+    """Mask selector arguments, returning None when a data call cannot be safely checked."""
+    spans: list[tuple[int, int]] = []
+    for match in _SELECTOR_CALL.finditer(text):
+        opening = text.find("(", match.start(), match.end())
+        closing = _matching_paren(text, opening)
+        if closing is None:
+            return None
+        spans.extend(_argument_spans(text, opening, closing))
+
+    for match in _VALUE_BEARING_CALL.finditer(text):
+        opening = text.find("(", match.start(), match.end())
+        closing = _matching_paren(text, opening)
+        if closing is None:
+            return None
+        arguments = _argument_spans(text, opening, closing)
+        # page.fill(selector, value) and related page methods take the selector first.
+        if text[match.start() :].startswith("page."):
+            if not arguments:
+                return None
+            spans.append(arguments[0])
+
+    if _VALUE_BEARING_CALL.search(text) and not spans:
+        # A locator-bound call has no selector argument of its own. Its data arguments
+        # must therefore remain byte-for-byte unchanged.
+        return text
+
+    masked = text
+    for start, end in reversed(sorted(spans)):
+        masked = masked[:start] + "<selector>" + masked[end:]
+    return masked
+
+
+def _validate_value_bearing_calls(instruction: PatchInstruction) -> None:
+    """Allow selector edits while preserving every input value supplied to Playwright."""
+    original = _masked_selector_line(instruction.original)
+    replacement = _masked_selector_line(instruction.replacement)
+    if original is None or replacement is None or original != replacement:
+        raise PatchApplicationError(
+            f"line {instruction.line} changes input data for a value-bearing Playwright call"
+        )
 
 
 class PatchApplicationError(ValueError):
@@ -47,6 +157,10 @@ def _validate_patch_scope(instruction: PatchInstruction) -> None:
         raise PatchApplicationError(
             f"line {instruction.line} is not limited to a locator or wait condition"
         )
+    if _VALUE_BEARING_CALL.search(instruction.original) or _VALUE_BEARING_CALL.search(
+        instruction.replacement
+    ):
+        _validate_value_bearing_calls(instruction)
 
 
 def _apply(code: str, instructions: list[PatchInstruction]) -> str:
