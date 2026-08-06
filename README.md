@@ -187,7 +187,7 @@ cp .env.example .env    # set E2E_HEALER_LLM_API_KEY (or your provider's key)
 e2e-healer tests/login.spec.ts
 ```
 
-Works with **NVIDIA NIM (default), OpenAI, Anthropic (Claude), or a local Ollama model** —
+Works with **NVIDIA NIM (default), OpenAI, Anthropic (Claude), DeepSeek, or a local Ollama model** —
 see [Configuration](#configuration) to pick one. For the default, get a free NVIDIA NIM API
 key at [build.nvidia.com](https://build.nvidia.com/) (default model `openai/gpt-oss-120b`).
 
@@ -249,6 +249,7 @@ changes.
 | `openai`    | built-in                   | `E2E_HEALER_LLM_API_KEY` **or** `OPENAI_API_KEY`      | strict `json_schema` (native) | Set `LLM_BASE_URL` for Azure / OpenAI-compatible endpoints.       |
 | `anthropic` | `ai-driven-e2e[anthropic]` | `E2E_HEALER_LLM_API_KEY` **or** `ANTHROPIC_API_KEY`   | tool-use                      | No OpenAI `response_format`; schema enforced via Claude tool-use. |
 | `ollama`    | `ai-driven-e2e[ollama]`    | none (local)                                          | native JSON-schema `format`   | Fully offline; smaller models are less reliable at strict JSON.   |
+| `deepseek`  | built-in                   | `E2E_HEALER_LLM_API_KEY` **or** `DEEPSEEK_API_KEY`    | Responses API `json_schema`   | Stateless Responses API; default `deepseek-v4-flash`.             |
 
 All providers read the generic `E2E_HEALER_LLM_MODEL` / `E2E_HEALER_LLM_MAX_TOKENS` /
 `E2E_HEALER_LLM_BASE_URL`. On a structured-output parse failure the engine retries
@@ -307,9 +308,36 @@ E2E_HEALER_LLM_MODEL=llama3.1
 # E2E_HEALER_LLM_BASE_URL=http://localhost:11434   # default; override for a remote host
 ```
 
+### Using DeepSeek (Responses API)
+
+DeepSeek is exposed through its **Responses API** (`client.responses.create()` at
+`https://api.deepseek.com`) rather than the LangChain chat path, so the provider is a small
+built-in adapter that speaks that API directly. Supply a key — either
+`E2E_HEALER_LLM_API_KEY` or an existing standard `DEEPSEEK_API_KEY` (fallback). The default
+model is `deepseek-v4-flash` (the Responses API currently supports only this model;
+`deepseek-v4-pro` is pending). Structured output is requested with the Responses API
+`text.format` `json_schema` parameter, and the returned JSON is validated against
+`PatchOutput`/`ReviewOutput`, so schema enforcement holds without LangChain.
+
+```bash
+E2E_HEALER_LLM_PROVIDER=deepseek
+DEEPSEEK_API_KEY=sk-...          # or E2E_HEALER_LLM_API_KEY=sk-...
+# E2E_HEALER_LLM_MODEL=deepseek-v4-flash   # default; set only to override
+```
+
+Try it live against the API (set `DEEPSEEK_API_KEY` first):
+
+```bash
+uv run e2e-healer --help >/dev/null  # import smoke check
+E2E_HEALER_LLM_PROVIDER=deepseek uv run python - <<'PY'
+from app.llm import generate_diagnosis
+print(generate_diagnosis("You are a terse assistant.", "Say OK"))
+PY
+```
+
 | Variable                       | Default                               | Purpose                                                |
 | ------------------------------ | ------------------------------------- | ------------------------------------------------------ |
-| `E2E_HEALER_LLM_PROVIDER`      | `nvidia`                              | LLM backend: `nvidia`, `openai`, `anthropic`, `ollama` |
+| `E2E_HEALER_LLM_PROVIDER`      | `nvidia`                              | LLM backend: `nvidia`, `openai`, `anthropic`, `ollama`, `deepseek` |
 | `E2E_HEALER_LLM_API_KEY`       | —                                     | API key for the selected provider                      |
 | `E2E_HEALER_LLM_BASE_URL`      | —                                     | OpenAI-compatible endpoint (empty = SDK default)       |
 | `E2E_HEALER_LLM_MODEL`         | —                                     | Structured-Outputs-capable model                       |
