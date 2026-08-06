@@ -225,11 +225,24 @@ def _deepseek_api_key() -> str:
 
 
 def _build_deepseek_client() -> DeepSeekResponsesClient:
-    """Build the DeepSeek Responses API client from settings."""
+    """Build the DeepSeek Responses API client from settings.
+
+    The DeepSeek Responses API currently supports only ``deepseek-v4-flash``, so an
+    explicit model override is rejected unless the base URL points at a custom
+    (OpenAI-compatible) endpoint that may serve other models.
+    """
+    base_url = settings.llm_base_url or _DEEPSEEK_DEFAULT_BASE_URL
+    model = settings.llm_model or _DEEPSEEK_DEFAULT_MODEL
+    if base_url == _DEEPSEEK_DEFAULT_BASE_URL and model != _DEEPSEEK_DEFAULT_MODEL:
+        raise ValueError(
+            f"model={model!r} is not supported by the DeepSeek Responses API at "
+            f"{_DEEPSEEK_DEFAULT_BASE_URL}; use {_DEEPSEEK_DEFAULT_MODEL!r} or point "
+            "E2E_HEALER_LLM_BASE_URL at a compatible OpenAI-compatible endpoint"
+        )
     return DeepSeekResponsesClient(
         api_key=_deepseek_api_key(),
-        base_url=settings.llm_base_url or _DEEPSEEK_DEFAULT_BASE_URL,
-        model=settings.llm_model or _DEEPSEEK_DEFAULT_MODEL,
+        base_url=base_url,
+        model=model,
         max_output_tokens=settings.llm_max_tokens,
     )
 

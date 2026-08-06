@@ -315,8 +315,10 @@ DeepSeek is exposed through its **Responses API** (`client.responses.create()` a
 built-in adapter that speaks that API directly. Supply a key — either
 `E2E_HEALER_LLM_API_KEY` or an existing standard `DEEPSEEK_API_KEY` (fallback). The default
 model is `deepseek-v4-flash` (the Responses API currently supports only this model;
-`deepseek-v4-pro` is pending). Structured output is requested with the Responses API
-`text.format` `json_schema` parameter, and the returned JSON is validated against
+`deepseek-v4-pro` is pending). Setting `E2E_HEALER_LLM_MODEL` to any other model is
+rejected unless `E2E_HEALER_LLM_BASE_URL` points at a custom OpenAI-compatible endpoint
+that may serve it. Structured output is requested with the Responses API `text.format`
+`json_schema` parameter, and the returned JSON is validated against
 `PatchOutput`/`ReviewOutput`, so schema enforcement holds without LangChain.
 
 ```bash
