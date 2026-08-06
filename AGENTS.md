@@ -54,3 +54,10 @@ should only orchestrate calls to `e2e-healer`. For sandbox boundaries, follow
 `docs/sandbox.md`: read logs, diffs, snapshots, and source context; write only the failing
 test target and known temporary artifacts unless the user explicitly requests broader
 access.
+
+## Codex Workflow
+
+Repository-specific Codex defaults and the short verification checklist live in
+`.codex/`. Before making a change, inspect the relevant module and nearby tests. Keep the
+change scoped, run the smallest relevant test first, then run `make check` and `make test`
+when the environment permits. Report any checks not run and why.

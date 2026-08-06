@@ -1,0 +1,9 @@
+# Repository-scoped defaults for trusted Codex sessions.
+# Personal model, provider, auth, and notification settings belong in ~/.codex/config.toml.
+
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "cached"
+
+[sandbox_workspace_write]
+network_access = false
