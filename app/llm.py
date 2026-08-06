@@ -153,9 +153,7 @@ class DeepSeekResponsesClient:
             raise ValueError("llm_returned_empty_completion")
         return text
 
-    def structured(
-        self, system_prompt: str, user_prompt: str, schema: type[SchemaT]
-    ) -> SchemaT:
+    def structured(self, system_prompt: str, user_prompt: str, schema: type[SchemaT]) -> SchemaT:
         response = self._client.responses.create(
             model=self._model,
             instructions=system_prompt,
