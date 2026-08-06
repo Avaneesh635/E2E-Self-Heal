@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-LLMProvider = Literal["nvidia", "openai", "anthropic", "ollama"]
+LLMProvider = Literal["nvidia", "openai", "anthropic", "ollama", "deepseek"]
 
 
 class Settings(BaseSettings):
@@ -16,7 +16,8 @@ class Settings(BaseSettings):
     # are mapped onto the generic ones when provider=nvidia (see _map_legacy_nvidia_fields), so
     # existing NVIDIA-only setups keep working without touching the new variables.
     llm_provider: LLMProvider = Field(
-        default="nvidia", description="LLM backend: nvidia | openai | anthropic | ollama"
+        default="nvidia",
+        description="LLM backend: nvidia | openai | anthropic | ollama | deepseek",
     )
     llm_api_key: str = Field(default="", description="API key for the selected provider")
     llm_base_url: str = Field(

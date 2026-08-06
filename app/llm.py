@@ -19,7 +19,8 @@ import structlog
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel
+from openai import OpenAI
+from pydantic import BaseModel, ValidationError
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.config import LLMProvider, settings
@@ -44,6 +45,11 @@ SchemaT = TypeVar("SchemaT", bound=BaseModel)
 
 # Ollama runs models locally with no credential; the native endpoint (no OpenAI /v1 path).
 _OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434"
+
+# DeepSeek's Responses API endpoint. It is stateless (no chat-completions /v1 path), and the
+# Responses API currently supports the deepseek-v4-flash model only.
+_DEEPSEEK_DEFAULT_BASE_URL = "https://api.deepseek.com"
+_DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash"
 
 # OpenAI's native Structured Outputs: strict json_schema guarantees the response matches
 # PatchOutput/ReviewOutput exactly (the same mechanism the original beta.parse used). Applied
@@ -111,6 +117,66 @@ class LangChainClient:
         return parsed
 
 
+class DeepSeekResponsesClient:
+    """Calls DeepSeek's Responses API directly through the OpenAI SDK.
+
+    DeepSeek exposes the Responses API shape (``client.responses.create``) at
+    ``https://api.deepseek.com``; unlike the LangChain chat path used by the other
+    providers, the Responses API is stateless so every call carries the full prompt.
+    Structured output is requested with the Responses API ``text.format`` json_schema
+    parameter (documented as supported by DeepSeek) and the returned JSON is then
+    validated against the Pydantic schema, so PatchOutput/ReviewOutput enforcement
+    holds without LangChain.
+    """
+
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str,
+        model: str,
+        max_output_tokens: int,
+    ) -> None:
+        self._client = OpenAI(api_key=api_key, base_url=base_url)
+        self._model = model
+        self._max_output_tokens = max_output_tokens
+
+    def complete(self, system_prompt: str, user_prompt: str) -> str:
+        response = self._client.responses.create(
+            model=self._model,
+            instructions=system_prompt,
+            input=user_prompt,
+            max_output_tokens=self._max_output_tokens,
+        )
+        text = response.output_text or ""
+        if not text:
+            logger.warning("llm_returned_empty_completion")
+            raise ValueError("llm_returned_empty_completion")
+        return text
+
+    def structured(self, system_prompt: str, user_prompt: str, schema: type[SchemaT]) -> SchemaT:
+        response = self._client.responses.create(
+            model=self._model,
+            instructions=system_prompt,
+            input=user_prompt,
+            max_output_tokens=self._max_output_tokens,
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": schema.__name__,
+                    "strict": True,
+                    "schema": schema.model_json_schema(),
+                }
+            },
+        )
+        text = response.output_text or ""
+        try:
+            parsed = schema.model_validate_json(text)
+        except ValidationError:
+            logger.warning("llm_returned_no_parsed_output", schema=schema.__name__)
+            raise ValueError("llm_returned_no_parsed_output") from None
+        return parsed
+
+
 def _require_key() -> str:
     """Return the configured API key, or raise so callers fail loudly (not silently)."""
     if not settings.llm_api_key:
@@ -146,6 +212,39 @@ def _anthropic_api_key() -> str:
             "E2E_HEALER_LLM_API_KEY or ANTHROPIC_API_KEY is not set for provider=anthropic"
         )
     return key
+
+
+def _deepseek_api_key() -> str:
+    """DeepSeek key: prefer the generic setting, else the standard ``DEEPSEEK_API_KEY`` env var."""
+    key = settings.llm_api_key or os.environ.get("DEEPSEEK_API_KEY", "")
+    if not key:
+        raise RuntimeError(
+            "E2E_HEALER_LLM_API_KEY or DEEPSEEK_API_KEY is not set for provider=deepseek"
+        )
+    return key
+
+
+def _build_deepseek_client() -> DeepSeekResponsesClient:
+    """Build the DeepSeek Responses API client from settings.
+
+    The DeepSeek Responses API currently supports only ``deepseek-v4-flash``, so an
+    explicit model override is rejected unless the base URL points at a custom
+    (OpenAI-compatible) endpoint that may serve other models.
+    """
+    base_url = settings.llm_base_url or _DEEPSEEK_DEFAULT_BASE_URL
+    model = settings.llm_model or _DEEPSEEK_DEFAULT_MODEL
+    if base_url == _DEEPSEEK_DEFAULT_BASE_URL and model != _DEEPSEEK_DEFAULT_MODEL:
+        raise ValueError(
+            f"model={model!r} is not supported by the DeepSeek Responses API at "
+            f"{_DEEPSEEK_DEFAULT_BASE_URL}; use {_DEEPSEEK_DEFAULT_MODEL!r} or point "
+            "E2E_HEALER_LLM_BASE_URL at a compatible OpenAI-compatible endpoint"
+        )
+    return DeepSeekResponsesClient(
+        api_key=_deepseek_api_key(),
+        base_url=base_url,
+        model=model,
+        max_output_tokens=settings.llm_max_tokens,
+    )
 
 
 def _build_chat_model(provider: LLMProvider) -> BaseChatModel:
@@ -216,6 +315,9 @@ def _get_client() -> LLMClient:
     LLM is actually called without a key configured.
     """
     provider = settings.llm_provider
+    if provider == "deepseek":
+        # DeepSeek uses the Responses API (stateless), not the LangChain chat path.
+        return _build_deepseek_client()
     structured_kwargs = _STRICT_JSON_SCHEMA if provider in _STRICT_SCHEMA_PROVIDERS else {}
     return LangChainClient(_build_chat_model(provider), structured_kwargs)
 

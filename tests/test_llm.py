@@ -4,7 +4,7 @@ Also covers the provider-agnostic factory: the right chat model is built from
 ``settings.llm_provider`` and a missing key fails loudly for key-requiring providers.
 """
 
-from typing import cast
+from typing import Any, TypedDict, cast
 
 import pytest
 from langchain_anthropic import ChatAnthropic  # pyright: ignore[reportMissingImports]
@@ -212,6 +212,172 @@ def test_complete_raises_on_empty_content():
     client = llm.LangChainClient(_FakeModel())  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="llm_returned_empty_completion"):
         client.complete("sys", "usr")
+
+
+# --- DeepSeek Responses API provider (mocked SDK, no live API calls) -------------------
+
+
+class _ResponsesRequest(TypedDict, total=False):
+    """Shape of a Responses API ``create`` request captured by the fake SDK."""
+
+    model: str
+    instructions: str
+    input: str
+    max_output_tokens: int
+    text: dict[str, Any]
+
+
+class _FakeResponses:
+    """Stands in for OpenAI SDK ``client.responses`` and records create() kwargs."""
+
+    def __init__(self) -> None:
+        self.calls: list[_ResponsesRequest] = []
+        self.output_text: str = ""
+
+    def create(self, **kwargs: Any) -> "_FakeResponse":
+        self.calls.append(cast(_ResponsesRequest, kwargs))
+        return _FakeResponse(self.output_text)
+
+
+class _FakeResponse:
+    def __init__(self, output_text: str) -> None:
+        self.output_text: str = output_text
+
+
+class _FakeOpenAI:
+    def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+        self.responses = _FakeResponses()
+
+
+def _make_deepseek_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[llm.DeepSeekResponsesClient, _FakeResponses]:
+    fake_openai = _FakeOpenAI()
+    monkeypatch.setattr(llm, "OpenAI", lambda *_a, **_k: fake_openai)
+    client = llm.DeepSeekResponsesClient(
+        api_key="sk-test",
+        base_url="https://api.deepseek.com",
+        model="deepseek-v4-flash",
+        max_output_tokens=512,
+    )
+    return client, fake_openai.responses
+
+
+def test_factory_builds_deepseek_responses_client(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(settings, "llm_api_key", "sk-deepseek-test")
+    monkeypatch.setattr(settings, "llm_base_url", "")
+    monkeypatch.setattr(settings, "llm_model", "")
+    monkeypatch.setattr(settings, "llm_max_tokens", 4096)
+
+    client = llm._build_deepseek_client()
+
+    assert isinstance(client, llm.DeepSeekResponsesClient)
+    assert client._model == "deepseek-v4-flash"
+    assert client._max_output_tokens == 4096
+    assert str(client._client.base_url) == "https://api.deepseek.com"
+
+
+def test_factory_deepseek_honors_base_url_and_model_override(monkeypatch: pytest.MonkeyPatch):
+    # A custom base URL may serve models other than the Responses API default.
+    monkeypatch.setattr(settings, "llm_api_key", "sk-deepseek-test")
+    monkeypatch.setattr(settings, "llm_base_url", "https://proxy.example.com")
+    monkeypatch.setattr(settings, "llm_model", "deepseek-v4-pro")
+
+    client = llm._build_deepseek_client()
+
+    assert client._model == "deepseek-v4-pro"
+    assert str(client._client.base_url) == "https://proxy.example.com"
+
+
+def test_deepseek_rejects_unsupported_model_on_default_endpoint(monkeypatch: pytest.MonkeyPatch):
+    # The Responses API supports only deepseek-v4-flash on api.deepseek.com.
+    monkeypatch.setattr(settings, "llm_api_key", "sk-deepseek-test")
+    monkeypatch.setattr(settings, "llm_base_url", "")
+    monkeypatch.setattr(settings, "llm_model", "deepseek-v4-pro")
+
+    with pytest.raises(ValueError, match="deepseek-v4-flash"):
+        llm._build_deepseek_client()
+
+
+def test_deepseek_falls_back_to_standard_deepseek_api_key(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(settings, "llm_api_key", "")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-ds-from-env")
+
+    assert llm._deepseek_api_key() == "sk-ds-from-env"
+
+
+def test_deepseek_missing_key_raises(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(settings, "llm_api_key", "")
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="DEEPSEEK_API_KEY"):
+        llm._deepseek_api_key()
+
+
+def test_deepseek_uses_responses_api_not_langchain_strict_schema():
+    # DeepSeek is served by DeepSeekResponsesClient (Responses API text.format),
+    # not the LangChain strict json_schema kwargs used for OpenAI/NVIDIA.
+    assert "deepseek" not in llm._STRICT_SCHEMA_PROVIDERS
+
+
+def test_deepseek_complete_sends_instructions_input_and_returns_text(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    client, fake = _make_deepseek_client(monkeypatch)
+    fake.output_text = "diagnosis text"
+
+    result = client.complete("SYS", "USR")
+
+    assert result == "diagnosis text"
+    assert fake.calls == [
+        {
+            "model": "deepseek-v4-flash",
+            "instructions": "SYS",
+            "input": "USR",
+            "max_output_tokens": 512,
+        }
+    ]
+
+
+def test_deepseek_complete_raises_on_empty_text(monkeypatch: pytest.MonkeyPatch):
+    client, _fake = _make_deepseek_client(monkeypatch)
+
+    with pytest.raises(ValueError, match="llm_returned_empty_completion"):
+        client.complete("SYS", "USR")
+
+
+def test_deepseek_structured_sends_json_schema_format_and_parses(monkeypatch: pytest.MonkeyPatch):
+    client, fake = _make_deepseek_client(monkeypatch)
+    fake.output_text = '{"instructions": []}'
+
+    result = client.structured("SYS", "USR", llm.PatchOutput)
+
+    assert isinstance(result, llm.PatchOutput)
+    call = fake.calls[0]
+    assert call.get("instructions") == "SYS"
+    assert call.get("input") == "USR"
+    fmt = call.get("text", {})["format"]
+    assert fmt["type"] == "json_schema"
+    assert fmt["name"] == "PatchOutput"
+    assert fmt["strict"] is True
+    assert fmt["schema"]["title"] == "PatchOutput"
+
+
+def test_deepseek_structured_raises_on_invalid_json(monkeypatch: pytest.MonkeyPatch):
+    client, fake = _make_deepseek_client(monkeypatch)
+    fake.output_text = "not json"
+
+    with pytest.raises(ValueError, match="llm_returned_no_parsed_output"):
+        client.structured("SYS", "USR", llm.PatchOutput)
+
+
+def test_get_client_builds_deepseek_responses_client(monkeypatch: pytest.MonkeyPatch):
+    llm._get_client.cache_clear()
+    monkeypatch.setattr(settings, "llm_provider", "deepseek")
+    monkeypatch.setattr(llm, "_build_deepseek_client", lambda: "deepseek-client")
+
+    assert llm._get_client() == "deepseek-client"
+    llm._get_client.cache_clear()
 
 
 # --- Adapter happy paths with mocked chat models (no live API calls) ------------------
