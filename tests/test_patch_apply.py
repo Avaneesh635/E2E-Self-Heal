@@ -143,6 +143,67 @@ def test_allows_wait_condition_edit() -> None:
     )
 
 
+def test_allows_selector_only_fill_edit() -> None:
+    instruction = _instruction(
+        1,
+        "await page.fill('#old-email', 'user@example.com')",
+        "await page.fill('#new-email', 'user@example.com')",
+    )
+
+    assert _apply("await page.fill('#old-email', 'user@example.com')\n", [instruction]) == (
+        "await page.fill('#new-email', 'user@example.com')\n"
+    )
+
+
+def test_rejects_fill_value_edit() -> None:
+    instruction = _instruction(
+        1,
+        "await page.fill('#email', 'user@example.com')",
+        "await page.fill('#email', 'admin@example.com')",
+    )
+
+    with pytest.raises(PatchApplicationError, match="changes input data"):
+        _apply("await page.fill('#email', 'user@example.com')\n", [instruction])
+
+
+def test_rejects_fill_value_edit_when_value_reads_changed_test_id() -> None:
+    instruction = _instruction(
+        1,
+        "await page.fill('#email', await page.getByTestId('old-name').textContent())",
+        "await page.fill('#email', await page.getByTestId('new-name').textContent())",
+    )
+
+    with pytest.raises(PatchApplicationError, match="changes input data"):
+        _apply(
+            "await page.fill('#email', await page.getByTestId('old-name').textContent())\n",
+            [instruction],
+        )
+
+
+def test_rejects_locator_fill_value_edit() -> None:
+    instruction = _instruction(
+        1,
+        "await page.locator('#email').fill('user@example.com')",
+        "await page.locator('#email').fill('admin@example.com')",
+    )
+
+    with pytest.raises(PatchApplicationError, match="changes input data"):
+        _apply("await page.locator('#email').fill('user@example.com')\n", [instruction])
+
+
+def test_allows_locator_selector_edit_without_changing_fill_value() -> None:
+    instruction = _instruction(
+        1,
+        "await page.locator('#old-email').fill('user@example.com')",
+        "await page.locator('#new-email').fill('user@example.com')",
+    )
+
+    assert (
+        _apply("await page.locator('#old-email').fill('user@example.com')\n", [instruction])
+        == "await page.locator('#new-email').fill('user@example.com')\n"
+    )
+
+
 def test_patch_generator_returns_rejection_feedback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

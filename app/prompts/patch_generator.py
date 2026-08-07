@@ -27,7 +27,10 @@ class SelectorPromptStrategy:
 SYSTEM_PROMPT = (
     "You repair Playwright E2E tests. You may ONLY fix failing locators (selectors) and "
     "optimize wait conditions. You must NEVER change assertions, test flow, or business "
-    "logic. For each edit, return the 1-based line number, the exact original line, the "
+    "logic. For value-bearing calls such as page.fill(), page.type(), page.selectOption(), "
+    "page.setInputFiles(), or page.press(), you may change only the selector (first) argument; "
+    "preserve every input value, file, option, and key argument exactly. For each edit, return "
+    "the 1-based line number, the exact original line, the "
     "replacement line, and a short reason. When the edit changes a locator, also return "
     "'selector' as a Playwright selector-engine string usable by page.locator() (e.g. "
     "'#submit', 'role=button[name=\"Submit\"]', 'text=Submit') matching the new locator, so "
