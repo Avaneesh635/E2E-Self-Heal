@@ -63,6 +63,21 @@ def mock_graph_failure(monkeypatch):
 
 
 @pytest.fixture
+def mock_graph_crash_after_write(monkeypatch):
+    class MockGraph:
+        def invoke(self, state):
+            candidate = "await page.click('#new')"
+            state["current_code"] = candidate
+            if state["test_script_path"]:
+                from app.utils.files import atomic_write
+
+                atomic_write(Path(state["test_script_path"]), candidate)
+            raise OSError("probe: post-write failure")
+
+    monkeypatch.setattr(cli_module, "build_graph", lambda: MockGraph())
+
+
+@pytest.fixture
 def mock_review_graph(monkeypatch):
     class MockGraph:
         def invoke(self, state):
@@ -162,6 +177,67 @@ def test_cli_dry_run_restores_file(mock_graph_success, monkeypatch, tmp_path) ->
     assert result.exit_code == 0
     assert "fixed after 1 loop(s)" in result.stderr
     assert test_file.read_text() == "await page.click('#old')"
+
+
+def test_cli_dry_run_restores_after_failure(mock_graph_failure, monkeypatch, tmp_path) -> None:
+    test_file = tmp_path / "test.spec.ts"
+    test_file.write_text("await page.click('#old')")
+    log_file = tmp_path / "error.log"
+    log_file.write_text("Timeout error waiting for selector")
+    runner = CliRunner()
+    result = runner.invoke(app, [str(test_file), "--log", str(log_file), "--dry-run"])
+    assert result.exit_code == 1
+    assert "not fixed after 3 loop(s)" in result.stderr
+    assert test_file.read_text() == "await page.click('#old')"
+
+
+def test_cli_exception_after_write_restores_original_file(
+    mock_graph_crash_after_write, monkeypatch, tmp_path
+) -> None:
+    test_file = tmp_path / "test.spec.ts"
+    original = "await page.click('#old')"
+    test_file.write_text(original)
+    log_file = tmp_path / "error.log"
+    log_file.write_text("Timeout error waiting for selector")
+    runner = CliRunner()
+    result = runner.invoke(app, [str(test_file), "--log", str(log_file)])
+    assert isinstance(result.exception, OSError)
+    assert test_file.read_text() == original
+
+
+def test_cli_heal_file_post_write_exception_propagates(monkeypatch, tmp_path) -> None:
+    """The original exception must reach the _heal_file caller, not a rollback error."""
+    test_file = tmp_path / "test.spec.ts"
+    original = "await page.click('#old')"
+    test_file.write_text(original)
+    candidate = "await page.click('#new')"
+
+    class MockGraph:
+        def invoke(self, state):
+            from app.utils.files import atomic_write
+
+            if state["test_script_path"]:
+                atomic_write(Path(state["test_script_path"]), candidate)
+            raise OSError("probe: post-write failure")
+
+    monkeypatch.setattr(cli_module, "build_graph", lambda: MockGraph())
+    with pytest.raises(OSError, match="probe: post-write failure"):
+        cli_module._heal_file(test_file, "Timeout error waiting for selector", [], dry_run=False)
+    assert test_file.read_text() == original
+
+
+def test_cli_dry_run_restores_after_exception(
+    mock_graph_crash_after_write, monkeypatch, tmp_path
+) -> None:
+    test_file = tmp_path / "test.spec.ts"
+    original = "await page.click('#old')"
+    test_file.write_text(original)
+    log_file = tmp_path / "error.log"
+    log_file.write_text("Timeout error waiting for selector")
+    runner = CliRunner()
+    result = runner.invoke(app, [str(test_file), "--log", str(log_file), "--dry-run"])
+    assert isinstance(result.exception, OSError)
+    assert test_file.read_text() == original
 
 
 def test_cli_json_output(mock_graph_success, monkeypatch, tmp_path) -> None:

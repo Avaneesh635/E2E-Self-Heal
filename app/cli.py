@@ -139,6 +139,20 @@ def _render_diff(original: str, patched: str, path: str) -> None:
     console.print(Syntax(text, "diff", theme="ansi_dark") if text else "[dim]no changes[/dim]")
 
 
+def _restore_original_file(path: Path, original_code: str) -> None:
+    """Return ``path`` to ``original_code`` when a candidate was left on disk.
+
+    Reads the on-disk content so a graph run that never touched the target (or wrote
+    the same bytes) is left alone. Best-effort: a failure here is logged, never allowed
+    to mask the exception that triggered the rollback.
+    """
+    try:
+        if path.read_text() != original_code:
+            atomic_write(path, original_code)
+    except Exception as exc:
+        logger.error("restore_original_failed", test_script_path=str(path), error=str(exc))
+
+
 def _heal_file(
     test_path: Path, raw_log: str, dom_diff_context: list[dict], dry_run: bool
 ) -> RepairSummary:
@@ -160,19 +174,29 @@ def _heal_file(
         "is_success": False,
     }
     logger.info("repair_run_started", test_script_path=str(test_path))
-    final_state = build_graph().invoke(initial_state)
-    if dry_run or not final_state["is_success"]:
-        atomic_write(test_path, original_code)
-    _render_diff(original_code, final_state["current_code"], str(test_path))
-    instructions = final_state["patch_instructions"] or {}
-    summary = RepairSummary(
-        test_script_path=final_state["test_script_path"],
-        is_success=final_state["is_success"],
-        loop_count=final_state["loop_count"],
-        instructions=[PatchInstruction(**i) for i in instructions.get("instructions", [])],
-    )
-    logger.info("repair_run_finished", is_success=summary.is_success, loop_count=summary.loop_count)
-    return summary
+    # Rollback contract (Issue #210): the original file must come back after every
+    # non-committing outcome — a failed loop, --dry-run, or an exception raised by a
+    # node after the Test Runner atomic-wrote a candidate. The candidate is committed
+    # only when a non-dry-run run reports success, and only after the summary is built.
+    committed = False
+    try:
+        final_state = build_graph().invoke(initial_state)
+        _render_diff(original_code, final_state["current_code"], str(test_path))
+        instructions = final_state["patch_instructions"] or {}
+        summary = RepairSummary(
+            test_script_path=final_state["test_script_path"],
+            is_success=final_state["is_success"],
+            loop_count=final_state["loop_count"],
+            instructions=[PatchInstruction(**i) for i in instructions.get("instructions", [])],
+        )
+        committed = not dry_run and final_state["is_success"]
+        logger.info(
+            "repair_run_finished", is_success=summary.is_success, loop_count=summary.loop_count
+        )
+        return summary
+    finally:
+        if not committed:
+            _restore_original_file(test_path, original_code)
 
 
 def _heal_suite(suite_target: str, dom_diff_context: list[dict], dry_run: bool) -> SuiteSummary:
