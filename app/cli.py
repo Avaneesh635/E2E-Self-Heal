@@ -140,11 +140,9 @@ def _render_diff(original: str, patched: str, path: str) -> None:
 
 
 def _restore_original_file(path: Path, original_code: str) -> None:
-    """Return ``path`` to ``original_code`` when a candidate was left on disk.
+    """Restore ``path`` to ``original_code`` if a candidate was left on disk.
 
-    Reads the on-disk content so a graph run that never touched the target (or wrote
-    the same bytes) is left alone. Best-effort: a failure here is logged, never allowed
-    to mask the exception that triggered the rollback.
+    Best-effort: failures are logged, never masking the triggering exception.
     """
     try:
         if path.read_text() != original_code:
@@ -174,10 +172,8 @@ def _heal_file(
         "is_success": False,
     }
     logger.info("repair_run_started", test_script_path=str(test_path))
-    # Rollback contract (Issue #210): the original file must come back after every
-    # non-committing outcome — a failed loop, --dry-run, or an exception raised by a
-    # node after the Test Runner atomic-wrote a candidate. The candidate is committed
-    # only when a non-dry-run run reports success, and only after the summary is built.
+    # Restore the original for any non-committing outcome (failed loop, --dry-run,
+    # post-write exception); commit only on a successful non-dry-run.
     committed = False
     try:
         final_state = build_graph().invoke(initial_state)
