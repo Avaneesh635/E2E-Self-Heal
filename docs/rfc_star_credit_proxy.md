@@ -2,17 +2,21 @@
 
 | Metadata | Details |
 | :--- | :--- |
-| **Issue** | [#139](https://github.com/Lee-Dongwook/E2E-Self-Heal/issues/139) |
-| **Status** | Proposed |
+| **Issue** | https://github.com/Lee-Dongwook/E2E-Self-Heal/issues/139 |
+| **Status** | Proposed (rev 2 — review feedback addressed) |
 | **Milestone** | v1.0 |
 | **Component** | Hosted Credit Proxy (backend) + CLI auth surface |
 
 ---
 
 ## 1. Executive Summary
-This RFC defines the architecture for a **first-party hosted credit proxy** that grants free LLM healing credits to users who star the `E2E-Self-Heal` repository. The proxy verifies stars, issues and accounts for credits, custodies provider API keys, and forwards LLM requests on behalf of authenticated users.
 
-**Core Principle:** The proxy is a *thin hosted wrapper*. **No repair logic, LangGraph execution, or test-healing code lives in the backend.** The core engine remains fully locally runnable with a user's own keys.
+This RFC defines a **first-party hosted credit proxy** that grants free LLM healing credits to users who star the `E2E-Self-Heal` repository. The proxy verifies stars, issues and accounts for credits, custodies **hosted** provider keys, and forwards LLM requests for authenticated users.
+
+**Key-custody scope (important):**
+*Proxy-managed* provider keys never leave the backend vault and are never sent to the CLI. *User-managed* keys (`E2E_HEALER_LLM_API_KEY` or provider-specific env vars) remain fully supported, stay on the user's machine, and are used directly by the CLI whenever the proxy is disabled, unreachable, or out of credits.
+
+**Core Principle:** The proxy is a *thin hosted wrapper*. **No repair logic, LangGraph execution, or test-healing code lives in the backend.** The core engine remains fully locally runnable.
 
 ---
 
@@ -22,26 +26,23 @@ This RFC defines the architecture for a **first-party hosted credit proxy** that
 ┌──────────────────────────┐        ┌───────────────────────────────┐
 │     Developer Machine    │        │   Hosted Credit Proxy (SaaS)  │
 │                          │        │                               │
-│  ┌────────────────────┐  │  HTTPS │  ┌─────────────────────────┐  │
-│  │  e2e-healer CLI    │  │ ◄────► │  │ Auth Service            │  │
-│  │  (core engine)     │  │        │  │ (GitHub OAuth + stars)  │  │
+│  ┌────────────────────┐  │ HTTPS  │  ┌─────────────────────────┐  │
+│  │  e2e-healer CLI    │◄─┼──────► │  │ Auth Service            │  │
+│  │  (core engine)     │  │        │  │ (device flow + stars)   │  │
 │  │                    │  │        │  ├─────────────────────────┤  │
 │  │ - LangGraph loop   │  │        │  │ Accounting Service      │  │
-│  │ - Playwright run   │  │        │  │ (credits ledger)        │  │
+│  │ - Playwright run   │  │        │  │ (grants, ledger, resv.) │  │
 │  │ - Patch/verify     │  │        │  ├─────────────────────────┤  │
-│  │ - NO keys stored   │  │        │  │ LLM Proxy               │  │
-│  └────────────────────┘  │        │  │ (vault + forwarding)    │  │
-│                          │        │  └───────────┬─────────────┘  │
-│  ┌────────────────────┐  │        │  ┌───────────▼─────────────┐  │
-│  │ Playground (Web)   │  │ ◄────► │  │ Abuse Controls          │  │
-│  │ (future surface)   │  │        │  │ (rate limits, budgets)  │  │
-│  └────────────────────┘  │        │  └─────────────────────────┘  │
-└──────────────────────────┘        └───────────────┬───────────────┘
-                                                    │ vault-only keys
-                                                    ▼
+│  │ - User keys stay   │  │        │  │ LLM Proxy               │  │
+│  │   local            │  │        │  │ (vault + forwarding)    │  │
+│  └────────────────────┘  │        │  └───────────┬─────────────┘  │
+│                          │        │              │                │
+└──────────────────────────┘        └──────────────┼────────────────┘
+                                                   │
+                                                   ▼
                                     ┌───────────────────────────────┐
-                                    │  LLM Providers                │
-                                    │  (NVIDIA / OpenAI / Anthropic)│
+                                    │        LLM Providers          │
+                                    │ OpenAI / Anthropic / NVIDIA   │
                                     └───────────────────────────────┘
 ```
 
@@ -49,158 +50,169 @@ This RFC defines the architecture for a **first-party hosted credit proxy** that
 
 ## 3. Star Verification (Authentication)
 
-### 3.1 Flow (GitHub OAuth Device Flow)
+### 3.1 GitHub Device Flow
 
 ```mermaid
 sequenceDiagram
     participant U as Developer
     participant CLI as e2e-healer CLI
-    participant P as Credit Proxy
     participant GH as GitHub
+    participant P as Credit Proxy
 
     U->>CLI: e2e-healer auth
-    CLI->>P: POST /auth/device
-    P-->>CLI: device_code + user_code + verification_uri
-    CLI->>U: display code / open browser
-    U->>GH: authorize (read-only public scope)
-    GH->>P: OAuth callback (user token)
-    P->>GH: GET /user + star check on repo
-    GH-->>P: github_id + starred=true
-    P->>P: idempotent credit grant (once per github_id)
-    P-->>CLI: session token + credit grant summary
-    CLI->>CLI: store token in ~/.e2e-healer/credentials (0600)
+    CLI->>GH: POST /login/device/code
+    GH-->>CLI: device_code, user_code
+    CLI->>U: Show verification code
+    U->>GH: Approve access
+
+    loop Poll
+        CLI->>GH: POST /login/oauth/access_token
+        GH-->>CLI: authorization_pending
+    end
+
+    GH-->>CLI: User access token
+    CLI->>P: POST /auth/verify
+    P->>GH: GET /user
+    P->>GH: GET /user/starred/{owner}/{repo}
+    GH-->>P: 204 or 404
+    P->>P: INSERT OR IGNORE grant
+    P-->>CLI: Session token + grant
 ```
 
-### 3.2 Anti-Gaming
-
-- Star check performed **server-side** with the backend's own token.
-- Star status cached with a 24h TTL to block rapid unstar/re-star cycles.
-- Credits granted **once per** **`github_id`** (unique constraint), not per username.
+Star verification uses the **user-authorized GitHub token**, which is discarded immediately after verification.
 
 ---
 
-## 4. Credit Issuance & Accounting
+## 4. Credit Accounting
 
-### 4.1 Data Model (Append-Only Ledger)
+### Database Model
 
 ```text
-users                 credits_ledger                llm_usage
-┌──────────────┐      ┌────────────────────────┐    ┌────────────────────┐
-│ github_id PK │      │ entry_id PK (uuid)     │    │ request_id PK      │
-│ username     │      │ github_id FK           │    │ github_id FK       │
-│ created_at   │      │ event (grant | spend)  │    │ provider           │
-└──────────────┘      │ amount                 │    │ tokens_in / out    │
-                      │ tier (star|sponsor)    │    │ cost_usd           │
-                      │ granted_at/expires_at  │    │ created_at         │
-                      │ request_id (UNIQUE)    │    └────────────────────┘
-                      └────────────────────────┘
+users
+grants
+reservations
+credits_ledger
+llm_usage
 ```
 
-### 4.2 Consumption Rules
+### Rules
 
-- **1 heal run = 1 credit** (regardless of internal loop count).
-- Consumption is **idempotent**, keyed by client-generated `request_id`.
-- Credits expire 30 days after grant.
-- Exhausted credits → CLI prints a friendly prompt to configure a personal API key.
+- One GitHub account receives one grant.
+- Credits expire after **30 days**.
+- FIFO grant consumption.
+- `UNIQUE(github_id, request_id)` ensures idempotency.
+- Payload hash mismatch returns **409 Conflict**.
 
-### 4.3 Heal Request Flow
+### Reservation Lifecycle
 
-```mermaid
-sequenceDiagram
-    participant CLI as e2e-healer CLI (local)
-    participant P as Credit Proxy
-    participant V as Secrets Vault
-    participant L as LLM Provider
-
-    CLI->>CLI: repair loop needs an LLM call
-    CLI->>P: POST /v1/llm/chat (token, request_id, payload)
-    P->>P: validate token + rate limits + budget check
-    P->>P: reserve credit (idempotent by request_id)
-    alt credits available
-        P->>V: fetch provider key
-        V-->>P: key
-        P->>L: forward request
-        L-->>P: completion
-        P-->>CLI: stream response
-        P->>P: commit spend to ledger
-    else no credits / budget tripped
-        P-->>CLI: 402 + upgrade hint
-        CLI->>CLI: fall back to local API key if configured
-    end
 ```
+reserved
+    │
+    ├── committed
+    ├── released
+    └── expired
+```
+
+TTL: **15 minutes**
+
+Background reconciler:
+
+- releases expired reservations
+- completes crashed requests
+- prevents duplicate provider charges
 
 ---
 
-## 5. Provider Key Custody
+## 5. Provider Keys
 
-- Keys stored only in a secrets vault.
-- CLI never receives provider keys.
-- Zero-downtime rotation supported.
+Hosted keys:
+
+- Stored only in Vault
+- Never sent to CLI
+- Rotated every 90 days
+
+User keys:
+
+- Stay on user machine
+- Never uploaded
+- Used automatically when proxy unavailable
 
 ---
 
 ## 6. Abuse Prevention
 
 | Threat | Mitigation |
-| :--- | :--- |
-| Multi-account farming | OAuth + one grant per github_id + IP limits |
-| Unstar after claim | Credits expire in 30 days |
-| Oversized payloads | Reject >50KB |
-| DDoS / scraping | Per-user rate limits |
-| Token theft | 1-hour session tokens |
-| Runaway spend | Global budget breaker |
+|--------|------------|
+| Multi-account farming | One grant per GitHub account |
+| Replay | request_id + payload hash |
+| DDoS | Rate limiting |
+| Token theft | 1-hour sessions |
+| Oversized payloads | 50 KB limit |
+| Runaway spend | Budget circuit breaker |
 
 ---
 
-## 7. CLI & Playground Touchpoints
+## 7. Data Retention
 
-### New CLI Commands
+Default:
 
-| Command | Purpose |
-| :--- | :--- |
-| `e2e-healer auth` | OAuth flow + credit grant |
-| `e2e-healer credits` | Show balance |
+- No payload logging
+- Memory-only forwarding
+- Metadata only
 
-### Settings
+Optional debug mode:
 
-| Setting | Default | Description |
-| :--- | :--- | :--- |
-| `E2E_HEALER_PROXY_URL` | `""` | Proxy URL |
-| `E2E_HEALER_PROXY_TOKEN` | `""` | Session token |
+- Encrypted storage
+- Retained 7 days
+- Automatically deleted
 
 ---
 
-## 8. Core ↔ Backend Boundary
+## 8. CLI
+
+### Commands
+
+```bash
+e2e-healer auth
+e2e-healer credits
+```
+
+Configuration:
+
+```bash
+E2E_HEALER_PROXY_URL
+E2E_HEALER_PROXY_TOKEN
+```
+
+---
+
+## 9. Responsibility Split
 
 | Responsibility | CLI | Proxy |
-| :--- | :---: | :---: |
-| LangGraph repair loop | ✅ | ❌ |
-| Playwright execution | ✅ | ❌ |
-| OAuth + star verification | ❌ | ✅ |
-| Credit ledger | ❌ | ✅ |
-| Provider key custody | ❌ | ✅ |
-
-**Guarantees**
-
-- Backend never executes repair logic.
-- CLI remains fully local with user keys.
+|---------------|-----|-------|
+| LangGraph | ✅ | ❌ |
+| Playwright | ✅ | ❌ |
+| User API Keys | ✅ | ❌ |
+| GitHub Auth | ❌ | ✅ |
+| Credit Ledger | ❌ | ✅ |
+| Hosted Keys | ❌ | ✅ |
 
 ---
 
-## 9. Open Questions
+## 10. Open Questions
 
 1. Provider-agnostic credits?
-2. Streaming in v1?
-3. Proxy outage fallback?
-4. Extra contributor credits?
+2. Streaming support?
+3. Contributor bonus credits?
 
 ---
 
-## 10. Acceptance Criteria Checklist
+## 11. Acceptance Criteria
 
-- [x] Auth covered
-- [x] Accounting covered
-- [x] Abuse controls covered
-- [x] Core/backend boundary defined
-- [x] No repair logic in backend
-- [x] Core stays locally runnable
+- [x] Device Flow
+- [x] Credit Accounting
+- [x] Abuse Protection
+- [x] Backend Boundary
+- [x] Local-first Core
+
+---
