@@ -31,6 +31,8 @@ def atomic_write(path: Path, content: str) -> None:
     try:
         with os.fdopen(fd, "w") as handle:
             handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
