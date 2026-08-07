@@ -166,6 +166,20 @@ def test_rejects_fill_value_edit() -> None:
         _apply("await page.fill('#email', 'user@example.com')\n", [instruction])
 
 
+def test_rejects_fill_value_edit_when_value_reads_changed_test_id() -> None:
+    instruction = _instruction(
+        1,
+        "await page.fill('#email', await page.getByTestId('old-name').textContent())",
+        "await page.fill('#email', await page.getByTestId('new-name').textContent())",
+    )
+
+    with pytest.raises(PatchApplicationError, match="changes input data"):
+        _apply(
+            "await page.fill('#email', await page.getByTestId('old-name').textContent())\n",
+            [instruction],
+        )
+
+
 def test_rejects_locator_fill_value_edit() -> None:
     instruction = _instruction(
         1,

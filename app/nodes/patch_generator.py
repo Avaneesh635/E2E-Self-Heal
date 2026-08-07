@@ -97,12 +97,6 @@ def _argument_spans(text: str, opening: int, closing: int) -> list[tuple[int, in
 def _masked_selector_line(text: str) -> str | None:
     """Mask selector arguments, returning None when a data call cannot be safely checked."""
     spans: list[tuple[int, int]] = []
-    for match in _SELECTOR_CALL.finditer(text):
-        opening = text.find("(", match.start(), match.end())
-        closing = _matching_paren(text, opening)
-        if closing is None:
-            return None
-        spans.extend(_argument_spans(text, opening, closing))
 
     for match in _VALUE_BEARING_CALL.finditer(text):
         opening = text.find("(", match.start(), match.end())
@@ -115,6 +109,20 @@ def _masked_selector_line(text: str) -> str | None:
             if not arguments:
                 return None
             spans.append(arguments[0])
+            continue
+
+        # A locator-bound call may change selectors in its receiver chain, but selector
+        # calls inside its value arguments are input data and must not be masked.
+        receiver_start = text.rfind("page.", 0, match.start())
+        if receiver_start == -1:
+            continue
+        for selector_match in _SELECTOR_CALL.finditer(text, receiver_start, match.start()):
+            selector_opening = text.find("(", selector_match.start(), selector_match.end())
+            selector_closing = _matching_paren(text, selector_opening)
+            if selector_closing is None:
+                return None
+            if selector_closing < match.start():
+                spans.extend(_argument_spans(text, selector_opening, selector_closing))
 
     if _VALUE_BEARING_CALL.search(text) and not spans:
         # A locator-bound call has no selector argument of its own. Its data arguments
