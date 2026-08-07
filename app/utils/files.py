@@ -1,10 +1,11 @@
 """Filesystem helpers."""
 
 import os
+import stat
 import tempfile
 from pathlib import Path
 
-from app.sandbox import assert_write_allowed
+from app.sandbox import SandboxViolation, assert_write_allowed
 
 
 def split_line_ending(line: str) -> tuple[str, str]:
@@ -32,6 +33,26 @@ def _fsync_parent_directory(path: Path) -> None:
         os.close(directory_fd)
 
 
+def _target_mode(path: Path) -> int:
+    """Return existing mode bits, or private permissions for a new file."""
+    if path.exists():
+        return stat.S_IMODE(path.stat().st_mode)
+    return 0o600
+
+
+def _assert_regular_non_symlink_target(path: Path) -> None:
+    """Reject symlinked path components and existing non-regular targets."""
+    if any(component.is_symlink() for component in (path, *path.parents)):
+        raise SandboxViolation(f"symlink write denied: {path}")
+
+    try:
+        target_mode = path.lstat().st_mode
+    except FileNotFoundError:
+        return
+    if not stat.S_ISREG(target_mode):
+        raise SandboxViolation(f"non-regular write target denied: {path}")
+
+
 def atomic_write(path: Path, content: str) -> None:
     """Write ``content`` to ``path`` atomically and durably.
 
@@ -39,10 +60,13 @@ def atomic_write(path: Path, content: str) -> None:
     then syncs the parent directory so a crash mid-write cannot leave a half-patched file
     or lose the durable rename on supported platforms.
     """
+    _assert_regular_non_symlink_target(path)
     assert_write_allowed(path, reason="atomic_write")
+    mode = _target_mode(path)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=path.suffix)
     try:
         with os.fdopen(fd, "w") as handle:
+            os.chmod(tmp, mode)
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
