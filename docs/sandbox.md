@@ -28,10 +28,11 @@ All paths should be resolved before access checks.
 - Default workspace root: current working directory.
 - A readable or writable path must stay inside the workspace root after `Path.resolve()`.
 - Symlink escapes outside the workspace should be rejected.
-- Write targets must be regular files; symlink paths are rejected even when their resolved
-  target would otherwise pass the sandbox checks. Existing file mode bits are preserved
-  across atomic writes. New files use private `0600` permissions until an explicit policy
-  says otherwise.
+- Write targets must be regular files; symlink paths and symlinked parent directories are
+  rejected even when their resolved target would otherwise pass the sandbox checks. Existing
+  file mode bits are preserved across atomic writes. New files use private `0600` permissions
+  until an explicit policy says otherwise. FIFOs, sockets, directories, and other non-regular
+  existing targets are rejected.
 - Directories such as `.git/`, `.venv/`, `node_modules/`, and build output should never be patched.
 - The repair loop may write only files discovered from the CLI argument or parsed failing test output.
 
@@ -75,6 +76,7 @@ approach is a good baseline because command chaining is not interpreted by a she
 - Allow a targeted `*.spec.ts` or `*.test.tsx` repair file.
 - Allow dry-run restoration of the original target file.
 - Preserve existing mode bits and keep failed replacements from changing content or mode.
-- Reject both in-workspace and escaping symlink write targets.
+- Reject in-workspace and escaping symlink write targets, including symlinked parents.
+- Reject non-regular existing targets such as directories, FIFOs, and sockets.
 - Allow and clean up the selector verifier helper.
 - Verify suite mode cannot patch files that were not reported as failing tests.

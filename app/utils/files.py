@@ -40,6 +40,19 @@ def _target_mode(path: Path) -> int:
     return 0o600
 
 
+def _assert_regular_non_symlink_target(path: Path) -> None:
+    """Reject symlinked path components and existing non-regular targets."""
+    if any(component.is_symlink() for component in (path, *path.parents)):
+        raise SandboxViolation(f"symlink write denied: {path}")
+
+    try:
+        target_mode = path.lstat().st_mode
+    except FileNotFoundError:
+        return
+    if not stat.S_ISREG(target_mode):
+        raise SandboxViolation(f"non-regular write target denied: {path}")
+
+
 def atomic_write(path: Path, content: str) -> None:
     """Write ``content`` to ``path`` atomically and durably.
 
@@ -47,8 +60,7 @@ def atomic_write(path: Path, content: str) -> None:
     then syncs the parent directory so a crash mid-write cannot leave a half-patched file
     or lose the durable rename on supported platforms.
     """
-    if path.is_symlink():
-        raise SandboxViolation(f"symlink write denied: {path}")
+    _assert_regular_non_symlink_target(path)
     assert_write_allowed(path, reason="atomic_write")
     mode = _target_mode(path)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=path.suffix)

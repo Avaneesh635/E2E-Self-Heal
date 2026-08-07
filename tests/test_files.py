@@ -1,4 +1,5 @@
 import os
+import socket
 import stat
 from pathlib import Path
 
@@ -89,6 +90,7 @@ def test_atomic_write_preserves_existing_mode(tmp_path: Path) -> None:
     assert target.read_text() == "new"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits are not portable on Windows")
 def test_atomic_write_failure_preserves_existing_content_and_mode(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -156,3 +158,79 @@ def test_atomic_write_rejects_symlink_escape(
 
     assert link.is_symlink()
     assert outside.read_text() == "secret"
+
+
+def test_atomic_write_rejects_symlinked_parent_inside_workspace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "sandbox_mode", "off")
+    real_dir = tmp_path / "real"
+    linked_dir = tmp_path / "linked"
+    real_dir.mkdir()
+    _create_symlink(linked_dir, real_dir)
+    target = linked_dir / "target.spec.ts"
+
+    with pytest.raises(SandboxViolation, match="symlink"):
+        atomic_write(target, "new")
+
+    assert not (real_dir / "target.spec.ts").exists()
+
+
+def test_atomic_write_rejects_symlinked_parent_escape(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "sandbox_mode", "off")
+    root = tmp_path / "repo"
+    outside = tmp_path / "outside"
+    linked_dir = root / "linked"
+    root.mkdir()
+    outside.mkdir()
+    _create_symlink(linked_dir, outside)
+    target = linked_dir / "target.spec.ts"
+
+    with pytest.raises(SandboxViolation, match="symlink"):
+        atomic_write(target, "new")
+
+    assert not (outside / "target.spec.ts").exists()
+
+
+def test_atomic_write_rejects_existing_directory_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "sandbox_mode", "off")
+    target = tmp_path / "directory.spec.ts"
+    target.mkdir()
+
+    with pytest.raises(SandboxViolation, match="non-regular"):
+        atomic_write(target, "new")
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="FIFOs unavailable")
+def test_atomic_write_rejects_existing_fifo_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "sandbox_mode", "off")
+    target = tmp_path / "fifo.spec.ts"
+    os.mkfifo(target)
+
+    try:
+        with pytest.raises(SandboxViolation, match="non-regular"):
+            atomic_write(target, "new")
+    finally:
+        target.unlink(missing_ok=True)
+
+
+@pytest.mark.skipif(not hasattr(socket, "AF_UNIX"), reason="Unix sockets unavailable")
+def test_atomic_write_rejects_existing_socket_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "sandbox_mode", "off")
+    target = tmp_path / "socket.spec.ts"
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        server.bind(str(target))
+        with pytest.raises(SandboxViolation, match="non-regular"):
+            atomic_write(target, "new")
+    finally:
+        server.close()
+        target.unlink(missing_ok=True)
