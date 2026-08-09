@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- **Settings validation** — `E2E_HEALER_MAX_LOOPS` is now bounded to `1..3` (Commandment #3:
+  the Router owns termination and `loop_count` never exceeds 3), and
+  `E2E_HEALER_LLM_MAX_TOKENS` / `E2E_HEALER_NVIDIA_MAX_TOKENS` require `>= 1`. Out-of-range
+  values fail at config load with a clear error instead of quietly breaking the repair-loop
+  budget (a stray `E2E_HEALER_MAX_LOOPS=0` previously made the Router terminate without ever
+  patching) (#184).
+- **Fail-fast provider configuration** — selecting a provider without a model name
+  (`E2E_HEALER_LLM_MODEL`) now errors at config load rather than surfacing deep inside the
+  provider SDK on the first LLM call. NVIDIA keeps its legacy default model (#184).
+
 ## [0.5.0-pre] - 2026-07-28
 
 Preview release. Everything below is shipped and tested, but the surfaces added here

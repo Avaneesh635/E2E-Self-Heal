@@ -25,7 +25,9 @@ class Settings(BaseSettings):
     )
     llm_model: str = Field(default="", description="Structured-Outputs-capable model")
     llm_max_tokens: int = Field(
-        default=4096, description="completion token cap (reasoning models need headroom)"
+        default=4096,
+        ge=1,
+        description="completion token cap (reasoning models need headroom); must be >= 1",
     )
 
     # Legacy NVIDIA-specific fields, kept for backward compatibility. Prefer the generic
@@ -38,8 +40,15 @@ class Settings(BaseSettings):
     nvidia_model: str = Field(
         default="openai/gpt-oss-120b", description="Structured-Outputs-capable model (legacy)"
     )
-    nvidia_max_tokens: int = Field(default=4096, description="completion token cap (legacy)")
-    max_loops: int = Field(default=3, description="repair loop cap (Router termination)")
+    nvidia_max_tokens: int = Field(
+        default=4096, ge=1, description="completion token cap (legacy); must be >= 1"
+    )
+    max_loops: int = Field(
+        default=3,
+        ge=1,
+        le=3,
+        description="repair loop cap (Router termination); Commandment #3 keeps this in 1..3",
+    )
     playwright_cmd: str = Field(default="npx playwright test", description="Playwright invocation")
     test_timeout_seconds: int = Field(
         default=120,
@@ -121,6 +130,21 @@ class Settings(BaseSettings):
             self.llm_model = self.nvidia_model
         if "llm_max_tokens" not in explicit and "nvidia_max_tokens" in explicit:
             self.llm_max_tokens = self.nvidia_max_tokens
+        return self
+
+    @model_validator(mode="after")
+    def _require_model_for_provider(self) -> "Settings":
+        """Fail fast when a provider is selected without a model name.
+
+        Runs after ``_map_legacy_nvidia_fields`` so the NVIDIA back-compat default
+        (``nvidia_model``) satisfies the check. An empty model otherwise surfaces deep
+        inside the provider SDK on the first LLM call, which is much harder to diagnose.
+        """
+        if not self.llm_model.strip():
+            raise ValueError(
+                f"llm_model must be set for provider '{self.llm_provider}' "
+                "(set E2E_HEALER_LLM_MODEL in .env)"
+            )
         return self
 
 
