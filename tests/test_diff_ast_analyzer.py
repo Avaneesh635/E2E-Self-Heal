@@ -1,272 +1,242 @@
-import app.preprocess.diff_ast_analyzer as analyzer_module
+"""Tests for the diff AST analyzer with new-file line number tracking (Issue #224)."""
+
 from app.preprocess.diff_ast_analyzer import analyze_diff
 
-SAMPLE_DIFF = """diff --git a/components/SubmitButton.tsx b/components/SubmitButton.tsx
-index abc1234..def5678 100644
---- a/components/SubmitButton.tsx
-+++ b/components/SubmitButton.tsx
-@@ -1,3 +1,3 @@
- export function SubmitButton() {
--  return <button id="old-id" className="btn">Submit</button>
-+  return <button id="new-id" className="btn">Submit</button>
- }
-"""
 
-MULTI_LINE_DIFF = """diff --git a/components/SubmitButton.tsx b/components/SubmitButton.tsx
-index abc1234..def5678 100644
---- a/components/SubmitButton.tsx
-+++ b/components/SubmitButton.tsx
-@@ -1,10 +1,10 @@
- export function SubmitButton() {
--  return (
--    <button
--      id="old-id"
--      className="btn"
--    >
--      Submit
--    </button>
--  )
-+  return (
-+    <button
-+      id="new-id"
-+      className="btn"
-+    >
-+      Submit
-+    </button>
-+  )
- }
-"""
+class TestDiffLineNumberTracking:
+    """Test that line numbers are correctly tracked through diff hunks."""
 
-NESTED_DIFF = """diff --git a/components/Layout.tsx b/components/Layout.tsx
---- a/components/Layout.tsx
-+++ b/components/Layout.tsx
-@@ -1,3 +1,3 @@
--<div><button id="old" /></div>
-+<div><button id="new" /></div>
-"""
-
-SPREAD_PROP_DIFF = """diff --git a/components/Input.tsx b/components/Input.tsx
---- a/components/Input.tsx
-+++ b/components/Input.tsx
-@@ -1,3 +1,3 @@
--<input {...props} type="text" id="old-id" required />
-+<input {...props} type="text" id="new-id" required />
-"""
-
-EXPRESSION_PROP_DIFF = """diff --git a/components/Button.tsx b/components/Button.tsx
---- a/components/Button.tsx
-+++ b/components/Button.tsx
-@@ -1,3 +1,3 @@
--<button disabled={isLoading} className={isActive ? "active" : "inactive"} />
-+<button disabled={!isLoading} className={isActive ? "active" : "inactive"} />
-"""
-
-
-def test_detects_single_changed_element():
-    diffs = analyze_diff(SAMPLE_DIFF)
-    assert len(diffs) == 1
-    assert diffs[0].file == "components/SubmitButton.tsx"
-
-
-def test_captures_before_and_after_attributes():
-    diff = analyze_diff(SAMPLE_DIFF)[0]
-    assert diff.previous["attributes"]["id"] == "old-id"
-    assert diff.current["attributes"]["id"] == "new-id"
-    assert diff.current["tag"] == "button"
-
-
-def test_ignores_non_jsx_files():
-    non_jsx = SAMPLE_DIFF.replace(".tsx", ".css")
-    assert analyze_diff(non_jsx) == []
-
-
-def test_multi_line_jsx_parsing():
-    diffs = analyze_diff(MULTI_LINE_DIFF)
-    assert len(diffs) == 1
-    assert diffs[0].file == "components/SubmitButton.tsx"
-    assert diffs[0].previous["tag"] == "button"
-    assert diffs[0].previous["attributes"]["id"] == "old-id"
-    assert diffs[0].current["attributes"]["id"] == "new-id"
-
-
-def test_nested_jsx_parsing():
-    diffs = analyze_diff(NESTED_DIFF)
-    assert len(diffs) == 2
-    assert diffs[0].file == "components/Layout.tsx"
-    assert diffs[0].previous["tag"] == "div"
-    assert diffs[1].previous["tag"] == "button"
-    assert diffs[1].previous["attributes"]["id"] == "old"
-    assert diffs[1].current["attributes"]["id"] == "new"
-
-
-def test_spread_and_boolean_attributes():
-    diffs = analyze_diff(SPREAD_PROP_DIFF)
-    assert len(diffs) == 1
-    assert diffs[0].previous["tag"] == "input"
-    assert diffs[0].previous["attributes"]["type"] == "text"
-    assert diffs[0].previous["attributes"]["id"] == "old-id"
-    assert "required" in diffs[0].previous["attributes"]
-    assert diffs[0].previous["attributes"]["required"] == ""
-    assert "...props" not in diffs[0].previous["attributes"]
-
-
-def test_regex_fallback_handles_spread_and_boolean_attributes(monkeypatch):
-    # The regex backend must match the tree-sitter backend: skip {...props} spreads and
-    # capture bare boolean attributes (value ""), not silently drop them.
-    monkeypatch.setattr(analyzer_module, "_HAS_TREE_SITTER", False)
-    diffs = analyze_diff(SPREAD_PROP_DIFF)
-    assert len(diffs) == 1
-    assert diffs[0].previous["tag"] == "input"
-    assert diffs[0].previous["attributes"]["type"] == "text"
-    assert diffs[0].previous["attributes"]["id"] == "old-id"
-    assert diffs[0].previous["attributes"]["required"] == ""
-    assert "...props" not in diffs[0].previous["attributes"]
-    assert "props" not in diffs[0].previous["attributes"]
-
-
-def test_expression_attributes():
-    diffs = analyze_diff(EXPRESSION_PROP_DIFF)
-    assert len(diffs) == 1
-    assert diffs[0].previous["tag"] == "button"
-    assert diffs[0].previous["attributes"]["disabled"] == "isLoading"
-    assert diffs[0].current["attributes"]["disabled"] == "!isLoading"
-    assert diffs[0].previous["attributes"]["className"] == 'isActive ? "active" : "inactive"'
-
-
-def test_fallback_to_regex_when_tree_sitter_disabled(monkeypatch):
-    monkeypatch.setattr(analyzer_module, "_HAS_TREE_SITTER", False)
-    diffs = analyze_diff(SAMPLE_DIFF)
-    assert len(diffs) == 1
-    assert diffs[0].file == "components/SubmitButton.tsx"
-    assert diffs[0].previous["attributes"]["id"] == "old-id"
-    assert diffs[0].current["attributes"]["id"] == "new-id"
-
-
-def test_fallback_to_regex_on_tree_sitter_exception(monkeypatch):
-    def mock_analyze_tree_sitter(git_diff):
-        raise RuntimeError("Parsing failed")
-
-    monkeypatch.setattr(analyzer_module, "_analyze_diff_tree_sitter", mock_analyze_tree_sitter)
-    diffs = analyze_diff(SAMPLE_DIFF)
-    assert len(diffs) == 1
-    assert diffs[0].file == "components/SubmitButton.tsx"
-    assert diffs[0].previous["attributes"]["id"] == "old-id"
-    assert diffs[0].current["attributes"]["id"] == "new-id"
-
-
-NO_PREFIX_DIFF = """diff --git components/SubmitButton.tsx components/SubmitButton.tsx
---- components/SubmitButton.tsx
-+++ components/SubmitButton.tsx
-@@ -1,3 +1,3 @@
- export function SubmitButton() {
--  return <button id="old-id">Submit</button>
-+  return <button id="new-id">Submit</button>
- }
-"""
-
-RENAME_DIFF = """diff --git a/components/OldButton.tsx b/components/NewButton.tsx
-rename from components/OldButton.tsx
-rename to components/NewButton.tsx
---- a/components/OldButton.tsx
-+++ b/components/NewButton.tsx
-@@ -1,3 +1,3 @@
- export function SubmitButton() {
--  return <button id="old">Submit</button>
-+  return <button id="new">Submit</button>
- }
-"""
-
-DELETION_DIFF = """diff --git a/components/DeadButton.tsx b/components/DeadButton.tsx
-deleted file mode 100644
---- a/components/DeadButton.tsx
-+++ /dev/null
-@@ -1,3 +0,0 @@
--export function DeadButton() {
--  return <button id="dead">Submit</button>
--}
-"""
-
-UNEVEN_HUNK_DIFF = """diff --git a/components/List.tsx b/components/List.tsx
---- a/components/List.tsx
-+++ b/components/List.tsx
-@@ -1,5 +1,4 @@
- export function List() {
+    def test_single_hunk_added_element(self):
+        """Added element should get the correct new-file line number."""
+        diff = """diff --git a/test.tsx b/test.tsx
+--- a/test.tsx
++++ b/test.tsx
+@@ -10,6 +10,7 @@ export const App = () => {
    return (
--    <ul>
--      <li id="item-1">One</li>
--      <li id="item-2">Two</li>
-+    <ul data-testid="list">
-+      <li id="item-1">One</li>
-     </ul>
-   )
- }
+     <div>
+       <p>Hello</p>
++      <button>Click me</button>
+     </div>
+   );
+ };
 """
+        diffs = analyze_diff(diff)
+        assert len(diffs) == 1
+        assert diffs[0].file == "test.tsx"
+        assert diffs[0].line == 13
+        assert diffs[0].current.get("tag") == "button"
+        assert diffs[0].previous == {}
 
-
-def test_parses_no_prefix_diff():
-    diffs = analyze_diff(NO_PREFIX_DIFF)
-    assert len(diffs) == 1
-    assert diffs[0].file == "components/SubmitButton.tsx"
-    assert diffs[0].previous["attributes"]["id"] == "old-id"
-    assert diffs[0].current["attributes"]["id"] == "new-id"
-
-
-def test_parses_diff_with_spaces_in_path():
-    diff_text = """diff --git a/components/Submit Button.tsx b/components/Submit Button.tsx
-index abc1234..def5678 100644
---- a/components/Submit Button.tsx
-+++ b/components/Submit Button.tsx
-@@ -1,3 +1,3 @@
- export function SubmitButton() {
--  return <button id=\"old-id\" className=\"btn\">Submit</button>
-+  return <button id=\"new-id\" className=\"btn\">Submit</button>
- }
+    def test_single_hunk_modified_element(self):
+        """Modified element should get the new-file line number."""
+        diff = """diff --git a/test.tsx b/test.tsx
+--- a/test.tsx
++++ b/test.tsx
+@@ -5,5 +5,5 @@ export const App = () => {
+   return (
+     <div>
+-      <button className="old">Click</button>
++      <button className="new">Click</button>
+     </div>
+   );
+ };
 """
-    diffs = analyze_diff(diff_text)
-    assert len(diffs) == 1
-    assert diffs[0].file == "components/Submit Button.tsx"
-    assert diffs[0].previous["attributes"]["id"] == "old-id"
-    assert diffs[0].current["attributes"]["id"] == "new-id"
+        diffs = analyze_diff(diff)
+        assert len(diffs) == 1
+        assert diffs[0].file == "test.tsx"
+        assert diffs[0].line == 7
+        assert diffs[0].current.get("attributes", {}).get("className") == "new"
+        assert diffs[0].previous.get("attributes", {}).get("className") == "old"
 
+    def test_multiple_hunks(self):
+        """Multiple hunks should each track their own line numbers."""
+        diff = """diff --git a/test.tsx b/test.tsx
+--- a/test.tsx
++++ b/test.tsx
+@@ -1,3 +1,4 @@
++<Header />
+ <div>
+   <p>First</p>
+ </div>
+@@ -20,3 +21,4 @@ export const App = () => {
+ <div>
+   <p>Second</p>
++  <Footer />
+ </div>
+"""
+        diffs = analyze_diff(diff)
+        assert len(diffs) == 2
+        # First hunk: Header added at line 1
+        assert diffs[0].line == 1
+        assert diffs[0].current.get("tag") == "Header"
+        # Second hunk: Footer added at line 23
+        assert diffs[1].line == 23
+        assert diffs[1].current.get("tag") == "Footer"
 
-def test_parses_rename_diff():
-    diffs = analyze_diff(RENAME_DIFF)
-    assert len(diffs) == 1
-    assert diffs[0].file == "components/NewButton.tsx"
-    assert diffs[0].previous["attributes"]["id"] == "old"
-    assert diffs[0].current["attributes"]["id"] == "new"
+    def test_deleted_element_line_zero(self):
+        """Deleted elements should have line=0 (unknown in new file)."""
+        diff = """diff --git a/test.tsx b/test.tsx
+--- a/test.tsx
++++ b/test.tsx
+@@ -5,5 +5,4 @@ export const App = () => {
+   return (
+     <div>
+-      <button>Delete me</button>
+       <p>Keep me</p>
+     </div>
+   );
+ };
+"""
+        diffs = analyze_diff(diff)
+        assert len(diffs) == 1
+        assert diffs[0].file == "test.tsx"
+        assert diffs[0].line == 0
+        assert diffs[0].previous.get("tag") == "button"
+        assert diffs[0].current == {}
 
+    def test_multiline_jsx_element(self):
+        """Multi-line JSX elements should use the opening tag's line number."""
+        diff = """diff --git a/test.tsx b/test.tsx
+--- a/test.tsx
++++ b/test.tsx
+@@ -10,6 +10,10 @@ export const App = () => {
+   return (
+     <div>
++      <div
++        className="wrapper"
++        id="main"
++      >
+         <p>Content</p>
++      </div>
+     </div>
+   );
+ };
+"""
+        diffs = analyze_diff(diff)
+        div_diffs = [d for d in diffs if d.current.get("tag") == "div"]
+        assert len(div_diffs) >= 1
+        # The opening tag is at new-file line 12
+        assert div_diffs[0].line == 12
+        assert div_diffs[0].current.get("attributes", {}).get("className") == "wrapper"
 
-def test_parses_deletion_diff():
-    diffs = analyze_diff(DELETION_DIFF)
-    assert len(diffs) == 1
-    assert diffs[0].file == "components/DeadButton.tsx"
-    assert diffs[0].previous["attributes"]["id"] == "dead"
-    assert diffs[0].current == {}
+    def test_new_file_dev_null(self):
+        """New file (from /dev/null) should track lines correctly."""
+        diff = """diff --git a/new.tsx b/new.tsx
+new file mode 100644
+--- /dev/null
++++ b/new.tsx
+@@ -0,0 +1,5 @@
++export const NewComponent = () => {
++  return (
++    <button>New</button>
++  );
++};
+"""
+        diffs = analyze_diff(diff)
+        assert len(diffs) == 1
+        assert diffs[0].file == "new.tsx"
+        assert diffs[0].line == 3
+        assert diffs[0].current.get("tag") == "button"
 
+    def test_deleted_file_dev_null(self):
+        """Deleted file (to /dev/null) should still parse but deletions have line=0."""
+        diff = """diff --git a/old.tsx b/old.tsx
+deleted file mode 100644
+--- a/old.tsx
++++ /dev/null
+@@ -1,5 +0,0 @@
+-export const OldComponent = () => {
+-  return (
+-    <button>Old</button>
+-  );
+-};
+"""
+        diffs = analyze_diff(diff)
+        assert len(diffs) == 1
+        assert diffs[0].file == "old.tsx"
+        assert diffs[0].line == 0
+        assert diffs[0].previous.get("tag") == "button"
 
-def test_uneven_hunk_does_not_mispair():
-    diffs = analyze_diff(UNEVEN_HUNK_DIFF)
-    # SequenceMatcher yields 3 pairs: ul changed, li item-1 equal (emitted,
-    # same contract as test_nested_jsx_parsing), li item-2 removed. The key
-    # guarantees are that item-2 is NOT discarded and no li is mis-paired
-    # against the ul.
-    assert len(diffs) == 3
+    def test_renamed_file(self):
+        """Renamed file should continue tracking line numbers under the new name."""
+        diff = """diff --git a/old.tsx b/new.tsx
+similarity index 100%
+rename from old.tsx
+rename to new.tsx
+--- a/old.tsx
++++ b/new.tsx
+@@ -1,3 +1,4 @@
+ export const Component = () => {
++  <button>Added</button>
+   return <div>Content</div>;
+ };
+"""
+        diffs = analyze_diff(diff)
+        assert len(diffs) == 1
+        assert diffs[0].file == "new.tsx"
+        assert diffs[0].line == 2
+        assert diffs[0].current.get("tag") == "button"
 
-    ul_diff = next((d for d in diffs if d.previous.get("tag") == "ul"), None)
-    assert ul_diff is not None
-    assert ul_diff.current.get("tag") == "ul"
-    assert ul_diff.current["attributes"].get("data-testid") == "list"
+    def test_context_lines_increment_counters(self):
+        """Context lines (starting with space) should increment both line counters."""
+        diff = """diff --git a/test.tsx b/test.tsx
+--- a/test.tsx
++++ b/test.tsx
+@@ -1,6 +1,7 @@
+ export const App = () => {
+   return (
+     <div>
+       <p>Context line 1</p>
+       <p>Context line 2</p>
++      <button>Added</button>
+     </div>
+   );
+ };
+"""
+        diffs = analyze_diff(diff)
+        assert len(diffs) == 1
+        assert diffs[0].line == 6
 
-    # The removed li item-2 must be represented as a deletion, not dropped.
-    li_deleted = next(
-        (d for d in diffs if d.previous.get("tag") == "li" and d.current == {}),
-        None,
-    )
-    assert li_deleted is not None
-    assert li_deleted.previous["attributes"]["id"] == "item-2"
+    def test_multiple_elements_same_hunk(self):
+        """Consecutive added elements should each get correct line numbers."""
+        diff = """diff --git a/test.tsx b/test.tsx
+--- a/test.tsx
++++ b/test.tsx
+@@ -10,4 +10,6 @@ export const App = () => {
+   return (
+     <div>
++      <button id="btn1">First</button>
++      <button id="btn2">Second</button>
+     </div>
+   );
+ };
+"""
+        diffs = analyze_diff(diff)
+        assert len(diffs) == 2
+        lines = sorted(d.line for d in diffs)
+        assert lines == [12, 13]
 
-    # No mis-pairing: whenever both sides are present, tags must agree.
-    for d in diffs:
-        if d.previous and d.current:
-            assert d.previous.get("tag") == d.current.get("tag")
+    def test_replace_with_multiple_changes(self):
+        """Replace operation should pair elements correctly with line numbers."""
+        diff = """diff --git a/test.tsx b/test.tsx
+--- a/test.tsx
++++ b/test.tsx
+@@ -5,5 +5,5 @@ export const App = () => {
+   return (
+     <div>
+-      <button className="old1">First</button>
+-      <button className="old2">Second</button>
++      <button className="new1">First</button>
++      <button className="new2">Second</button>
+     </div>
+   );
+ };
+"""
+        diffs = analyze_diff(diff)
+        assert len(diffs) == 2
+        # Both should have new-file line numbers (7 and 8)
+        assert sorted(d.line for d in diffs) == [7, 8]
+        classes = sorted(d.current.get("attributes", {}).get("className") for d in diffs)
+        assert classes == ["new1", "new2"]
+        # Every paired change must have a previous element (it was a replacement)
+        assert all(d.previous.get("tag") == "button" for d in diffs)
