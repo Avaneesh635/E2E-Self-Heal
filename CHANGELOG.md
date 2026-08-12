@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **Self-describing JSON contract** — every `--json` summary (`RepairSummary`, `SuiteSummary`,
+  `ReviewReport`) now carries a `schema_version` (currently `"1.0"`) and a `kind`
+  discriminator (`"repair"` / `"suite"` / `"review"`) so CI wrappers can detect breaking
+  changes and dispatch on the payload without guessing keys (#189).
+
 ### Fixed
 - **Settings validation** — `E2E_HEALER_MAX_LOOPS` is now bounded to `1..3` (Commandment #3:
   the Router owns termination and `loop_count` never exceeds 3), and
