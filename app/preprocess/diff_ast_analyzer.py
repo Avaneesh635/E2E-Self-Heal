@@ -232,6 +232,7 @@ def _analyze(git_diff: str, extract: Extractor) -> list[DomDiff]:
     hunks: list[tuple[list[tuple[str, int]], list[tuple[str, int]]]] = []
     old_line = 0
     new_line = 0
+    in_hunk = False
 
     def flush_hunk() -> None:
         if cur_rem or cur_add:
@@ -256,14 +257,10 @@ def _analyze(git_diff: str, extract: Extractor) -> list[DomDiff]:
                     # Added/changed elements use the new-file line; deletions stay 0.
                     line = curr["line"] if curr["tag"] else 0
                     prev_clean = (
-                        {"tag": prev["tag"], "attributes": prev["attributes"]}
-                        if prev["tag"]
-                        else {}
+                        {"tag": prev["tag"], "attributes": prev["attributes"]} if prev["tag"] else {}
                     )
                     curr_clean = (
-                        {"tag": curr["tag"], "attributes": curr["attributes"]}
-                        if curr["tag"]
-                        else {}
+                        {"tag": curr["tag"], "attributes": curr["attributes"]} if curr["tag"] else {}
                     )
                     diffs.append(
                         DomDiff(
@@ -282,6 +279,7 @@ def _analyze(git_diff: str, extract: Extractor) -> list[DomDiff]:
             pending_minus = ""
             old_line = 0
             new_line = 0
+            in_hunk = False
             header = line[len("diff --git ") :]
             sep_index = header.rfind(" b/")
             if sep_index != -1:
@@ -290,38 +288,46 @@ def _analyze(git_diff: str, extract: Extractor) -> list[DomDiff]:
                 parts = header.split(" ", 1)
                 if len(parts) == 2:
                     current_file = parts[1].removeprefix("b/")
-        elif line.startswith("--- "):
-            path = _strip_timestamp(line[4:].strip()).removeprefix("a/")
-            if path != "/dev/null":
-                pending_minus = path
-            if not current_file or current_file == "/dev/null":
-                current_file = path
-        elif line.startswith("+++ "):
-            path = _strip_timestamp(line[4:].strip()).removeprefix("b/")
-            if path != "/dev/null":
-                current_file = path
-            else:
-                current_file = pending_minus
-        elif line.startswith("rename to "):
-            process_file()
-            current_file = line[10:].strip()
-            continue
         elif line.startswith("@@ "):
             flush_hunk()
             match = _HUNK_RE.match(line)
             if match:
                 old_line = int(match.group(1))
                 new_line = int(match.group(3))
-        if not current_file.endswith(_JSX_SUFFIXES):
+                in_hunk = True
+        elif not in_hunk:
+            # File-level headers only (before the first hunk).
+            if line.startswith("--- "):
+                path = _strip_timestamp(line[4:].strip()).removeprefix("a/")
+                if path != "/dev/null":
+                    pending_minus = path
+                if not current_file or current_file == "/dev/null":
+                    current_file = path
+            elif line.startswith("+++ "):
+                path = _strip_timestamp(line[4:].strip()).removeprefix("b/")
+                if path != "/dev/null":
+                    current_file = path
+                else:
+                    current_file = pending_minus
+            elif line.startswith("rename to "):
+                process_file()
+                current_file = line[10:].strip()
+        elif line.startswith("\\"):
+            # "\ No newline at end of file" marker carries no position info.
             continue
-        if line.startswith("-") and not line.startswith("---"):
+        elif not current_file.endswith(_JSX_SUFFIXES):
+            continue
+        elif line.startswith("-"):
+            # Removed content line (incl. content that itself starts with ---).
             cur_rem.append((line[1:], old_line))
             old_line += 1
-        elif line.startswith("+") and not line.startswith("+++"):
+        elif line.startswith("+"):
+            # Added content line (incl. content that itself starts with +++).
             cur_add.append((line[1:], new_line))
             new_line += 1
-        elif line.startswith(" "):
-            # Context line: flush so each +/- chunk stays line-contiguous.
+        else:
+            # Context line: " text" or "" for blank lines; flush so each +/-
+            # chunk stays line-contiguous.
             flush_hunk()
             old_line += 1
             new_line += 1

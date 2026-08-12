@@ -271,3 +271,37 @@ rename to new.tsx
         diffs = analyze_diff(diff)
         by_tag = {d.current.get("tag"): d.line for d in diffs}
         assert by_tag == {"Form.Field": 2, "my-widget": 3}
+
+    def test_removed_content_line_starting_with_dashes(self) -> None:
+        """A removed line like '---custom-prop' must not be read as a --- header."""
+        diff = """diff --git a/test.tsx b/test.tsx
+--- a/test.tsx
++++ b/test.tsx
+@@ -1,4 +1,3 @@
+ <div>
+---custom-prop
+-  <button id="old">Old</button>
++  <button id="new">New</button>
+ </div>
+"""
+        diffs = analyze_diff(diff)
+        assert len(diffs) == 1
+        assert diffs[0].current.get("tag") == "button"
+        assert diffs[0].line == 2
+
+    def test_blank_context_line_keeps_counters_aligned(self) -> None:
+        """Blank context lines must advance both line counters."""
+        diff = """diff --git a/test.tsx b/test.tsx
+--- a/test.tsx
++++ b/test.tsx
+@@ -1,4 +1,5 @@
+ <div>
+
+   <p>a</p>
++  <button id="b">B</button>
+ </div>
+"""
+        diffs = analyze_diff(diff)
+        assert len(diffs) == 1
+        assert diffs[0].current.get("tag") == "button"
+        assert diffs[0].line == 4

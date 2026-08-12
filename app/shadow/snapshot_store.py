@@ -37,8 +37,8 @@ class SnapshotStore(ISnapshotStore):
     Identity rules:
         * The full ``snapshot_id`` is hashed to derive the filename, so distinct
           ids (e.g. ``"team/a"`` vs ``"a"``) can never alias the same path.
-        * On save, a ``ShadowSnapshot`` whose embedded ``snapshot_id`` disagrees
-          with the save key is rejected — dicts without an id adopt the key.
+        * On save, a dict without ``snapshot_id`` adopts the save key; a supplied
+          id that disagrees with the save key is rejected.
         * On read, the loaded object's ``snapshot_id`` must match the lookup key;
           otherwise the file is treated as corrupted.
     """
@@ -95,9 +95,12 @@ class SnapshotStore(ISnapshotStore):
                 )
             snapshot_dict = data.model_dump()
         elif isinstance(data, dict):
-            # Try to validate/parse to ensure correctness before saving
+            # A dict without an embedded id adopts the save key; a supplied id
+            # must match the key exactly.
+            payload = dict(data)
+            payload.setdefault("snapshot_id", snapshot_id)
             try:
-                snapshot = ShadowSnapshot(**data)
+                snapshot = ShadowSnapshot(**payload)
             except Exception as e:
                 raise SnapshotStoreError(f"Invalid snapshot dict structure: {e}") from e
             if snapshot.snapshot_id != snapshot_id:

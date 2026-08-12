@@ -68,36 +68,28 @@ def test_save_invalid_dict_raises_error(tmp_path):
     ws = ShadowWorkspace(ShadowConfig(workspace_dir=str(tmp_path)))
     store = SnapshotStore(ws)
 
-    # Dict with completely wrong fields (not just missing optional ones)
-    bad_dict = {"wrong_field": "data", "another_bad_field": 123}
+    # Type-invalid payload (a dict missing snapshot_id now adopts the key, so
+    # invalidity must come from a bad field type)
+    bad_dict = {"network_snapshots": "not-a-list"}
 
-    try:
+    with pytest.raises(SnapshotStoreError, match="Invalid snapshot dict structure"):
         store.save_snapshot("bad", bad_dict)
-        assert False, "Should have raised SnapshotStoreError"
-    except SnapshotStoreError as e:
-        assert "Invalid snapshot dict structure" in str(e)
 
 
 def test_save_unsupported_type_raises_error(tmp_path):
     ws = ShadowWorkspace(ShadowConfig(workspace_dir=str(tmp_path)))
     store = SnapshotStore(ws)
 
-    try:
+    with pytest.raises(SnapshotStoreError, match="Unsupported data type"):
         store.save_snapshot("test", "not a dict or ShadowSnapshot")
-        assert False, "Should have raised SnapshotStoreError"
-    except SnapshotStoreError as e:
-        assert "Unsupported data type" in str(e)
 
 
 def test_get_snapshot_not_found(tmp_path):
     ws = ShadowWorkspace(ShadowConfig(workspace_dir=str(tmp_path)))
     store = SnapshotStore(ws)
 
-    try:
+    with pytest.raises(SnapshotNotFoundError, match="does not exist"):
         store.get_snapshot("nonexistent")
-        assert False, "Should have raised SnapshotNotFoundError"
-    except SnapshotNotFoundError as e:
-        assert "does not exist" in str(e)
 
 
 def test_get_snapshot_corrupted_json(tmp_path):
@@ -108,10 +100,8 @@ def test_get_snapshot_corrupted_json(tmp_path):
     corrupt_file = store._get_snapshot_path("corrupted")
     corrupt_file.write_text("{bad-json:", encoding="utf-8")
 
-    with pytest.raises(SnapshotCorruptionError) as exc_info:
+    with pytest.raises(SnapshotCorruptionError, match="not valid JSON"):
         store.get_snapshot("corrupted")
-
-    assert "not valid JSON" in str(exc_info.value)
 
 
 def test_get_snapshot_invalid_schema(tmp_path):
@@ -122,7 +112,5 @@ def test_get_snapshot_invalid_schema(tmp_path):
     invalid_schema_file = store._get_snapshot_path("bad_schema")
     invalid_schema_file.write_text(json.dumps({"wrong_field": "data"}), encoding="utf-8")
 
-    with pytest.raises(SnapshotCorruptionError) as exc_info:
+    with pytest.raises(SnapshotCorruptionError, match="does not conform"):
         store.get_snapshot("bad_schema")
-
-    assert "does not conform to ShadowSnapshot schema" in str(exc_info.value)
