@@ -1,12 +1,15 @@
 """Tests for the diff AST analyzer with new-file line number tracking (Issue #224)."""
 
+import pytest
+
+import app.preprocess.diff_ast_analyzer as analyzer_module
 from app.preprocess.diff_ast_analyzer import analyze_diff
 
 
 class TestDiffLineNumberTracking:
     """Test that line numbers are correctly tracked through diff hunks."""
 
-    def test_single_hunk_added_element(self):
+    def test_single_hunk_added_element(self) -> None:
         """Added element should get the correct new-file line number."""
         diff = """diff --git a/test.tsx b/test.tsx
 --- a/test.tsx
@@ -27,7 +30,7 @@ class TestDiffLineNumberTracking:
         assert diffs[0].current.get("tag") == "button"
         assert diffs[0].previous == {}
 
-    def test_single_hunk_modified_element(self):
+    def test_single_hunk_modified_element(self) -> None:
         """Modified element should get the new-file line number."""
         diff = """diff --git a/test.tsx b/test.tsx
 --- a/test.tsx
@@ -48,7 +51,7 @@ class TestDiffLineNumberTracking:
         assert diffs[0].current.get("attributes", {}).get("className") == "new"
         assert diffs[0].previous.get("attributes", {}).get("className") == "old"
 
-    def test_multiple_hunks(self):
+    def test_multiple_hunks(self) -> None:
         """Multiple hunks should each track their own line numbers."""
         diff = """diff --git a/test.tsx b/test.tsx
 --- a/test.tsx
@@ -66,14 +69,12 @@ class TestDiffLineNumberTracking:
 """
         diffs = analyze_diff(diff)
         assert len(diffs) == 2
-        # First hunk: Header added at line 1
         assert diffs[0].line == 1
         assert diffs[0].current.get("tag") == "Header"
-        # Second hunk: Footer added at line 23
         assert diffs[1].line == 23
         assert diffs[1].current.get("tag") == "Footer"
 
-    def test_deleted_element_line_zero(self):
+    def test_deleted_element_line_zero(self) -> None:
         """Deleted elements should have line=0 (unknown in new file)."""
         diff = """diff --git a/test.tsx b/test.tsx
 --- a/test.tsx
@@ -94,7 +95,7 @@ class TestDiffLineNumberTracking:
         assert diffs[0].previous.get("tag") == "button"
         assert diffs[0].current == {}
 
-    def test_multiline_jsx_element(self):
+    def test_multiline_jsx_element(self) -> None:
         """Multi-line JSX elements should use the opening tag's line number."""
         diff = """diff --git a/test.tsx b/test.tsx
 --- a/test.tsx
@@ -115,11 +116,10 @@ class TestDiffLineNumberTracking:
         diffs = analyze_diff(diff)
         div_diffs = [d for d in diffs if d.current.get("tag") == "div"]
         assert len(div_diffs) >= 1
-        # The opening tag is at new-file line 12
         assert div_diffs[0].line == 12
         assert div_diffs[0].current.get("attributes", {}).get("className") == "wrapper"
 
-    def test_new_file_dev_null(self):
+    def test_new_file_dev_null(self) -> None:
         """New file (from /dev/null) should track lines correctly."""
         diff = """diff --git a/new.tsx b/new.tsx
 new file mode 100644
@@ -138,7 +138,7 @@ new file mode 100644
         assert diffs[0].line == 3
         assert diffs[0].current.get("tag") == "button"
 
-    def test_deleted_file_dev_null(self):
+    def test_deleted_file_dev_null(self) -> None:
         """Deleted file (to /dev/null) should still parse but deletions have line=0."""
         diff = """diff --git a/old.tsx b/old.tsx
 deleted file mode 100644
@@ -157,7 +157,7 @@ deleted file mode 100644
         assert diffs[0].line == 0
         assert diffs[0].previous.get("tag") == "button"
 
-    def test_renamed_file(self):
+    def test_renamed_file(self) -> None:
         """Renamed file should continue tracking line numbers under the new name."""
         diff = """diff --git a/old.tsx b/new.tsx
 similarity index 100%
@@ -177,7 +177,7 @@ rename to new.tsx
         assert diffs[0].line == 2
         assert diffs[0].current.get("tag") == "button"
 
-    def test_context_lines_increment_counters(self):
+    def test_context_lines_increment_counters(self) -> None:
         """Context lines (starting with space) should increment both line counters."""
         diff = """diff --git a/test.tsx b/test.tsx
 --- a/test.tsx
@@ -197,7 +197,7 @@ rename to new.tsx
         assert len(diffs) == 1
         assert diffs[0].line == 6
 
-    def test_multiple_elements_same_hunk(self):
+    def test_multiple_elements_same_hunk(self) -> None:
         """Consecutive added elements should each get correct line numbers."""
         diff = """diff --git a/test.tsx b/test.tsx
 --- a/test.tsx
@@ -213,10 +213,9 @@ rename to new.tsx
 """
         diffs = analyze_diff(diff)
         assert len(diffs) == 2
-        lines = sorted(d.line for d in diffs)
-        assert lines == [12, 13]
+        assert sorted(d.line for d in diffs) == [12, 13]
 
-    def test_replace_with_multiple_changes(self):
+    def test_replace_with_multiple_changes(self) -> None:
         """Replace operation should pair elements correctly with line numbers."""
         diff = """diff --git a/test.tsx b/test.tsx
 --- a/test.tsx
@@ -234,9 +233,41 @@ rename to new.tsx
 """
         diffs = analyze_diff(diff)
         assert len(diffs) == 2
-        # Both should have new-file line numbers (7 and 8)
         assert sorted(d.line for d in diffs) == [7, 8]
         classes = sorted(d.current.get("attributes", {}).get("className") for d in diffs)
         assert classes == ["new1", "new2"]
-        # Every paired change must have a previous element (it was a replacement)
         assert all(d.previous.get("tag") == "button" for d in diffs)
+
+    def test_regex_fallback_line_tracking(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Line tracking must hold when tree-sitter is unavailable (regex backend)."""
+        monkeypatch.setattr(analyzer_module, "_HAS_TREE_SITTER", False)
+        diff = """diff --git a/test.tsx b/test.tsx
+--- a/test.tsx
++++ b/test.tsx
+@@ -10,4 +10,6 @@ export const App = () => {
+   return (
+     <div>
++      <button id="btn1">First</button>
++      <button id="btn2">Second</button>
+     </div>
+   );
+ };
+"""
+        diffs = analyzer_module.analyze_diff(diff)
+        assert len(diffs) == 2
+        assert sorted(d.line for d in diffs) == [12, 13]
+
+    def test_dotted_and_hyphenated_tags(self) -> None:
+        """Dotted (member) and hyphenated (custom element) tags are extracted with lines."""
+        diff = """diff --git a/test.tsx b/test.tsx
+--- a/test.tsx
++++ b/test.tsx
+@@ -1,2 +1,4 @@
+ <div>
++  <Form.Field name="email" />
++  <my-widget id="w1">Hi</my-widget>
+ </div>
+"""
+        diffs = analyze_diff(diff)
+        by_tag = {d.current.get("tag"): d.line for d in diffs}
+        assert by_tag == {"Form.Field": 2, "my-widget": 3}

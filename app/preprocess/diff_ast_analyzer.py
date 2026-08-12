@@ -8,13 +8,22 @@ import difflib
 import importlib.util
 import re
 from collections.abc import Callable
-from typing import Any
+from typing import Any, TypedDict
 
 import structlog
 
 from app.schemas import DomDiff
 
 logger = structlog.get_logger(__name__)
+
+
+class JsxElement(TypedDict):
+    """A single extracted JSX opening/self-closing element."""
+
+    tag: str
+    attributes: dict[str, str]
+    line: int
+
 
 _JSX_TAG_RE = re.compile(
     r"<([A-Za-z][\w.\-]*)"
@@ -44,7 +53,10 @@ _HAS_TREE_SITTER = (
     and importlib.util.find_spec("tree_sitter_typescript") is not None
 )
 
-Extractor = Callable[[str, int], list[dict[str, Any]]]
+Extractor = Callable[[str, int], list[JsxElement]]
+
+# Sentinel for the "missing side" of an added/deleted pair.
+_EMPTY_ELEMENT: JsxElement = {"tag": "", "attributes": {}, "line": 0}
 
 
 def _chunk_fragment_lines(code_text: str) -> list[tuple[str, int]]:
@@ -72,9 +84,9 @@ def _chunk_fragment_lines(code_text: str) -> list[tuple[str, int]]:
     return chunks
 
 
-def _extract_jsx_elements_regex(code_text: str, start_line: int) -> list[dict[str, Any]]:
+def _extract_jsx_elements_regex(code_text: str, start_line: int) -> list[JsxElement]:
     """Extract JSX elements from a (possibly multi-line) code fragment with line numbers."""
-    elements: list[dict[str, Any]] = []
+    elements: list[JsxElement] = []
     for match in _JSX_TAG_RE.finditer(code_text):
         tag = match.group(1)
         # Everything after `<tag`; _ATTR_RE skips the trailing `>`/>
@@ -97,7 +109,7 @@ def _walk_jsx_nodes(
     node: Any,
     code_bytes: bytes,
     base_line: int,
-    elements: list[dict[str, Any]],
+    elements: list[JsxElement],
 ) -> None:
     """Recursively collect JSX opening/self-closing elements with line numbers."""
     if node.type in ("jsx_opening_element", "jsx_self_closing_element"):
@@ -147,7 +159,7 @@ def _walk_jsx_nodes(
         _walk_jsx_nodes(child, code_bytes, base_line, elements)
 
 
-def _extract_jsx_elements_tree_sitter(code_text: str, start_line: int) -> list[dict[str, Any]]:
+def _extract_jsx_elements_tree_sitter(code_text: str, start_line: int) -> list[JsxElement]:
     """Extract JSX elements from a code fragment via tree-sitter with line numbers."""
     if not _HAS_TREE_SITTER:
         return []
@@ -156,7 +168,7 @@ def _extract_jsx_elements_tree_sitter(code_text: str, start_line: int) -> list[d
 
     tsx_language = Language(ts_typescript.language_tsx())
     parser = Parser(tsx_language)
-    elements: list[dict[str, Any]] = []
+    elements: list[JsxElement] = []
 
     for chunk_text, start_row in _chunk_fragment_lines(code_text):
         code_bytes = chunk_text.encode("utf-8")
@@ -165,19 +177,21 @@ def _extract_jsx_elements_tree_sitter(code_text: str, start_line: int) -> list[d
     return elements
 
 
-def _elem_to_str(elem: dict[str, Any]) -> str:
-    """Deterministic string representation for SequenceMatcher."""
-    tag = elem.get("tag", "")
-    attrs = elem.get("attributes", {})
-    attr_str = ",".join(f"{k}={v}" for k, v in sorted(attrs.items()))
-    return f"<{tag}{attr_str}>"
+def _elem_to_str(elem: JsxElement) -> str:
+    """Deterministic string representation for SequenceMatcher.
+
+    A space separates the tag from its attributes so ``<a bc=d>`` and ``<ab c=d>``
+    never collide into the same serialization.
+    """
+    attr_str = ",".join(f"{k}={v}" for k, v in sorted(elem["attributes"].items()))
+    return f"<{elem['tag']} {attr_str}>" if attr_str else f"<{elem['tag']}>"
 
 
 def _pair_elements(
-    removed: list[dict[str, Any]], added: list[dict[str, Any]]
-) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    removed: list[JsxElement], added: list[JsxElement]
+) -> list[tuple[JsxElement, JsxElement]]:
     """Pair removed/added elements via SequenceMatcher to handle N!=M hunks."""
-    pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    pairs: list[tuple[JsxElement, JsxElement]] = []
     rem_strs = [_elem_to_str(e) for e in removed]
     add_strs = [_elem_to_str(e) for e in added]
     # autojunk=False keeps matching deterministic on large hunks.
@@ -191,15 +205,15 @@ def _pair_elements(
             for k in range(n):
                 pairs.append((removed[i1 + k], added[j1 + k]))
             for i in range(i1 + n, i2):
-                pairs.append((removed[i], {}))
+                pairs.append((removed[i], _EMPTY_ELEMENT))
             for j in range(j1 + n, j2):
-                pairs.append(({}, added[j]))
+                pairs.append((_EMPTY_ELEMENT, added[j]))
         elif tag == "delete":
             for i in range(i1, i2):
-                pairs.append((removed[i], {}))
+                pairs.append((removed[i], _EMPTY_ELEMENT))
         elif tag == "insert":
             for j in range(j1, j2):
-                pairs.append(({}, added[j]))
+                pairs.append((_EMPTY_ELEMENT, added[j]))
     return pairs
 
 
@@ -240,9 +254,17 @@ def _analyze(git_diff: str, extract: Extractor) -> list[DomDiff]:
 
                 for prev, curr in _pair_elements(rem_el, add_el):
                     # Added/changed elements use the new-file line; deletions stay 0.
-                    line = curr.get("line", 0) if curr else 0
-                    prev_clean = {k: v for k, v in prev.items() if k != "line"} if prev else {}
-                    curr_clean = {k: v for k, v in curr.items() if k != "line"} if curr else {}
+                    line = curr["line"] if curr["tag"] else 0
+                    prev_clean = (
+                        {"tag": prev["tag"], "attributes": prev["attributes"]}
+                        if prev["tag"]
+                        else {}
+                    )
+                    curr_clean = (
+                        {"tag": curr["tag"], "attributes": curr["attributes"]}
+                        if curr["tag"]
+                        else {}
+                    )
                     diffs.append(
                         DomDiff(
                             file=current_file,
