@@ -6,8 +6,9 @@ from pydantic import BaseModel, Field
 
 # Version of the machine-readable CI contract emitted as `--json` output (RepairSummary /
 # SuiteSummary / ReviewReport). Bump this on any breaking change to the JSON shape so CI
-# wrappers can detect it instead of guessing on keys (Issue #189).
-SCHEMA_VERSION = "1.0"
+# wrappers can detect it instead of guessing on keys (Issue #189). The Literal type pins
+# the version so a model can never silently serialize an unsupported one.
+SCHEMA_VERSION: Literal["1.0"] = "1.0"
 
 
 class DomDiff(BaseModel):
@@ -51,7 +52,7 @@ class PatchOutput(BaseModel):
 class RepairSummary(BaseModel):
     """Machine-readable result emitted for the CI wrapper to consume."""
 
-    schema_version: str = Field(
+    schema_version: Literal["1.0"] = Field(
         default=SCHEMA_VERSION,
         description="version of this machine-readable contract; bump on breaking changes",
     )
@@ -68,7 +69,7 @@ class RepairSummary(BaseModel):
 class SuiteSummary(BaseModel):
     """Aggregate result when healing a whole suite (multiple failing tests)."""
 
-    schema_version: str = Field(
+    schema_version: Literal["1.0"] = Field(
         default=SCHEMA_VERSION,
         description="version of this machine-readable contract; bump on breaking changes",
     )
@@ -115,7 +116,7 @@ class ReviewOutput(BaseModel):
 class ReviewReport(BaseModel):
     """Machine-readable review result emitted for the CI wrapper to post as PR comments."""
 
-    schema_version: str = Field(
+    schema_version: Literal["1.0"] = Field(
         default=SCHEMA_VERSION,
         description="version of this machine-readable contract; bump on breaking changes",
     )

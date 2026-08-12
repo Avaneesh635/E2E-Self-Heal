@@ -1,12 +1,15 @@
 """Contract tests: every emitted summary carries schema_version + a kind discriminator (#189)."""
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
 from app.schemas import SCHEMA_VERSION, RepairSummary, ReviewReport, SuiteSummary
+
+_AnySummary = RepairSummary | SuiteSummary | ReviewReport
 
 
 def _repair(**overrides: Any) -> RepairSummary:
@@ -34,7 +37,7 @@ def _review(**overrides: Any) -> ReviewReport:
 
 
 @pytest.mark.parametrize("summary", [_repair(), _suite(), _review()])
-def test_all_output_models_share_one_schema_version(summary) -> None:
+def test_all_output_models_share_one_schema_version(summary: _AnySummary) -> None:
     assert summary.schema_version == SCHEMA_VERSION
 
 
@@ -46,7 +49,7 @@ def test_all_output_models_share_one_schema_version(summary) -> None:
         (_review(), "review"),
     ],
 )
-def test_model_json_is_self_describing(summary, expected_kind) -> None:
+def test_model_json_is_self_describing(summary: _AnySummary, expected_kind: str) -> None:
     data = json.loads(summary.model_dump_json())
     assert data["kind"] == expected_kind
     assert data["schema_version"] == SCHEMA_VERSION
@@ -56,6 +59,15 @@ def test_kind_is_a_fixed_literal() -> None:
     bad_kind: Any = "nope"
     with pytest.raises(ValidationError):
         _repair(kind=bad_kind)
+
+
+@pytest.mark.parametrize("make", [_repair, _suite, _review])
+def test_unsupported_schema_version_is_rejected(make: Callable[..., _AnySummary]) -> None:
+    # The contract pins the emitted version, so a model can never serialize an
+    # unsupported schema_version (e.g. a stale hard-coded "2.0").
+    bad_version: Any = "2.0"
+    with pytest.raises(ValidationError, match="schema_version"):
+        make(schema_version=bad_version)
 
 
 def test_suite_results_are_nested_repair_summaries() -> None:

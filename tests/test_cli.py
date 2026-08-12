@@ -264,7 +264,7 @@ def test_cli_json_output(mock_graph_success, monkeypatch, tmp_path) -> None:
     assert data["schema_version"] == SCHEMA_VERSION
 
 
-def test_cli_suite_mode_emits_suite_kind(monkeypatch) -> None:
+def test_cli_suite_mode_emits_suite_kind(monkeypatch: pytest.MonkeyPatch) -> None:
     suite = SuiteSummary(
         total_failed=1,
         healed=1,
