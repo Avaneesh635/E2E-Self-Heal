@@ -133,12 +133,14 @@ class ContentAddressedSnapshotStore(ISnapshotStore):
         try:
             raw = object_path.read_text(encoding="utf-8")
         except OSError as e:
-            raise SnapshotStoreError(f"Failed to read object blob: {e}") from e
+            raise SnapshotStoreError(
+                f"Failed to read or parse snapshot object at '{object_path}': {e}"
+            ) from e
         try:
             return json.loads(raw)
         except (json.JSONDecodeError, UnicodeDecodeError) as e:
             raise SnapshotCorruptionError(
-                f"Object blob at '{object_path}' is not valid JSON: {e}"
+                f"Failed to read or parse snapshot object at '{object_path}': {e}"
             ) from e
 
     def _verify_object_hash(
