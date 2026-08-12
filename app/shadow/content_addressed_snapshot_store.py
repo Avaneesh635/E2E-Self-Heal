@@ -9,14 +9,21 @@ becomes diffable across snapshot sets.
 On-disk layout under the workspace ``snapshots`` directory::
 
     snapshots/
-      objects/
-        <sha256>.json   # canonical, deduplicated content blob (no snapshot_id)
-      refs/
-        <snapshot_id>.ref   # single line: the content hash it resolves to
+        objects/
+            <sha256>.json     # canonical, deduplicated content blob (no snapshot_id)
+        refs/
+            <snapshot_id>.ref # single line: the content hash it resolves to
 
 The ``snapshot_id`` is deliberately excluded from the hashed content: identical
 captured responses saved under different ids share one object, which is what
 makes the store dedupe "identical responses" rather than identical keys.
+
+Integrity rules:
+    * On save with an existing object (dedupe path), the existing object is
+      re-hashed and compared to its filename before a new ref points at it.
+      A corrupted existing object therefore raises before being re-referenced.
+    * On read, the loaded content is re-hashed and compared to the object
+      filename. Altered JSON under the old hash is rejected.
 """
 
 import hashlib
@@ -49,7 +56,7 @@ class ContentAddressedSnapshotStore(ISnapshotStore):
     Sits behind :class:`ISnapshotStore` and honors the same schema contract as
     :class:`~app.shadow.snapshot_store.SnapshotStore`: it accepts a
     :class:`ShadowSnapshot` or a schema-valid dict and returns a validated
-    :class:`ShadowSnapshot`.
+    :class:`ShadowSnapshot`. A dict without ``snapshot_id`` adopts the save key.
     """
 
     def __init__(self, workspace: ShadowWorkspace) -> None:
@@ -66,6 +73,8 @@ class ContentAddressedSnapshotStore(ISnapshotStore):
         to distinct refs (no collisions from stripping path components) while the
         hex digest keeps the path traversal-safe.
         """
+        if not snapshot_id:
+            raise SnapshotStoreError("snapshot_id must be a non-empty string")
         safe_id = hashlib.sha256(snapshot_id.encode("utf-8")).hexdigest()
         return self.refs_dir / f"{safe_id}.ref"
 
@@ -96,18 +105,33 @@ class ContentAddressedSnapshotStore(ISnapshotStore):
             raise
 
     @staticmethod
-    def _to_content(data: Any) -> dict[str, Any]:
-        """Validate input and reduce it to hashable content (without the id)."""
+    def _to_content(data: Any, snapshot_id: str) -> dict[str, Any]:
+        """Validate input and reduce it to hashable content (without the id).
+
+        A dict without an embedded ``snapshot_id`` adopts the save key; a
+        supplied id must match the key exactly.
+        """
         if isinstance(data, ShadowSnapshot):
+            if data.snapshot_id != snapshot_id:
+                raise SnapshotStoreError(
+                    f"Key/model id mismatch: key={snapshot_id!r}, "
+                    f"model.snapshot_id={data.snapshot_id!r}"
+                )
             snapshot = data
         elif isinstance(data, dict):
+            payload = dict(data)
+            payload.setdefault("snapshot_id", snapshot_id)
             try:
-                snapshot = ShadowSnapshot(**data)
+                snapshot = ShadowSnapshot(**payload)
             except Exception as e:
-                raise SnapshotStoreError(f"Invalid snapshot dict structure: {e}")
+                raise SnapshotStoreError(f"Invalid snapshot dict structure: {e}") from e
+            if snapshot.snapshot_id != snapshot_id:
+                raise SnapshotStoreError(
+                    f"Key/model id mismatch: key={snapshot_id!r}, "
+                    f"model.snapshot_id={snapshot.snapshot_id!r}"
+                )
         else:
             raise SnapshotStoreError("Unsupported data type; expected ShadowSnapshot or dict")
-
         content = snapshot.model_dump()
         content.pop("snapshot_id", None)
         return content
@@ -118,24 +142,83 @@ class ContentAddressedSnapshotStore(ISnapshotStore):
         canonical = json.dumps(content, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
+    @staticmethod
+    def _read_object(object_path: Path) -> dict[str, Any]:
+        """Read and parse a JSON object blob, converting IO/parse errors to store errors."""
+        try:
+            raw = object_path.read_text(encoding="utf-8")
+        except OSError as e:
+            raise SnapshotStoreError(
+                f"Failed to read or parse snapshot object at '{object_path}': {e}"
+            ) from e
+        except UnicodeDecodeError as e:
+            raise SnapshotCorruptionError(
+                f"Failed to read or parse snapshot object at '{object_path}': {e}"
+            ) from e
+        try:
+            return json.loads(raw)
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            raise SnapshotCorruptionError(
+                f"Failed to read or parse snapshot object at '{object_path}': {e}"
+            ) from e
+
+    def _verify_object_hash(
+        self, object_path: Path, expected_hash: str, *, snapshot_id: str
+    ) -> dict[str, Any]:
+        """Read an object and confirm its content hashes to ``expected_hash``.
+
+        Raises ``SnapshotCorruptionError`` on a hash mismatch so neither a save
+        (dedupe-skip) nor a read can silently re-use an altered object.
+
+        Note: the object blob deliberately excludes ``snapshot_id`` (that is what
+        enables deduplication across ids), so we only verify the hash here. Full
+        ShadowSnapshot schema validation happens in ``get_snapshot`` after the
+        id is re-attached.
+        """
+        content = self._read_object(object_path)
+
+        actual = self._hash_content(content)
+        if actual != expected_hash:
+            logger.error(
+                "snapshot_object_hash_mismatch",
+                snapshot_id=snapshot_id,
+                expected=expected_hash,
+                actual=actual,
+                path=str(object_path),
+            )
+            raise SnapshotCorruptionError(
+                f"Object '{expected_hash}' content hash does not match its filename "
+                f"(actual={actual}); the object has been altered."
+            )
+        return content
+
     def save_snapshot(self, snapshot_id: str, data: Any) -> None:
         """Store a snapshot by content hash and point ``snapshot_id`` at it."""
-        content = self._to_content(data)
+        content = self._to_content(data, snapshot_id)
         content_hash = self._hash_content(content)
         object_path = self._object_path(content_hash)
 
-        deduped = object_path.exists()
-        if not deduped:
+        if object_path.exists():
+            # Before dedupe-skipping, verify the existing object is still intact.
+            # Otherwise a corrupted object gets a new ref pointing at it.
+            self._verify_object_hash(object_path, content_hash, snapshot_id=snapshot_id)
+            deduped = True
+        else:
             try:
                 serialized = json.dumps(content, sort_keys=True, indent=2)
                 self._atomic_write_text(object_path, serialized)
+            except SnapshotStoreError:
+                raise
             except Exception as e:
-                raise SnapshotStoreError(f"Failed to write snapshot object to disk: {e}")
+                raise SnapshotStoreError(f"Failed to write snapshot object to disk: {e}") from e
+            deduped = False
 
         try:
             self._atomic_write_text(self._ref_path(snapshot_id), content_hash)
+        except SnapshotStoreError:
+            raise
         except Exception as e:
-            raise SnapshotStoreError(f"Failed to write snapshot reference to disk: {e}")
+            raise SnapshotStoreError(f"Failed to write snapshot reference to disk: {e}") from e
 
         logger.info(
             "snapshot_saved",
@@ -153,8 +236,10 @@ class ContentAddressedSnapshotStore(ISnapshotStore):
 
         content_hash = ref_path.read_text(encoding="utf-8").strip()
         if not _SHA256_HEX.match(content_hash):
-            logger.exception(
-                "snapshot_ref_invalid", snapshot_id=snapshot_id, content_hash=content_hash
+            logger.error(
+                "snapshot_ref_invalid",
+                snapshot_id=snapshot_id,
+                content_hash=content_hash,
             )
             raise SnapshotCorruptionError(
                 f"Snapshot '{snapshot_id}' has an invalid content hash reference."
@@ -162,29 +247,26 @@ class ContentAddressedSnapshotStore(ISnapshotStore):
 
         object_path = self._object_path(content_hash)
         if not object_path.exists():
-            logger.exception(
-                "snapshot_object_missing", snapshot_id=snapshot_id, content_hash=content_hash
+            logger.error(
+                "snapshot_object_missing",
+                snapshot_id=snapshot_id,
+                content_hash=content_hash,
             )
             raise SnapshotCorruptionError(
                 f"Snapshot '{snapshot_id}' references missing object '{content_hash}'."
             )
 
-        try:
-            content = json.loads(object_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError, OSError) as e:
-            logger.exception(
-                "snapshot_object_corrupted", snapshot_id=snapshot_id, content_hash=content_hash
-            )
-            raise SnapshotCorruptionError(
-                f"Failed to read or parse snapshot object '{content_hash}': {e}"
-            ) from e
+        # Re-hash the content and compare to the filename so edited files are rejected.
+        content = self._verify_object_hash(object_path, content_hash, snapshot_id=snapshot_id)
 
         try:
             return ShadowSnapshot(snapshot_id=snapshot_id, **content)
         except Exception as e:
             logger.exception(
-                "snapshot_data_invalid", snapshot_id=snapshot_id, content_hash=content_hash
+                "snapshot_data_invalid",
+                snapshot_id=snapshot_id,
+                content_hash=content_hash,
             )
             raise SnapshotCorruptionError(
                 f"Snapshot data does not conform to ShadowSnapshot schema: {e}"
-            )
+            ) from e
