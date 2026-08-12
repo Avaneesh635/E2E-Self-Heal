@@ -56,7 +56,24 @@ breaking change to the payload.
   "total_failed": 2,
   "healed": 1,
   "is_success": false,
-  "results": []
+  "results": [
+    {
+      "schema_version": "1.0",
+      "kind": "repair",
+      "test_script_path": "tests/login.spec.ts",
+      "is_success": true,
+      "loop_count": 1,
+      "instructions": []
+    },
+    {
+      "schema_version": "1.0",
+      "kind": "repair",
+      "test_script_path": "tests/checkout.spec.ts",
+      "is_success": false,
+      "loop_count": 3,
+      "instructions": []
+    }
+  ]
 }
 ```
 
