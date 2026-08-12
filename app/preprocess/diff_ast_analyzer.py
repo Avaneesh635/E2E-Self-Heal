@@ -257,10 +257,14 @@ def _analyze(git_diff: str, extract: Extractor) -> list[DomDiff]:
                     # Added/changed elements use the new-file line; deletions stay 0.
                     line = curr["line"] if curr["tag"] else 0
                     prev_clean = (
-                        {"tag": prev["tag"], "attributes": prev["attributes"]} if prev["tag"] else {}
+                        {"tag": prev["tag"], "attributes": prev["attributes"]}
+                        if prev["tag"]
+                        else {}
                     )
                     curr_clean = (
-                        {"tag": curr["tag"], "attributes": curr["attributes"]} if curr["tag"] else {}
+                        {"tag": curr["tag"], "attributes": curr["attributes"]}
+                        if curr["tag"]
+                        else {}
                     )
                     diffs.append(
                         DomDiff(
