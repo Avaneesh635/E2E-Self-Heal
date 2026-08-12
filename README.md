@@ -229,7 +229,10 @@ uv run e2e-healer review tests/example.spec.ts --log playwright.log --diff-base 
 
 Exit code is `0` when the test is healed, non-zero otherwise. `--json` prints a
 machine-readable `RepairSummary` to stdout (human output goes to stderr) so CI can branch
-on it. `e2e-healer <path>` is shorthand for `e2e-healer heal <path>`; `review` is a separate
+on it. Every emitted summary is self-describing: it carries a `schema_version` (currently
+`"1.0"`) and a `kind` discriminator (`"repair"` for single-file heals, `"suite"` for suite
+mode, `"review"` for review reports) so the CI wrapper can dispatch without guessing on
+keys. `e2e-healer <path>` is shorthand for `e2e-healer heal <path>`; `review` is a separate
 subcommand that emits a `ReviewReport` (findings anchored to the changed source line) and
 always exits `0` — the CI wrapper branches on `has_findings`.
 

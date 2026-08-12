@@ -4,6 +4,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+# Version of the machine-readable CI contract emitted as `--json` output (RepairSummary /
+# SuiteSummary / ReviewReport). Bump this on any breaking change to the JSON shape so CI
+# wrappers can detect it instead of guessing on keys (Issue #189).
+SCHEMA_VERSION = "1.0"
+
 
 class DomDiff(BaseModel):
     """A single before/after DOM node change parsed from a git diff."""
@@ -46,6 +51,14 @@ class PatchOutput(BaseModel):
 class RepairSummary(BaseModel):
     """Machine-readable result emitted for the CI wrapper to consume."""
 
+    schema_version: str = Field(
+        default=SCHEMA_VERSION,
+        description="version of this machine-readable contract; bump on breaking changes",
+    )
+    kind: Literal["repair"] = Field(
+        default="repair",
+        description="discriminator so consumers can dispatch without guessing on keys",
+    )
     test_script_path: str
     is_success: bool
     loop_count: int
@@ -55,6 +68,14 @@ class RepairSummary(BaseModel):
 class SuiteSummary(BaseModel):
     """Aggregate result when healing a whole suite (multiple failing tests)."""
 
+    schema_version: str = Field(
+        default=SCHEMA_VERSION,
+        description="version of this machine-readable contract; bump on breaking changes",
+    )
+    kind: Literal["suite"] = Field(
+        default="suite",
+        description="discriminator so consumers can dispatch without guessing on keys",
+    )
     total_failed: int
     healed: int
     is_success: bool  # every failing test was healed
@@ -94,6 +115,14 @@ class ReviewOutput(BaseModel):
 class ReviewReport(BaseModel):
     """Machine-readable review result emitted for the CI wrapper to post as PR comments."""
 
+    schema_version: str = Field(
+        default=SCHEMA_VERSION,
+        description="version of this machine-readable contract; bump on breaking changes",
+    )
+    kind: Literal["review"] = Field(
+        default="review",
+        description="discriminator so consumers can dispatch without guessing on keys",
+    )
     test_script_path: str
     findings: list[ReviewFinding] = Field(default_factory=list)
     has_findings: bool = False

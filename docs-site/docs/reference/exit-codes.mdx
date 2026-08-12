@@ -7,11 +7,68 @@ description: "How CI branches on the result: exit codes plus the RepairSummary /
 
 How CI branches on the result: exit codes plus the RepairSummary / ReviewReport JSON schemas.
 
-:::note Draft — scaffolded page
-This page is a stub. Planned contents:
+## Exit code contract
 
-- Exit code contract (0 healed, non-zero otherwise; review always 0)
-- RepairSummary shape
-- ReviewReport shape (has_findings)
-- stdout JSON vs stderr human output
-:::
+- `e2e-healer heal <path>` exits `0` when the failing test is healed, non-zero otherwise.
+- `e2e-healer heal` (suite mode) exits `0` only when every discovered failing test is healed.
+- `e2e-healer review` always exits `0` — the CI wrapper branches on `has_findings`.
+- `--json` prints the machine-readable summary to **stdout**; human-readable output goes to **stderr**, so a wrapper can parse the JSON without filtering prose.
+
+## JSON contract
+
+Every machine-readable summary is self-describing: it carries a `schema_version` and a `kind`
+discriminator so consumers can dispatch without guessing on keys. Bump `schema_version` on any
+breaking change to the payload.
+
+| Field              | `RepairSummary` | `SuiteSummary` | `ReviewReport` |
+| ------------------ | --------------- | -------------- | -------------- |
+| `schema_version`   | `"1.0"`         | `"1.0"`        | `"1.0"`        |
+| `kind`             | `"repair"`      | `"suite"`      | `"review"`     |
+| `test_script_path` | ✔               | —              | ✔              |
+| `is_success`       | ✔               | ✔              | —              |
+| `loop_count`       | ✔               | —              | —              |
+| `instructions`     | ✔               | —              | —              |
+| `total_failed`     | —               | ✔              | —              |
+| `healed`           | —               | ✔              | —              |
+| `results`          | —               | ✔ (`RepairSummary[]`) | —        |
+| `findings`         | —               | —              | ✔ (`ReviewFinding[]`) |
+| `has_findings`     | —               | —              | ✔              |
+
+### Example: single-file heal (`kind: "repair"`)
+
+```json
+{
+  "schema_version": "1.0",
+  "kind": "repair",
+  "test_script_path": "tests/login.spec.ts",
+  "is_success": true,
+  "loop_count": 2,
+  "instructions": []
+}
+```
+
+### Example: suite heal (`kind: "suite"`)
+
+```json
+{
+  "schema_version": "1.0",
+  "kind": "suite",
+  "total_failed": 2,
+  "healed": 1,
+  "is_success": false,
+  "results": []
+}
+```
+
+### Example: review (`kind: "review"`)
+
+```json
+{
+  "schema_version": "1.0",
+  "kind": "review",
+  "test_script_path": "tests/login.spec.ts",
+  "findings": [],
+  "has_findings": false
+}
+```
+
