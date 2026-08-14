@@ -65,7 +65,7 @@ def atomic_write(path: Path, content: str) -> None:
     mode = _target_mode(path)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=path.suffix)
     try:
-        with os.fdopen(fd, "w") as handle:
+        with os.fdopen(fd, "w", newline="") as handle:
             os.chmod(tmp, mode)
             handle.write(content)
             handle.flush()

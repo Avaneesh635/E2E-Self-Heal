@@ -26,6 +26,19 @@ def test_atomic_write_leaves_no_temp_files(tmp_path):
     assert leftovers == []
 
 
+@pytest.mark.parametrize(
+    "content",
+    ["alpha\nbeta\n", "alpha\r\nbeta\r\n", "alpha\rbeta\r"],
+)
+def test_atomic_write_preserves_line_endings(tmp_path: Path, content: str) -> None:
+    """Write ``content`` byte-for-byte, never translating line endings (LF -> CRLF on Windows)."""
+    target = tmp_path / "sample.spec.ts"
+
+    atomic_write(target, content)
+
+    assert target.read_bytes() == content.encode("utf-8")
+
+
 def test_atomic_write_fsyncs_file_before_replace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
