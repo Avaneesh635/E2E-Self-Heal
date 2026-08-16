@@ -25,7 +25,12 @@ _ALLOWED_PATCH_CALL = re.compile(
     r"setInputFiles|press|hover|focus|waitFor[A-Za-z]*)\s*\("
 )
 _ASSERTION_CALL = re.compile(r"(?:\b(?:expect|assert)\s*\(|\.(?:toBe|toHave|toEqual)\w*\s*\()")
-_VALUE_BEARING_CALL = re.compile(r"(?:\bpage\.)?(fill|type|selectOption|setInputFiles|press)\s*\(")
+# "Action" calls: Playwright methods whose selector is the only editable argument —
+# data values (fill/type/...) and options (click/hover/...) must stay byte-for-byte.
+_ACTION_CALL = re.compile(
+    r"(?:\bpage\.)?(fill|type|selectOption|setInputFiles|press|"
+    r"click|dblclick|check|uncheck|hover|focus)\s*\("
+)
 _SELECTOR_CALL = re.compile(
     r"(?:\bpage\.|\.)(locator|getByRole|getByText|getByLabel|getByPlaceholder|"
     r"getByAltText|getByTitle|getByTestId)\s*\("
@@ -94,11 +99,69 @@ def _argument_spans(text: str, opening: int, closing: int) -> list[tuple[int, in
     return arguments
 
 
-def _masked_selector_line(text: str) -> str | None:
-    """Mask selector arguments, returning None when a data call cannot be safely checked."""
-    spans: list[tuple[int, int]] = []
+def _mask_js_non_code(text: str) -> str:
+    """Blank JS comments and string/template literals, preserving length and offsets.
 
-    for match in _VALUE_BEARING_CALL.finditer(text):
+    ``_ACTION_CALL``/``_SELECTOR_CALL`` must only see real code — an action-like token
+    inside a comment or string must not be treated as an actual call. Line (``//``) and
+    block (``/* … */``) comments, single/double-quoted strings, and backtick templates
+    (including delimiters and ``\\`` escapes) are replaced with spaces, so matches keep
+    the same offsets while the original ``text`` is still used for paren/argument parsing.
+    """
+    chars = list(text)
+    i = 0
+    n = len(chars)
+    while i < n:
+        char = chars[i]
+        nxt = chars[i + 1] if i + 1 < n else ""
+
+        if char == "/" and nxt == "/":
+            chars[i] = chars[i + 1] = " "
+            i += 2
+            while i < n and chars[i] != "\n":
+                chars[i] = " "
+                i += 1
+            continue
+
+        if char == "/" and nxt == "*":
+            chars[i] = chars[i + 1] = " "
+            i += 2
+            while i < n:
+                if chars[i] == "*" and i + 1 < n and chars[i + 1] == "/":
+                    chars[i] = chars[i + 1] = " "
+                    i += 2
+                    break
+                chars[i] = " "
+                i += 1
+            continue
+
+        if char in {"'", '"', "`"}:
+            quote = char
+            chars[i] = " "
+            i += 1
+            while i < n:
+                if chars[i] == "\\" and i + 1 < n:
+                    chars[i] = chars[i + 1] = " "
+                    i += 2
+                    continue
+                if chars[i] == quote:
+                    chars[i] = " "
+                    i += 1
+                    break
+                chars[i] = " "
+                i += 1
+            continue
+
+        i += 1
+    return "".join(chars)
+
+
+def _masked_selector_line(text: str) -> str | None:
+    """Mask selector arguments, returning None when an action call cannot be safely checked."""
+    spans: list[tuple[int, int]] = []
+    code = _mask_js_non_code(text)
+
+    for match in _ACTION_CALL.finditer(code):
         opening = text.find("(", match.start(), match.end())
         closing = _matching_paren(text, opening)
         if closing is None:
@@ -112,11 +175,11 @@ def _masked_selector_line(text: str) -> str | None:
             continue
 
         # A locator-bound call may change selectors in its receiver chain, but selector
-        # calls inside its value arguments are input data and must not be masked.
-        receiver_start = text.rfind("page.", 0, match.start())
+        # calls inside its value/options arguments are input data and must not be masked.
+        receiver_start = code.rfind("page.", 0, match.start())
         if receiver_start == -1:
             continue
-        for selector_match in _SELECTOR_CALL.finditer(text, receiver_start, match.start()):
+        for selector_match in _SELECTOR_CALL.finditer(code, receiver_start, match.start()):
             selector_opening = text.find("(", selector_match.start(), selector_match.end())
             selector_closing = _matching_paren(text, selector_opening)
             if selector_closing is None:
@@ -124,9 +187,9 @@ def _masked_selector_line(text: str) -> str | None:
             if selector_closing < match.start():
                 spans.extend(_argument_spans(text, selector_opening, selector_closing))
 
-    if _VALUE_BEARING_CALL.search(text) and not spans:
-        # A locator-bound call has no selector argument of its own. Its data arguments
-        # must therefore remain byte-for-byte unchanged.
+    if _ACTION_CALL.search(code) and not spans:
+        # A locator-bound call has no selector argument of its own. Its data/options
+        # arguments must therefore remain byte-for-byte unchanged.
         return text
 
     masked = text
@@ -135,13 +198,14 @@ def _masked_selector_line(text: str) -> str | None:
     return masked
 
 
-def _validate_value_bearing_calls(instruction: PatchInstruction) -> None:
-    """Allow selector edits while preserving every input value supplied to Playwright."""
+def _validate_action_calls(instruction: PatchInstruction) -> None:
+    """Allow selector edits while preserving every other argument (data and options)."""
     original = _masked_selector_line(instruction.original)
     replacement = _masked_selector_line(instruction.replacement)
     if original is None or replacement is None or original != replacement:
         raise PatchApplicationError(
-            f"line {instruction.line} changes input data for a value-bearing Playwright call"
+            f"line {instruction.line} changes an argument other than the selector "
+            "of a Playwright action"
         )
 
 
@@ -165,10 +229,8 @@ def _validate_patch_scope(instruction: PatchInstruction) -> None:
         raise PatchApplicationError(
             f"line {instruction.line} is not limited to a locator or wait condition"
         )
-    if _VALUE_BEARING_CALL.search(instruction.original) or _VALUE_BEARING_CALL.search(
-        instruction.replacement
-    ):
-        _validate_value_bearing_calls(instruction)
+    if _ACTION_CALL.search(instruction.original) or _ACTION_CALL.search(instruction.replacement):
+        _validate_action_calls(instruction)
 
 
 def _apply(code: str, instructions: list[PatchInstruction]) -> str:

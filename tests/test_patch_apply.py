@@ -162,7 +162,7 @@ def test_rejects_fill_value_edit() -> None:
         "await page.fill('#email', 'admin@example.com')",
     )
 
-    with pytest.raises(PatchApplicationError, match="changes input data"):
+    with pytest.raises(PatchApplicationError, match="argument other than the selector"):
         _apply("await page.fill('#email', 'user@example.com')\n", [instruction])
 
 
@@ -173,7 +173,7 @@ def test_rejects_fill_value_edit_when_value_reads_changed_test_id() -> None:
         "await page.fill('#email', await page.getByTestId('new-name').textContent())",
     )
 
-    with pytest.raises(PatchApplicationError, match="changes input data"):
+    with pytest.raises(PatchApplicationError, match="argument other than the selector"):
         _apply(
             "await page.fill('#email', await page.getByTestId('old-name').textContent())\n",
             [instruction],
@@ -187,7 +187,7 @@ def test_rejects_locator_fill_value_edit() -> None:
         "await page.locator('#email').fill('admin@example.com')",
     )
 
-    with pytest.raises(PatchApplicationError, match="changes input data"):
+    with pytest.raises(PatchApplicationError, match="argument other than the selector"):
         _apply("await page.locator('#email').fill('user@example.com')\n", [instruction])
 
 
@@ -201,6 +201,142 @@ def test_allows_locator_selector_edit_without_changing_fill_value() -> None:
     assert (
         _apply("await page.locator('#old-email').fill('user@example.com')\n", [instruction])
         == "await page.locator('#new-email').fill('user@example.com')\n"
+    )
+
+
+def test_rejects_click_force_option_edit() -> None:
+    instruction = _instruction(
+        1,
+        "await page.click('#a', { force: true })",
+        "await page.click('#a', { force: false })",
+    )
+    with pytest.raises(PatchApplicationError, match="argument other than the selector"):
+        _apply("await page.click('#a', { force: true })\n", [instruction])
+
+
+def test_rejects_click_trial_option_edit() -> None:
+    instruction = _instruction(
+        1,
+        "await page.click('#a', { trial: true })",
+        "await page.click('#a', { trial: false })",
+    )
+    with pytest.raises(PatchApplicationError, match="argument other than the selector"):
+        _apply("await page.click('#a', { trial: true })\n", [instruction])
+
+
+def test_rejects_dblclick_delay_option_edit() -> None:
+    instruction = _instruction(
+        1,
+        "await page.dblclick('#a', { delay: 100 })",
+        "await page.dblclick('#a', { delay: 500 })",
+    )
+    with pytest.raises(PatchApplicationError, match="argument other than the selector"):
+        _apply("await page.dblclick('#a', { delay: 100 })\n", [instruction])
+
+
+def test_rejects_check_no_wait_after_option_edit() -> None:
+    instruction = _instruction(
+        1,
+        "await page.check('#a', { noWaitAfter: true })",
+        "await page.check('#a', { noWaitAfter: false })",
+    )
+    with pytest.raises(PatchApplicationError, match="argument other than the selector"):
+        _apply("await page.check('#a', { noWaitAfter: true })\n", [instruction])
+
+
+def test_rejects_locator_bound_click_force_option_edit() -> None:
+    instruction = _instruction(
+        1,
+        "await page.getByRole('button').click({ force: true })",
+        "await page.getByRole('button').click({ force: false })",
+    )
+    with pytest.raises(PatchApplicationError, match="argument other than the selector"):
+        _apply("await page.getByRole('button').click({ force: true })\n", [instruction])
+
+
+def test_rejects_hover_position_option_edit() -> None:
+    instruction = _instruction(
+        1,
+        "await page.hover('#a', { position: { x: 1, y: 2 } })",
+        "await page.hover('#a', { position: { x: 3, y: 4 } })",
+    )
+    with pytest.raises(PatchApplicationError, match="argument other than the selector"):
+        _apply("await page.hover('#a', { position: { x: 1, y: 2 } })\n", [instruction])
+
+
+def test_allows_click_selector_only_edit() -> None:
+    instruction = _instruction(
+        1,
+        "await page.click('#old', { force: true })",
+        "await page.click('#new', { force: true })",
+    )
+    assert _apply("await page.click('#old', { force: true })\n", [instruction]) == (
+        "await page.click('#new', { force: true })\n"
+    )
+
+
+def test_allows_locator_selector_edit_on_click() -> None:
+    instruction = _instruction(
+        1,
+        "await page.getByRole('button', { name: 'Old' }).click()",
+        "await page.getByRole('button', { name: 'New' }).click()",
+    )
+    assert (
+        _apply("await page.getByRole('button', { name: 'Old' }).click()\n", [instruction])
+        == "await page.getByRole('button', { name: 'New' }).click()\n"
+    )
+
+
+def test_ignores_action_call_in_line_comment() -> None:
+    instruction = _instruction(
+        1,
+        "await page.click('#old') // page.click('#x",
+        "await page.click('#new') // page.click('#x",
+    )
+    assert _apply("await page.click('#old') // page.click('#x\n", [instruction]) == (
+        "await page.click('#new') // page.click('#x\n"
+    )
+
+
+def test_ignores_action_call_in_block_comment() -> None:
+    instruction = _instruction(
+        1,
+        "await page.click('#old') /* page.click('#x */",
+        "await page.click('#new') /* page.click('#x */",
+    )
+    assert _apply("await page.click('#old') /* page.click('#x */\n", [instruction]) == (
+        "await page.click('#new') /* page.click('#x */\n"
+    )
+
+
+def test_rejects_value_edit_when_value_string_mentions_action() -> None:
+    instruction = _instruction(
+        1,
+        "await page.fill('#msg', 'page.click(\"#x\")')",
+        "await page.fill('#msg', 'page.click(\"#y\")')",
+    )
+    with pytest.raises(PatchApplicationError, match="argument other than the selector"):
+        _apply("await page.fill('#msg', 'page.click(\"#x\")')\n", [instruction])
+
+
+def test_rejects_value_edit_when_value_template_mentions_action() -> None:
+    instruction = _instruction(
+        1,
+        "await page.fill('#msg', `page.click(\"#x\")`)",
+        "await page.fill('#msg', `page.click(\"#y\")`)",
+    )
+    with pytest.raises(PatchApplicationError, match="argument other than the selector"):
+        _apply("await page.fill('#msg', `page.click(\"#x\")`)\n", [instruction])
+
+
+def test_allows_selector_edit_when_value_mentions_action() -> None:
+    instruction = _instruction(
+        1,
+        "await page.fill('#old', 'page.click(\"#x\")')",
+        "await page.fill('#new', 'page.click(\"#x\")')",
+    )
+    assert _apply("await page.fill('#old', 'page.click(\"#x\")')\n", [instruction]) == (
+        "await page.fill('#new', 'page.click(\"#x\")')\n"
     )
 
 
