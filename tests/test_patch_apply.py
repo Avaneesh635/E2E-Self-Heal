@@ -287,6 +287,59 @@ def test_allows_locator_selector_edit_on_click() -> None:
     )
 
 
+def test_ignores_action_call_in_line_comment() -> None:
+    instruction = _instruction(
+        1,
+        "await page.click('#old') // page.click('#x",
+        "await page.click('#new') // page.click('#x",
+    )
+    assert _apply("await page.click('#old') // page.click('#x\n", [instruction]) == (
+        "await page.click('#new') // page.click('#x\n"
+    )
+
+
+def test_ignores_action_call_in_block_comment() -> None:
+    instruction = _instruction(
+        1,
+        "await page.click('#old') /* page.click('#x */",
+        "await page.click('#new') /* page.click('#x */",
+    )
+    assert _apply("await page.click('#old') /* page.click('#x */\n", [instruction]) == (
+        "await page.click('#new') /* page.click('#x */\n"
+    )
+
+
+def test_rejects_value_edit_when_value_string_mentions_action() -> None:
+    instruction = _instruction(
+        1,
+        "await page.fill('#msg', 'page.click(\"#x\")')",
+        "await page.fill('#msg', 'page.click(\"#y\")')",
+    )
+    with pytest.raises(PatchApplicationError, match="argument other than the selector"):
+        _apply("await page.fill('#msg', 'page.click(\"#x\")')\n", [instruction])
+
+
+def test_rejects_value_edit_when_value_template_mentions_action() -> None:
+    instruction = _instruction(
+        1,
+        "await page.fill('#msg', `page.click(\"#x\")`)",
+        "await page.fill('#msg', `page.click(\"#y\")`)",
+    )
+    with pytest.raises(PatchApplicationError, match="argument other than the selector"):
+        _apply("await page.fill('#msg', `page.click(\"#x\")`)\n", [instruction])
+
+
+def test_allows_selector_edit_when_value_mentions_action() -> None:
+    instruction = _instruction(
+        1,
+        "await page.fill('#old', 'page.click(\"#x\")')",
+        "await page.fill('#new', 'page.click(\"#x\")')",
+    )
+    assert _apply("await page.fill('#old', 'page.click(\"#x\")')\n", [instruction]) == (
+        "await page.fill('#new', 'page.click(\"#x\")')\n"
+    )
+
+
 def test_patch_generator_returns_rejection_feedback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

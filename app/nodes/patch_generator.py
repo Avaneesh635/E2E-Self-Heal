@@ -99,11 +99,69 @@ def _argument_spans(text: str, opening: int, closing: int) -> list[tuple[int, in
     return arguments
 
 
+def _mask_js_non_code(text: str) -> str:
+    """Blank JS comments and string/template literals, preserving length and offsets.
+
+    ``_ACTION_CALL``/``_SELECTOR_CALL`` must only see real code — an action-like token
+    inside a comment or string must not be treated as an actual call. Line (``//``) and
+    block (``/* … */``) comments, single/double-quoted strings, and backtick templates
+    (including delimiters and ``\\`` escapes) are replaced with spaces, so matches keep
+    the same offsets while the original ``text`` is still used for paren/argument parsing.
+    """
+    chars = list(text)
+    i = 0
+    n = len(chars)
+    while i < n:
+        char = chars[i]
+        nxt = chars[i + 1] if i + 1 < n else ""
+
+        if char == "/" and nxt == "/":
+            chars[i] = chars[i + 1] = " "
+            i += 2
+            while i < n and chars[i] != "\n":
+                chars[i] = " "
+                i += 1
+            continue
+
+        if char == "/" and nxt == "*":
+            chars[i] = chars[i + 1] = " "
+            i += 2
+            while i < n:
+                if chars[i] == "*" and i + 1 < n and chars[i + 1] == "/":
+                    chars[i] = chars[i + 1] = " "
+                    i += 2
+                    break
+                chars[i] = " "
+                i += 1
+            continue
+
+        if char in {"'", '"', "`"}:
+            quote = char
+            chars[i] = " "
+            i += 1
+            while i < n:
+                if chars[i] == "\\" and i + 1 < n:
+                    chars[i] = chars[i + 1] = " "
+                    i += 2
+                    continue
+                if chars[i] == quote:
+                    chars[i] = " "
+                    i += 1
+                    break
+                chars[i] = " "
+                i += 1
+            continue
+
+        i += 1
+    return "".join(chars)
+
+
 def _masked_selector_line(text: str) -> str | None:
     """Mask selector arguments, returning None when an action call cannot be safely checked."""
     spans: list[tuple[int, int]] = []
+    code = _mask_js_non_code(text)
 
-    for match in _ACTION_CALL.finditer(text):
+    for match in _ACTION_CALL.finditer(code):
         opening = text.find("(", match.start(), match.end())
         closing = _matching_paren(text, opening)
         if closing is None:
@@ -118,10 +176,10 @@ def _masked_selector_line(text: str) -> str | None:
 
         # A locator-bound call may change selectors in its receiver chain, but selector
         # calls inside its value/options arguments are input data and must not be masked.
-        receiver_start = text.rfind("page.", 0, match.start())
+        receiver_start = code.rfind("page.", 0, match.start())
         if receiver_start == -1:
             continue
-        for selector_match in _SELECTOR_CALL.finditer(text, receiver_start, match.start()):
+        for selector_match in _SELECTOR_CALL.finditer(code, receiver_start, match.start()):
             selector_opening = text.find("(", selector_match.start(), selector_match.end())
             selector_closing = _matching_paren(text, selector_opening)
             if selector_closing is None:
@@ -129,7 +187,7 @@ def _masked_selector_line(text: str) -> str | None:
             if selector_closing < match.start():
                 spans.extend(_argument_spans(text, selector_opening, selector_closing))
 
-    if _ACTION_CALL.search(text) and not spans:
+    if _ACTION_CALL.search(code) and not spans:
         # A locator-bound call has no selector argument of its own. Its data/options
         # arguments must therefore remain byte-for-byte unchanged.
         return text
