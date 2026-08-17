@@ -340,6 +340,50 @@ def test_allows_selector_edit_when_value_mentions_action() -> None:
     )
 
 
+def test_rejects_edit_on_line_with_only_commented_locator() -> None:
+    instruction = _instruction(
+        1,
+        "const retries = 3; // page.getByRole('button')",
+        "const retries = 99; // page.getByRole('button')",
+        selector="",
+    )
+    with pytest.raises(PatchApplicationError, match="not limited to a locator"):
+        _apply("const retries = 3; // page.getByRole('button')\n", [instruction])
+
+
+def test_rejects_edit_on_line_with_only_string_locator() -> None:
+    instruction = _instruction(
+        1,
+        "const sel = \"page.getByRole('button')\";",
+        "const sel = \"page.getByRole('button2')\";",
+        selector="",
+    )
+    with pytest.raises(PatchApplicationError, match="not limited to a locator"):
+        _apply("const sel = \"page.getByRole('button')\";\n", [instruction])
+
+
+def test_rejects_edit_on_line_with_only_template_locator() -> None:
+    instruction = _instruction(
+        1,
+        "const sel = `page.getByRole('button')`;",
+        "const sel = `page.getByRole('button2')`;",
+        selector="",
+    )
+    with pytest.raises(PatchApplicationError, match="not limited to a locator"):
+        _apply("const sel = `page.getByRole('button')`;\n", [instruction])
+
+
+def test_allows_selector_edit_with_assertion_token_in_comment() -> None:
+    instruction = _instruction(
+        1,
+        "await page.click('#old') // expect(false)",
+        "await page.click('#new') // expect(false)",
+    )
+    assert _apply("await page.click('#old') // expect(false)\n", [instruction]) == (
+        "await page.click('#new') // expect(false)\n"
+    )
+
+
 def test_patch_generator_returns_rejection_feedback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

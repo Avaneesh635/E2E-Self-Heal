@@ -219,17 +219,19 @@ def _validate_patch_scope(instruction: PatchInstruction) -> None:
         raise PatchApplicationError(
             f"line {instruction.line} replacement must contain exactly one line"
         )
-    if _ASSERTION_CALL.search(instruction.original) or _ASSERTION_CALL.search(
-        instruction.replacement
-    ):
+    # Gate on code only: an assertion/locator token inside a comment or string must not
+    # satisfy (or trip) the scope checks — the same view `_masked_selector_line` uses.
+    original_code = _mask_js_non_code(instruction.original)
+    replacement_code = _mask_js_non_code(instruction.replacement)
+    if _ASSERTION_CALL.search(original_code) or _ASSERTION_CALL.search(replacement_code):
         raise PatchApplicationError(f"line {instruction.line} targets an assertion")
-    if not _ALLOWED_PATCH_CALL.search(instruction.original) or not _ALLOWED_PATCH_CALL.search(
-        instruction.replacement
+    if not _ALLOWED_PATCH_CALL.search(original_code) or not _ALLOWED_PATCH_CALL.search(
+        replacement_code
     ):
         raise PatchApplicationError(
             f"line {instruction.line} is not limited to a locator or wait condition"
         )
-    if _ACTION_CALL.search(instruction.original) or _ACTION_CALL.search(instruction.replacement):
+    if _ACTION_CALL.search(original_code) or _ACTION_CALL.search(replacement_code):
         _validate_action_calls(instruction)
 
 
