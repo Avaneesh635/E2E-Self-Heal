@@ -384,6 +384,37 @@ def test_allows_selector_edit_with_assertion_token_in_comment() -> None:
     )
 
 
+def test_rejects_edit_on_line_continuing_block_comment() -> None:
+    # The locator token looks like real code to a line-local mask, but the line is inside
+    # a block comment opened on an earlier line — it must not be a patchable target.
+    code = "/* multi-line comment\npage.getByRole('button')\n*/\n"
+    instruction = _instruction(
+        2,
+        "page.getByRole('button')",
+        "page.getByRole('other')",
+    )
+    with pytest.raises(PatchApplicationError, match="not limited to a locator"):
+        _apply(code, [instruction])
+
+
+def test_rejects_edit_on_line_continuing_template_literal() -> None:
+    code = "const tpl = `multi-line template\npage.getByRole('button')\n`;\n"
+    instruction = _instruction(
+        2,
+        "page.getByRole('button')",
+        "page.getByRole('other')",
+    )
+    with pytest.raises(PatchApplicationError, match="not limited to a locator"):
+        _apply(code, [instruction])
+
+
+def test_allows_real_locator_line_after_block_comment() -> None:
+    # A genuine locator line that FOLLOWS a closed block comment still gates normally.
+    code = "/* header */\nawait page.click('#old')\n"
+    instruction = _instruction(2, "await page.click('#old')", "await page.click('#new')")
+    assert _apply(code, [instruction]) == "/* header */\nawait page.click('#new')\n"
+
+
 def test_patch_generator_returns_rejection_feedback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

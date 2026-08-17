@@ -213,15 +213,25 @@ class PatchApplicationError(ValueError):
     """Raised when generated instructions do not match the current test code."""
 
 
-def _validate_patch_scope(instruction: PatchInstruction) -> None:
-    """Reject edits outside the single-line locator/wait guardrail."""
+def _validate_patch_scope(
+    instruction: PatchInstruction, masked_original: str | None = None
+) -> None:
+    """Reject edits outside the single-line locator/wait guardrail.
+
+    ``masked_original`` is the code-only view of the target line computed against the
+    *complete* source (see ``_apply``), so a line that continues a block comment or
+    template literal opened on an earlier line is treated as non-code. When omitted,
+    the line is masked in isolation (tests / callers without file context).
+    """
     if "\n" in instruction.replacement or "\r" in instruction.replacement:
         raise PatchApplicationError(
             f"line {instruction.line} replacement must contain exactly one line"
         )
     # Gate on code only: an assertion/locator token inside a comment or string must not
     # satisfy (or trip) the scope checks — the same view `_masked_selector_line` uses.
-    original_code = _mask_js_non_code(instruction.original)
+    original_code = (
+        masked_original if masked_original is not None else _mask_js_non_code(instruction.original)
+    )
     replacement_code = _mask_js_non_code(instruction.replacement)
     if _ASSERTION_CALL.search(original_code) or _ASSERTION_CALL.search(replacement_code):
         raise PatchApplicationError(f"line {instruction.line} targets an assertion")
@@ -238,6 +248,16 @@ def _validate_patch_scope(instruction: PatchInstruction) -> None:
 def _apply(code: str, instructions: list[PatchInstruction]) -> str:
     """Validate and atomically apply line-targeted replacements to ``code``."""
     lines = code.splitlines(keepends=True)
+    # Mask the complete source once so a targeted line that continues a block comment or
+    # template literal opened on an earlier line cannot satisfy the scope gates (Issue #260).
+    # The mask preserves length (blanking non-code, including the newlines it swallows), so
+    # each original line maps onto the same character span of the masked code.
+    masked_code = _mask_js_non_code(code)
+    masked_lines: list[str] = []
+    offset = 0
+    for line in lines:
+        masked_lines.append(masked_code[offset : offset + len(line)])
+        offset += len(line)
     replacements: list[tuple[int, str]] = []
     targeted_lines: set[int] = set()
     for instruction in instructions:
@@ -256,7 +276,8 @@ def _apply(code: str, instructions: list[PatchInstruction]) -> str:
             raise PatchApplicationError(
                 f"line {instruction.line} no longer matches the expected original text"
             )
-        _validate_patch_scope(instruction)
+        masked_current, _ = split_line_ending(masked_lines[index])
+        _validate_patch_scope(instruction, masked_original=masked_current)
         replacements.append((index, instruction.replacement + line_ending))
 
     for index, replacement in replacements:
