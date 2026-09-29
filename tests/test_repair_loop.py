@@ -127,6 +127,54 @@ def test_loop_reports_guardrail_rejection_after_retries_are_exhausted(monkeypatc
     assert final["refusal_reason"] is RefusalReason.GUARDRAIL_VIOLATION
 
 
+def test_ast_lock_rejections_still_honor_the_loop_cap(monkeypatch, tmp_path):
+    """A patch only the AST lock can reject must retry, spend loops, and stop at the cap."""
+    monkeypatch.chdir(tmp_path)
+    original = "const submit = page.locator('#old');\n"
+    spec = tmp_path / "t.spec.ts"
+    spec.write_text(original)
+    # Passes every per-line regex gate, but appends a statement: only the lock rejects it.
+    lock_violation = PatchOutput(
+        instructions=[
+            PatchInstruction(
+                line=1,
+                original=original.strip(),
+                replacement="const submit = page.locator('#new'); await page.goto('/admin');",
+                reason="adds navigation",
+            )
+        ]
+    )
+    attempts: list[int] = []
+
+    def generate(system: str, user: str) -> PatchOutput:
+        attempts.append(1)
+        return lock_violation
+
+    monkeypatch.setattr(diagnoser_node, "generate_diagnosis", lambda s, u: "selector changed")
+    monkeypatch.setattr(patch_node, "generate_patch", generate)
+    monkeypatch.setattr(
+        runner_node,
+        "run_playwright",
+        lambda path: (_ for _ in ()).throw(AssertionError("a rejected patch must not be run")),
+    )
+
+    state = _initial_state()
+    state["test_script_path"] = str(spec)
+    state["original_code"] = state["current_code"] = original
+    final = build_graph().invoke(state)
+
+    assert final["is_success"] is False
+    assert final["refusal_reason"] is RefusalReason.GUARDRAIL_VIOLATION
+    # Every rejection spends a loop, so the generator is called exactly max_loops times.
+    assert final["loop_count"] == settings.max_loops
+    assert len(attempts) == settings.max_loops
+    assert spec.read_text() == original
+    candidates = final["evidence_candidates"]
+    assert len(candidates) == settings.max_loops
+    assert all(c["outcome"] == "rejected" for c in candidates)
+    assert all("AST lock rejected" in c["rejection"] for c in candidates)
+
+
 def test_failed_memory_candidate_falls_back_to_llm_without_spending_a_loop(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
     monkeypatch.setattr(settings, "sandbox_mode", "strict")

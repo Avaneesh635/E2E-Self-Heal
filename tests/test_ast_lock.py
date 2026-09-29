@@ -26,6 +26,14 @@ from app.verify.ast_lock import AstLockAllowlist, check_ast_lock
             "await page.waitForTimeout(500);",
             "await page.waitForLoadState(500);",
         ),
+        ("await page.click('#old');", "await page.click('#new');"),
+        (
+            "await page.fill('#old', 'user@example.com');",
+            "await page.fill('#new', 'user@example.com');",
+        ),
+        ("await page.waitForSelector('#old');", "await page.waitForSelector('#new');"),
+        ("await page.click(`#old-${id}`);", "await page.click(`#new-${id}`);"),
+        ("await page.click(/* why */ '#old');", "await page.click(/* why */ '#new');"),
     ],
 )
 def test_allows_explicitly_safe_ast_changes(original: str, patched: str) -> None:
@@ -75,6 +83,22 @@ def test_allows_explicitly_safe_ast_changes(original: str, patched: str) -> None
             'await page.locator("#save").click({ force: false });',
             'await page.locator("#save").click({ force: true });',
         ),
+        # Only the selector (first) argument of a ``page`` action is editable.
+        (
+            "await page.fill('#email', 'user@example.com');",
+            "await page.fill('#email', 'admin@example.com');",
+        ),
+        ("await page.click('#a', { force: true });", "await page.click('#a', { force: false });"),
+        ("await page.press('#a', 'Enter');", "await page.press('#a', 'Escape');"),
+        # A non-``page`` receiver has no selector argument, so its arguments stay locked.
+        ("await frame.click('#old');", "await frame.click('#new');"),
+        (
+            "await page.locator('#a').fill('user@example.com');",
+            "await page.locator('#a').fill('admin@example.com');",
+        ),
+        # A computed selector is executable code, not a literal.
+        ("await page.click(pick('#old'));", "await page.click(pick('#new'));"),
+        ("await page.click(() => '#old');", "await page.click(() => '#new');"),
     ],
 )
 def test_rejects_assertion_and_control_flow_changes(original: str, patched: str) -> None:

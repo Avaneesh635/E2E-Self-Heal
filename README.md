@@ -25,7 +25,10 @@ test until it passes (or a retry cap is hit) and writes the fix back — as a lo
 a **CI GitHub Action** that opens a patch PR.
 
 > **Scope guardrail:** the engine only fixes **failing locators and wait conditions**. It
-> never touches assertions or test logic, and every patch stays human-reviewable.
+> never touches assertions or test logic, and every patch stays human-reviewable. Every
+> candidate patch is also checked structurally with an AST lock: anything other than a
+> locator string, timeout, or wait method changing is rejected, and repeated rejections end in
+> a refusal at the loop cap.
 
 ### Two modes: **heal** and **review**
 

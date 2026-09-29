@@ -28,6 +28,29 @@ class AstLockAllowlist(BaseModel):
             }
         )
     )
+    # Page-level actions whose FIRST argument is a selector (``page.click(selector)``). Every
+    # other argument (values, keys, options) stays locked. Mirrors the regex scope gate.
+    page_selector_methods: frozenset[str] = Field(
+        default_factory=lambda: frozenset(
+            {
+                "check",
+                "click",
+                "dblclick",
+                "fill",
+                "focus",
+                "hover",
+                "press",
+                "selectOption",
+                "setInputFiles",
+                "type",
+                "uncheck",
+                "waitForSelector",
+            }
+        )
+    )
+    # Receivers that make ``page_selector_methods`` selector-first. A ``locator.click(x)`` call
+    # has no selector argument, so it must not be matched by method name alone.
+    page_receivers: frozenset[str] = Field(default_factory=lambda: frozenset({"page"}))
     timeout_keys: frozenset[str] = Field(default_factory=lambda: frozenset({"timeout"}))
     wait_methods: frozenset[str] = Field(
         default_factory=lambda: frozenset(
@@ -178,9 +201,34 @@ def _inside_locator_arguments(
         if parent.type == "arguments" and parent.parent is not None:
             call = parent.parent
             if call.type == "call_expression":
-                return _call_name(call, source) in allowlist.locator_methods
+                name = _call_name(call, source)
+                if name in allowlist.locator_methods:
+                    return True
+                return (
+                    name in allowlist.page_selector_methods
+                    and _has_page_receiver(call, source, allowlist)
+                    and _is_first_argument(parent, current)
+                )
         current = parent
     return False
+
+
+def _has_page_receiver(call: Node, source: bytes, allowlist: AstLockAllowlist) -> bool:
+    function = call.child_by_field_name("function")
+    if function is None or function.type != "member_expression":
+        return False
+    receiver = function.child_by_field_name("object")
+    return (
+        receiver is not None
+        and receiver.type == "identifier"
+        and _node_text(receiver, source) in allowlist.page_receivers
+    )
+
+
+def _is_first_argument(arguments: Node, argument: Node) -> bool:
+    # Comments are extras and appear among named children; they are not arguments.
+    first = next((child for child in arguments.named_children if child.type != "comment"), None)
+    return first is not None and first.id == argument.id
 
 
 def _is_timeout_value(node: Node, source: bytes, allowlist: AstLockAllowlist) -> bool:

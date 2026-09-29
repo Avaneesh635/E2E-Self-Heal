@@ -18,6 +18,7 @@ from app.sandbox import SandboxViolation, assert_patch_boundary_allowed
 from app.schemas import PatchInstruction
 from app.state import AgentState
 from app.utils.files import split_line_ending
+from app.verify.ast_lock import check_ast_lock
 
 logger = structlog.get_logger(__name__)
 _ALLOWED_PATCH_CALL = re.compile(
@@ -419,8 +420,37 @@ def _validate_patch_scope(
         _validate_action_calls(instruction)
 
 
+def _enforce_ast_lock(original: str, patched: str) -> None:
+    """Reject a patch whose AST differs outside locator strings, timeouts, and wait methods.
+
+    Fail-closed: a parse failure or any structural change is a guardrail violation. It is
+    raised as :class:`PatchGuardrailViolation` so it flows through the same retry path as
+    any other rejected application. That path spends a loop, so a candidate that keeps
+    violating the lock can never retry past ``settings.max_loops``.
+    """
+    if patched == original:
+        return  # Nothing changed, so there is nothing to verify.
+    verdict = check_ast_lock(original, patched)
+    if not verdict.allowed:
+        logger.warning(
+            "ast_lock_rejected",
+            reason=verdict.reason,
+            node_kind=verdict.node_kind,
+            line=verdict.line,
+        )
+        raise PatchGuardrailViolation(
+            f"AST lock rejected the patch ({verdict.reason}: {verdict.node_kind} at line "
+            f"{verdict.line}); only locator strings, timeouts, and wait methods may change"
+        )
+    logger.info("ast_lock_passed", reason=verdict.reason)
+
+
 def _apply(code: str, instructions: list[PatchInstruction]) -> str:
-    """Validate and atomically apply line-targeted replacements to ``code``."""
+    """Validate and atomically apply line-targeted replacements to ``code``.
+
+    Shared by the Patch Generator and the memory lookup, so every candidate, however it
+    was produced, passes the regex scope gates and then the structural AST lock.
+    """
     lines = code.splitlines(keepends=True)
     # Mask the complete source once so a targeted line that continues a block comment or
     # template literal opened on an earlier line cannot satisfy the scope gates.
@@ -456,7 +486,9 @@ def _apply(code: str, instructions: list[PatchInstruction]) -> str:
 
     for index, replacement in replacements:
         lines[index] = replacement
-    return "".join(lines)
+    patched = "".join(lines)
+    _enforce_ast_lock(code, patched)
+    return patched
 
 
 def patch_generator(state: AgentState) -> dict:
