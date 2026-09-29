@@ -84,6 +84,52 @@ def test_memory_lookup_applies_rebased_guarded_candidate(
     assert result["patch_instructions"]["instructions"][0]["line"] == 1
 
 
+def test_memory_lookup_rejects_a_history_candidate_that_violates_the_ast_lock(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(settings, "sandbox_mode", "strict")
+    error = "Error: waiting for locator('#old') timed out"
+    original = "const submit = page.locator('#old');"
+    record = HealingHistoryRecord(
+        normalized_error_signature=normalize_error_signature(error),
+        selector_kind=classify_selector_kind("#old"),
+        original_selector="#old",
+        replacement_selectors=("#new",),
+        instructions=[
+            PatchInstruction(
+                line=1,
+                original=original,
+                # Passes every per-line gate but appends a statement, so only the AST lock
+                # can reject it. A cached repair gets no shortcut around that check.
+                replacement="const submit = page.locator('#new'); await page.goto('/admin');",
+                reason="selector renamed",
+                selector="#new",
+            )
+        ],
+        test_script_path="tests/login.spec.ts",
+        provider="test",
+        model="test",
+        source="llm",
+        recorded_at=datetime.now(UTC),
+    )
+    assert append_record(record) is True
+    state = _state()
+    state["test_script_path"] = str(tmp_path / "tests" / "login.spec.ts")
+    state["current_code"] = f"{original}\n"
+
+    result = memory_lookup(state)
+
+    assert "current_code" not in result
+    # A rejected history candidate is a cache miss: it must not spend a repair loop.
+    assert "loop_count" not in result
+    assert result["memory_report"]["hit"] is False
+    assert "AST lock rejected" in result["memory_report"]["rejection"]
+    candidate = result["evidence_candidates"][0]
+    assert candidate["source"] == "memory"
+    assert candidate["outcome"] == "rejected"
+
+
 def test_memory_lookup_rejects_duplicate_source_lines_without_mutating(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

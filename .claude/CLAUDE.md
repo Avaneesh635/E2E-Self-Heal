@@ -105,6 +105,18 @@ Three nodes and one conditional edge control the flow.
   rather than crashing the graph.
 - **Loop cap** — `loop_count` must never exceed 3. The Router is the single source of
   truth for termination.
+- **AST lock** — after the per-line scope gates, `_apply` runs `check_ast_lock` on the whole
+  patched file, so both the Patch Generator and the memory lookup are covered. It is
+  fail-closed: a parse failure or any change other than locator strings, timeouts, and wait
+  names is a `PatchGuardrailViolation`. Retry semantics differ by producer. A **Patch
+  Generator** violation is a `PatchApplicationError`, so it is handled by the existing internal
+  exception loop (never raised out of the node), is fed back to the Patch Generator, and
+  **spends a loop**; it can therefore never be retried past the cap, and a terminal one yields
+  `RefusalReason.GUARDRAIL_VIOLATION`. A **memory lookup** (history candidate) violation is
+  treated as a cache miss: it is recorded as a rejected candidate, does **not** increment
+  `loop_count`, and falls through to the LLM path. That is bounded because the memory lookup
+  runs once at the start of the graph. Events: `ast_lock_rejected` (reason, node_kind, line)
+  and `ast_lock_passed`.
 
 ### Imports
 

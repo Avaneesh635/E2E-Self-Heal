@@ -1,8 +1,14 @@
 import pytest
 
 import app.nodes.patch_generator as patch_node
+from app.config import settings
 from app.graph import route_after_patch
-from app.nodes.patch_generator import PatchApplicationError, _apply, _mask_js_non_code
+from app.nodes.patch_generator import (
+    PatchApplicationError,
+    PatchGuardrailViolation,
+    _apply,
+    _mask_js_non_code,
+)
 from app.schemas import PatchInstruction, PatchOutput
 from app.state import AgentState
 
@@ -604,6 +610,121 @@ def test_generation_failure_clears_previous_rejection(
 
     state["patch_application_report"] = result["patch_application_report"]
     assert route_after_patch(state) == "shadow_verifier"
+
+
+# --- AST lock integration (#286) ----------------------------------------
+
+# Passes every per-line regex gate (a single line, a locator call, no assertion token) but
+# appends a second statement, so only the structural AST lock can catch it.
+LOCK_ORIGINAL = "const submit = page.locator('#old');"
+LOCK_VIOLATION = "const submit = page.locator('#new'); await page.goto('/admin');"
+
+
+class _RecordingLogger:
+    """Order-independent log capture; structlog's cached loggers defeat ``capture_logs``."""
+
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, object]]] = []
+
+    def _record(self, event: str, **kwargs: object) -> None:
+        self.events.append((event, kwargs))
+
+    info = warning = error = debug = _record
+
+
+def test_ast_lock_rejects_a_patch_that_passes_the_line_gates() -> None:
+    instruction = _instruction(1, LOCK_ORIGINAL, LOCK_VIOLATION)
+
+    with pytest.raises(PatchGuardrailViolation, match="AST lock rejected the patch"):
+        _apply(f"{LOCK_ORIGINAL}\n", [instruction])
+
+
+def test_ast_lock_rejection_is_a_recoverable_application_error() -> None:
+    # It must subclass PatchApplicationError so the existing retry handling catches it and
+    # it can never propagate out of the node and kill the graph.
+    assert issubclass(PatchGuardrailViolation, PatchApplicationError)
+
+
+def test_ast_lock_fails_closed_when_the_original_source_does_not_parse() -> None:
+    code = "const submit = page.locator('#old'\n"  # unbalanced parenthesis
+    instruction = _instruction(
+        1, "const submit = page.locator('#old'", "const submit = page.locator('#new'"
+    )
+
+    with pytest.raises(PatchGuardrailViolation, match="original_parse_error"):
+        _apply(code, [instruction])
+
+
+def test_ast_lock_logs_rejection_with_node_kind_and_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorder = _RecordingLogger()
+    monkeypatch.setattr(patch_node, "logger", recorder)
+
+    with pytest.raises(PatchGuardrailViolation):
+        _apply(f"{LOCK_ORIGINAL}\n", [_instruction(1, LOCK_ORIGINAL, LOCK_VIOLATION)])
+
+    (event, fields) = next(item for item in recorder.events if item[0] == "ast_lock_rejected")
+    assert event == "ast_lock_rejected"
+    assert fields["reason"] == "disallowed_ast_change"
+    assert fields["node_kind"]
+    assert fields["line"] == 1
+
+
+def test_ast_lock_logs_a_pass_for_an_allowed_selector_edit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recorder = _RecordingLogger()
+    monkeypatch.setattr(patch_node, "logger", recorder)
+
+    _apply(
+        "await page.click('#old')\n",
+        [_instruction(1, "await page.click('#old')", "await page.click('#new')")],
+    )
+
+    names = [name for name, _ in recorder.events]
+    assert "ast_lock_passed" in names
+    assert "ast_lock_rejected" not in names
+
+
+def test_patch_generator_preserves_the_rejection_and_spends_a_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = PatchOutput(instructions=[_instruction(1, LOCK_ORIGINAL, LOCK_VIOLATION)])
+    monkeypatch.setattr(patch_node, "generate_patch", lambda system, user: output)
+    state = _state()
+    state["original_code"] = state["current_code"] = f"{LOCK_ORIGINAL}\n"
+
+    result = patch_node.patch_generator(state)
+
+    # The node returns normally: the failure is preserved as state, not raised.
+    assert result["current_code"] == state["current_code"]
+    assert result["patch_instructions"] == {}
+    assert result["patch_application_report"]["ok"] is False
+    assert result["patch_application_report"]["guardrail_violation"] is True
+    assert "AST lock rejected" in result["patch_application_report"]["error"]
+    assert "[PATCH APPLICATION FEEDBACK]" in result["analysis_report"]
+    assert result["loop_count"] == state["loop_count"] + 1
+    candidate = result["evidence_candidates"][-1]
+    assert candidate["outcome"] == "rejected"
+    assert "AST lock rejected" in candidate["rejection"]
+
+
+def test_ast_lock_rejection_retries_below_the_cap_and_refuses_at_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = PatchOutput(instructions=[_instruction(1, LOCK_ORIGINAL, LOCK_VIOLATION)])
+    monkeypatch.setattr(patch_node, "generate_patch", lambda system, user: output)
+    state = _state()
+    state["original_code"] = state["current_code"] = f"{LOCK_ORIGINAL}\n"
+
+    result = patch_node.patch_generator(state)
+    state["patch_application_report"] = result["patch_application_report"]
+    state["loop_count"] = result["loop_count"]
+    assert route_after_patch(state) == "patch_generator"
+
+    state["loop_count"] = settings.max_loops
+    assert route_after_patch(state) == "refusal_finalizer"
 
 
 def test_boundary_violation_ends_immediately() -> None:
