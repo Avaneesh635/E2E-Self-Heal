@@ -1,5 +1,9 @@
 """End-to-end graph test with the LLM and Playwright mocked out."""
 
+import pathlib
+
+import pytest
+
 import app.nodes.diagnoser as diagnoser_node
 import app.nodes.patch_generator as patch_node
 import app.nodes.test_runner as runner_node
@@ -127,7 +131,9 @@ def test_loop_reports_guardrail_rejection_after_retries_are_exhausted(monkeypatc
     assert final["refusal_reason"] is RefusalReason.GUARDRAIL_VIOLATION
 
 
-def test_ast_lock_rejections_still_honor_the_loop_cap(monkeypatch, tmp_path):
+def test_ast_lock_rejections_still_honor_the_loop_cap(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
     """A patch only the AST lock can reject must retry, spend loops, and stop at the cap."""
     monkeypatch.chdir(tmp_path)
     original = "const submit = page.locator('#old');\n"

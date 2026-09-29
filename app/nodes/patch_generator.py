@@ -424,9 +424,11 @@ def _enforce_ast_lock(original: str, patched: str) -> None:
     """Reject a patch whose AST differs outside locator strings, timeouts, and wait methods.
 
     Fail-closed: a parse failure or any structural change is a guardrail violation. It is
-    raised as :class:`PatchGuardrailViolation` so it flows through the same retry path as
-    any other rejected application. That path spends a loop, so a candidate that keeps
-    violating the lock can never retry past ``settings.max_loops``.
+    raised as :class:`PatchGuardrailViolation`, a :class:`PatchApplicationError`, so each
+    caller handles it through its existing rejection path. The Patch Generator feeds it back
+    and spends a loop, so a generated candidate that keeps violating the lock can never retry
+    past ``settings.max_loops``. The memory lookup treats it as a cache miss (no loop spent);
+    that is bounded because the lookup runs once, before the generator loop starts.
     """
     if patched == original:
         return  # Nothing changed, so there is nothing to verify.

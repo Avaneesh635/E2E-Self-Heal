@@ -11,8 +11,10 @@ All notable changes to this project are documented here. The format is based on
   lookup now verify each candidate against the original file with the tree-sitter AST lock,
   after the existing per-line scope gates. Only locator strings, timeouts, and wait-method names
   may differ; any other structural change, or a file that does not parse, is rejected fail-closed
-  as a `guardrail_violation`. A rejection is fed back to the Patch Generator and **spends a
-  loop**, so repeated violations stop at `max_loops` and end in a `RefusalReport` (#286).
+  as a `guardrail_violation`. A Patch Generator rejection is fed back to the generator and
+  **spends a loop**, so repeated violations stop at `max_loops` and end in a `RefusalReport`.
+  A rejected history candidate is treated as a cache miss: it is recorded as a rejected
+  candidate, does not increment the loop count, and falls through to the LLM path (#286).
 - The AST lock now treats the first argument of a `page.<action>(selector, ...)` call (`click`,
   `fill`, `waitForSelector`, ...) as an editable selector, matching the existing scope gate.
   Values, keys, options, and non-`page` receivers stay locked (#286).

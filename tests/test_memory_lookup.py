@@ -121,6 +121,8 @@ def test_memory_lookup_rejects_a_history_candidate_that_violates_the_ast_lock(
     result = memory_lookup(state)
 
     assert "current_code" not in result
+    # A rejected history candidate is a cache miss: it must not spend a repair loop.
+    assert "loop_count" not in result
     assert result["memory_report"]["hit"] is False
     assert "AST lock rejected" in result["memory_report"]["rejection"]
     candidate = result["evidence_candidates"][0]
