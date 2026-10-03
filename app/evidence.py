@@ -25,6 +25,7 @@ from app.state import (
     EvidenceLoopDetails,
     EvidenceLoopRecord,
 )
+from app.verify.ast_lock import AstLockVerdict
 
 EvidenceStage = Literal[
     "memory_lookup",
@@ -66,30 +67,34 @@ def add_candidate(
     memory_score: float | None = None,
     outcome: Literal["generated", "accepted", "rejected"] = "generated",
     rejection: str | None = None,
+    ast_lock: AstLockVerdict | None = None,
 ) -> list[EvidenceCandidateRecord]:
-    """Record a candidate in order so a later retry cannot discard it."""
+    """Record a candidate in order so a later retry cannot discard it.
+
+    ``ast_lock`` is the structural lock's verdict when it is what rejected the candidate.
+    """
     candidates = [
         cast(EvidenceCandidateRecord, dict(candidate))
         for candidate in state.get("evidence_candidates", [])
     ]
-    candidates.append(
-        cast(
-            EvidenceCandidateRecord,
-            redact_value(
-                {
-                    "loop_count": state["loop_count"],
-                    "source": source,
-                    "instructions": cast(
-                        list[EvidenceInstructionRecord],
-                        [instruction.model_dump() for instruction in instructions],
-                    ),
-                    "memory_score": memory_score,
-                    "outcome": outcome,
-                    "rejection": rejection,
-                }
-            ),
-        )
-    )
+    record: dict[str, object] = {
+        "loop_count": state["loop_count"],
+        "source": source,
+        "instructions": cast(
+            list[EvidenceInstructionRecord],
+            [instruction.model_dump() for instruction in instructions],
+        ),
+        "memory_score": memory_score,
+        "outcome": outcome,
+        "rejection": rejection,
+    }
+    if ast_lock is not None and not ast_lock.allowed:
+        record["ast_lock"] = {
+            "reason": ast_lock.reason,
+            "node_kind": ast_lock.node_kind,
+            "line": ast_lock.line,
+        }
+    candidates.append(cast(EvidenceCandidateRecord, redact_value(record)))
     return candidates
 
 

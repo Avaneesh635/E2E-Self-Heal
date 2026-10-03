@@ -18,7 +18,7 @@ from app.sandbox import SandboxViolation, assert_patch_boundary_allowed
 from app.schemas import PatchInstruction
 from app.state import AgentState
 from app.utils.files import split_line_ending
-from app.verify.ast_lock import check_ast_lock
+from app.verify.ast_lock import AstLockVerdict, check_ast_lock
 
 logger = structlog.get_logger(__name__)
 _ALLOWED_PATCH_CALL = re.compile(
@@ -385,7 +385,21 @@ class PatchApplicationError(ValueError):
 
 
 class PatchGuardrailViolation(PatchApplicationError):
-    """Raised when a candidate attempts to leave the selector/wait-condition boundary."""
+    """Raised when a candidate attempts to leave the selector/wait-condition boundary.
+
+    ``ast_lock`` carries the structural lock's verdict when that check produced the
+    rejection, so callers can record what was rejected as structured evidence instead of
+    re-parsing the message. It is ``None`` for the per-line scope gates.
+    """
+
+    def __init__(self, message: str, *, ast_lock: AstLockVerdict | None = None) -> None:
+        super().__init__(message)
+        self.ast_lock = ast_lock
+
+
+def ast_lock_verdict(error: BaseException) -> AstLockVerdict | None:
+    """Return the AST lock verdict behind a rejection, or ``None`` if another check raised it."""
+    return error.ast_lock if isinstance(error, PatchGuardrailViolation) else None
 
 
 def _validate_patch_scope(
@@ -442,7 +456,8 @@ def _enforce_ast_lock(original: str, patched: str) -> None:
         )
         raise PatchGuardrailViolation(
             f"AST lock rejected the patch ({verdict.reason}: {verdict.node_kind} at line "
-            f"{verdict.line}); only locator strings, timeouts, and wait methods may change"
+            f"{verdict.line}); only locator strings, timeouts, and wait methods may change",
+            ast_lock=verdict,
         )
     logger.info("ast_lock_passed", reason=verdict.reason)
 
@@ -570,6 +585,7 @@ def patch_generator(state: AgentState) -> dict:
                 instructions=output.instructions,
                 outcome="rejected",
                 rejection=str(exc),
+                ast_lock=ast_lock_verdict(exc),
             ),
             "evidence_history": add_loop_event(
                 state, "patch_generator", "application_rejected", error=str(exc)

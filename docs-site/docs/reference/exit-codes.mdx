@@ -17,14 +17,16 @@ parse it safely.
 ## JSON contract
 
 Every result contains a `schema_version` and `kind` discriminator. Current output is schema
-`"2.0"`: version 2 introduced the first-class `"refusal"` kind and its closed reason taxonomy.
-Consumers must reject unsupported schema majors and unknown `kind` or refusal-reason values.
+`"2.1"`: version 2 introduced the first-class `"refusal"` kind and its closed reason taxonomy,
+and 2.1 added the optional `ast_lock` detail on rejected candidates (a compatible minor change).
+Consumers must reject unsupported schema majors and unknown `kind` or refusal-reason values, and
+must ignore unknown optional fields within a supported major.
 See the [schema versioning and deprecation policy](./schema-versioning) for the compatibility
 and migration rules.
 
 | Field | `RepairSummary` | `RefusalReport` | `SuiteSummary` | `ReviewReport` |
 | --- | --- | --- | --- | --- |
-| `schema_version` | `"2.0"` | `"2.0"` | `"2.0"` | `"2.0"` |
+| `schema_version` | `"2.1"` | `"2.1"` | `"2.1"` | `"2.1"` |
 | `kind` | `"repair"` | `"refusal"` | `"suite"` | `"review"` |
 | `test_script_path` | ✔ | ✔ | — | ✔ |
 | `is_success` | ✔ | `false` | ✔ | — |
@@ -42,11 +44,28 @@ workspace artifact as provenance when available. The digest is over the redacted
 snapshot, not the source `error-context.md` bytes. Sensitive structured values and URL query
 values are redacted.
 
+### `ast_lock` on a rejected candidate
+
+When the structural AST lock refuses a candidate, that entry in `evidence.candidates` carries an
+`ast_lock` object. Otherwise the field is `null`: candidates refused by other checks (a stale
+line, a per-line scope gate, selector or shadow verification) explain themselves only in
+`rejection`.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `reason` | string | Why the lock refused. Currently `disallowed_ast_change`, `original_parse_error`, or `patched_parse_error`. An **open** set: ignore values you do not recognize. |
+| `node_kind` | string or `null` | The tree-sitter node type where the original and patched trees first diverge. This can be a container such as `program` when a statement was added or removed, not the added statement itself. |
+| `line` | integer or `null` | 1-based line of that node in the patched source, or of the parse error. |
+
+A run that ends in `reason: "guardrail_violation"` can still have candidates without `ast_lock`,
+because the per-line scope gates also raise guardrail violations. Use `ast_lock` to learn *what*
+the lock caught, not to decide *whether* a guardrail violation occurred.
+
 ### Example: successful single-file heal
 
 ```json
 {
-  "schema_version": "2.0",
+  "schema_version": "2.1",
   "kind": "repair",
   "test_script_path": "tests/login.spec.ts",
   "is_success": true,
@@ -67,7 +86,7 @@ values are redacted.
 
 ```json
 {
-  "schema_version": "2.0",
+  "schema_version": "2.1",
   "kind": "refusal",
   "test_script_path": "tests/login.spec.ts",
   "reason": "ambiguous_target",
@@ -84,20 +103,79 @@ values are redacted.
 }
 ```
 
+### Example: guardrail refusal with `ast_lock` detail
+
+Captured from the real repair graph with a stubbed provider that keeps proposing
+`const submit = page.locator('#new'); await page.goto('/admin');` for
+`const submit = page.locator('#old');`. It passes the per-line gates but appends a statement, so
+only the AST lock refuses it. Each of the three attempts produced a candidate like this one; the
+example keeps the first candidate and the first loop event.
+
+```json
+{
+  "schema_version": "2.1",
+  "kind": "refusal",
+  "test_script_path": "t.spec.ts",
+  "reason": "guardrail_violation",
+  "is_success": false,
+  "loop_count": 3,
+  "evidence": {
+    "parsed_error": "Error: waiting for locator('#old') timed out\ncall log: locator('#old') timed out",
+    "failing_selector": "#old",
+    "dom_diff_context": [],
+    "aria_snapshot": null,
+    "candidates": [
+      {
+        "loop_count": 0,
+        "source": "llm",
+        "instructions": [
+          {
+            "line": 1,
+            "original": "const submit = page.locator('#old');",
+            "replacement": "const submit = page.locator('#new'); await page.goto('/admin');",
+            "reason": "adds navigation",
+            "selector": ""
+          }
+        ],
+        "memory_score": null,
+        "shadow_score": null,
+        "selector_counts": {},
+        "test_passed": null,
+        "outcome": "rejected",
+        "rejection": "AST lock rejected the patch (disallowed_ast_change: program at line 1); only locator strings, timeouts, and wait methods may change",
+        "ast_lock": {
+          "reason": "disallowed_ast_change",
+          "node_kind": "program",
+          "line": 1
+        }
+      }
+    ],
+    "loop_history": [
+      {
+        "loop_count": 0,
+        "stage": "memory_lookup",
+        "outcome": "miss",
+        "details": { "score": 0.0, "error": null, "instruction_count": null, "reason": null }
+      }
+    ]
+  }
+}
+```
+
 ### Example: suite heal
 The nested `evidence` values below are abbreviated; see the single-file examples above for the
 complete evidence shape.
 
 ```json
 {
-  "schema_version": "2.0",
+  "schema_version": "2.1",
   "kind": "suite",
   "total_failed": 2,
   "healed": 1,
   "is_success": false,
   "results": [
     {
-      "schema_version": "2.0",
+      "schema_version": "2.1",
       "kind": "repair",
       "test_script_path": "tests/login.spec.ts",
       "is_success": true,
@@ -106,7 +184,7 @@ complete evidence shape.
       "evidence": {}
     },
     {
-      "schema_version": "2.0",
+      "schema_version": "2.1",
       "kind": "refusal",
       "test_script_path": "tests/checkout.spec.ts",
       "reason": "insufficient_evidence",

@@ -10,8 +10,10 @@ It applies to `RepairSummary`, `RefusalReport`, `SuiteSummary`, and `ReviewRepor
 
 ## Status and scope
 
-Schema `1.0` is the original published baseline. Schema `2.0` is the current output contract:
-it adds the `refusal` discriminator, closed refusal reasons, and evidence bundles. It is emitted
+Schema `1.0` is the original published baseline. Schema `2.0` added the `refusal`
+discriminator, closed refusal reasons, and evidence bundles. Schema `2.1` is the current output
+contract: it adds the optional `CandidateEvidence.ast_lock` detail object, a compatible minor
+change under the rules below. It is emitted
 by the CLI, documented for GitHub Action workflows, and consumed by the bundled Playwright
 Reporter and review-bot examples. A schema change is evaluated against this published contract,
 not merely against direct runtime checks in this repository.
@@ -116,3 +118,18 @@ closed `RefusalReason` enum public. Future additions must choose one of these de
 
 This rule prevents a refusal from being mistaken for an ordinary unsuccessful repair by a
 workflow that has not been updated to recognize it.
+
+### Worked example: schema 2.1
+
+Schema `2.1` added `ast_lock` (`reason`, `node_kind`, `line`) to rejected candidates so a
+guardrail refusal reports what the structural lock caught instead of only a message string. It was
+classified under this policy as follows:
+
+- It is an optional detail object whose absence does not change the meaning of any existing
+  field, so it is a **minor** change. A consumer written against `2.0` keeps working by ignoring
+  it.
+- `ast_lock.reason` is deliberately an **open string**, not a closed enum, because adding a value
+  to a closed enum would be a major change. Consumers must tolerate reasons they do not
+  recognize.
+- It is `null` when another check, not the AST lock, refused the candidate, so it must not be used
+  to decide whether a `guardrail_violation` occurred; that is the job of `reason`.
