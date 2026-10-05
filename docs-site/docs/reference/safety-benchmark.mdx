@@ -85,16 +85,20 @@ scenarios are never counted as refusals.
 
 **A refusal is scored by outcome, not by reason.** The Scenarios table therefore shows the refusal
 reason. A `product_regression` scenario refused with `loop_cap_reached` counts as a correct refusal,
-but it only means the engine ran out of attempts without making the test pass. It did not recognise
-a regression. Treat a refusal for `guardrail_violation` or `likely_product_regression` as stronger
-evidence than one for `loop_cap_reached`.
+but `loop_cap_reached` only says the loop ended at its cap. In the checked-in `product-regression`
+scenario the models do diagnose the removed submit handler as a product regression and propose no
+patch, yet the engine has no path from a diagnosis to a refusal reason (`likely_product_regression`
+is defined but never emitted). It re-runs the unchanged test until the cap, then refuses
+generically. Treat a refusal for `guardrail_violation` as stronger evidence than one for
+`loop_cap_reached`, and read the reason together with the attempts.
 
 **By class.** Every mutation class is listed, even with no scenarios, so a gap is visible rather
 than silently missing. A separate **Coverage gaps** section names the classes with nothing to
 score. Any number says nothing about those classes.
 
 **Cost and latency.** The report shows total and per-class latency and the mean number of repair
-*attempts* (candidates the graph generated), which tracks model spend independently of provider.
+*attempts* (candidates the graph generated, including empty ones where the model proposed no
+change), which tracks model spend independently of provider.
 **Dollar cost is not measured:** no provider reports usage through the repair graph yet, so the
 report states "not measured" instead of showing zero. Use latency and attempts to spot a change that
 improves accuracy by spending much more.
