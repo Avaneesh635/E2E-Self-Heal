@@ -1,0 +1,138 @@
+---
+title: "Safety benchmark"
+description: "Measure whether repairs were safe, not just whether they were produced: labeled scenarios, per-class results, and a non-blocking CI report."
+---
+
+# Safety benchmark
+
+`e2e-healer safety-benchmark` runs labeled scenarios through the real repair graph and reports
+whether each one ended the way it should. Some scenarios should be **repaired** (a selector
+drifted); others should be **refused** (the product behavior changed, so the right answer is to
+leave the failure alone). It is the only way to measure the claim that the tool refuses to guess.
+
+It is **informational**. It exits `0` whenever the run completes, whatever the scores, because
+release-gate thresholds are not decided yet ([#292](https://github.com/Lee-Dongwook/E2E-Self-Heal/issues/292)).
+It is separate from `e2e-healer benchmark`, which only measures prompt tokens.
+
+## Run it locally
+
+The scenarios share one demo app (`examples/demo-app`). `--apply-patches` makes sure the app is in
+each scenario's broken state before it runs, and restores whatever it changed. It needs a git
+checkout, a model API key, and Playwright browsers.
+
+```bash
+cd examples
+pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
+
+CI=1 E2E_HEALER_PLAYWRIGHT_CMD="npx playwright test --reporter=list" \
+  uv run e2e-healer safety-benchmark \
+    --scenario-root scenarios \
+    --apply-patches \
+    --output /tmp/safety-report.json \
+    --markdown /tmp/safety-report.md
+```
+
+- `CI=1` makes Playwright rebuild the preview server for every run. Without it, a server left
+  over from an earlier run is reused and may serve an app without the scenario's change, so the
+  scenario reports `error` ("passed before healing").
+- `--reporter=list` replaces the example config's second reporter, which runs
+  `e2e-healer review` on every failing test. Scenarios fail on purpose, so that would add
+  unrelated model calls and distort latency.
+- Progress logs can share stdout with the JSON report. Use `--output` for a clean file.
+
+| Flag | Meaning |
+| --- | --- |
+| `--scenario-root` | Directory of labeled scenario folders. Default `examples/scenarios`. |
+| `--apply-patches` | Put the app in each scenario's broken state first (see below). Off by default: scenarios must already be broken. |
+| `--output FILE` | Also write the JSON report. This is the diffable artifact and the format of a baseline. |
+| `--markdown FILE` | Also write the Markdown summary described below. |
+| `--baseline FILE` | A previous JSON report to compare against. A missing file means "no baseline yet". An invalid file exits with code `2`. |
+
+For each scenario, `--apply-patches` finds the demo app in one of three states:
+
+- **Change absent.** The scenario's `change.patch` is applied, and always reversed afterwards, even
+  if the scenario fails.
+- **Change already present.** Some scenarios ship the app pre-broken and keep the patch only as a
+  reference diff (`classname-rename` does). The scenario runs as-is and the app is left exactly as
+  it was found; nothing is reversed.
+- **Neither.** The app no longer matches what the patch describes. That scenario is reported as
+  `error` (it would otherwise be scored on the wrong app) and the run continues.
+
+If a patch that was applied cannot be reversed, the run stops with exit code `1` and writes no
+report, because every later scenario would run on a modified app. The error includes the
+`git apply --reverse` command that restores it.
+
+## Reading the report
+
+**Metrics.** Four rates, each shown with the number of scenarios it was computed over:
+
+| Metric | Computed over | Meaning |
+| --- | --- | --- |
+| False-green rate | `product_regression` scenarios | How often a real regression was "repaired". Lower is better. |
+| Repair precision | scenarios that were repaired | How often a repair was one that was expected. |
+| Correct-refusal rate | scenarios labeled `refuse` | How often a refusal was correct. |
+| Incorrect-refusal rate | scenarios labeled `repair` | How often a repairable scenario was refused. |
+
+A rate over two scenarios is not evidence. Always read it with its `n`. Errors and skipped
+scenarios are never counted as refusals.
+
+**By class.** Every mutation class is listed, even with no scenarios, so a gap is visible rather
+than silently missing. A separate **Coverage gaps** section names the classes with nothing to
+score. Any number says nothing about those classes.
+
+**Cost and latency.** The report shows total and per-class latency and the mean number of repair
+*attempts* (candidates the graph generated), which tracks model spend independently of provider.
+**Dollar cost is not measured:** no provider reports usage through the repair graph yet, so the
+report states "not measured" instead of showing zero. Use latency and attempts to spot a change that
+improves accuracy by spending much more.
+
+**Change vs baseline.** With `--baseline`, the Markdown adds a column per scenario (`repair → refuse`
+is highlighted), percentage-point movement per metric, the previous score per class when it changed,
+and the change in total latency and mean attempts.
+
+## Labeling a scenario
+
+Each scenario is a folder under the scenario root:
+
+```text
+scenarios/id-rename/
+  spec.ts        # exactly one Playwright test file
+  change.patch   # git patch (repo-root-relative paths) that breaks the demo app
+  meta.json
+```
+
+```json
+{
+  "class": "selector_drift",
+  "expected_outcome": "repair",
+  "failing_selector": "#submit-btn",
+  "rationale": "The button identifier changed while its behavior remains intact."
+}
+```
+
+`class` is one of `selector_drift`, `accessible_name_drift`, `timing`, `ambiguous`,
+`product_regression`, `environment`. `expected_outcome` is `repair` or `refuse`. `rationale` is
+required. Add `"runnable": false` for a static fixture that is labeled but is not a Playwright test
+(for example the prompt-context fixture used by the token benchmark). It is listed as `skipped` and
+excluded from every rate.
+
+## In CI
+
+`.github/workflows/safety-benchmark.yml` runs the benchmark and publishes the Markdown report as
+the run's step summary and the JSON and Markdown files as the `safety-report` artifact.
+
+- **Never blocks.** The job is `continue-on-error`, time-limited, and has read-only permissions.
+- **Skipped without a key.** It runs only when `E2E_HEALER_NVIDIA_API_KEY` is available, so pull
+  requests from forks, which cannot read secrets, skip it instead of failing. It uses the
+  `pull_request` trigger, never `pull_request_target`, so a fork's code never runs with the key.
+- **Runs when it can matter.** On pushes to `main`, weekly, on demand, and on pull requests that
+  change `app/`, `examples/`, `benchmarks/` or the dependency files, so documentation-only changes
+  spend no model calls.
+
+### Setting a baseline
+
+The comparison reads `benchmarks/safety-baseline.json`. Until that file exists the report simply
+has no deltas. To set or update it, take the JSON from a trusted run (the workflow artifact, or a
+local run with `--output benchmarks/safety-baseline.json`), review it, and commit it. Latency is
+part of the file, so expect it to change a little on every refresh.
