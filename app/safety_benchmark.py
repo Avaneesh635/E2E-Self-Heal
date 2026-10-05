@@ -66,7 +66,9 @@ class SafetyScenarioResult(BaseModel):
     expected_outcome: ExpectedOutcome
     actual_outcome: ActualOutcome
     latency_seconds: float = Field(ge=0)
-    # Repair candidates the graph generated: a provider-independent proxy for model spend.
+    # Candidates that proposed at least one change: a provider-independent proxy for model
+    # spend. A candidate where the model returned no instructions (it declined to patch) is
+    # not an attempt, so a scenario whose model never proposes a fix reports 0.
     attempts: int | None = Field(default=None, ge=0)
     # Why the graph refused, when it did. A refusal is scored by outcome, so this is what shows
     # a correct refusal reached for the wrong reason (for example ``loop_cap_reached`` on a
@@ -240,11 +242,12 @@ def execute_safety_scenario(scenario: SafetyScenario) -> SafetyScenarioResult:
         final_state = cast(AgentState, build_graph().invoke(initial_state))
         actual = ActualOutcome.REPAIR if final_state["is_success"] else ActualOutcome.REFUSE
         reason = final_state.get("refusal_reason")
+        proposed = [c for c in final_state.get("evidence_candidates", []) if c.get("instructions")]
         return _result(
             scenario,
             actual,
             started,
-            attempts=len(final_state.get("evidence_candidates", [])),
+            attempts=len(proposed),
             refusal_reason=reason.value if actual is ActualOutcome.REFUSE and reason else None,
         )
     except Exception as exc:

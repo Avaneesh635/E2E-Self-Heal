@@ -97,8 +97,9 @@ than silently missing. A separate **Coverage gaps** section names the classes wi
 score. Any number says nothing about those classes.
 
 **Cost and latency.** The report shows total and per-class latency and the mean number of repair
-*attempts* (candidates the graph generated, including empty ones where the model proposed no
-change), which tracks model spend independently of provider.
+*attempts* (candidates that proposed at least one change; a candidate where the model declined to
+patch is not counted, so a scenario where it never proposes a fix shows `0`), which tracks model
+spend independently of provider.
 **Dollar cost is not measured:** no provider reports usage through the repair graph yet, so the
 report states "not measured" instead of showing zero. Use latency and attempts to spot a change that
 improves accuracy by spending much more.

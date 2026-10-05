@@ -349,6 +349,10 @@ def test_cost_is_unavailable_unless_every_scored_scenario_reports_it() -> None:
 # --- executing one scenario through the graph (graph and Playwright stubbed) ---------
 
 
+_CHANGE = {"instructions": [{"line": 1}]}
+_NO_CHANGE = {"instructions": []}
+
+
 class _StubGraph:
     def __init__(self, final: dict[str, object], on_invoke=None) -> None:
         self._final = final
@@ -378,7 +382,7 @@ def test_a_refusal_records_why_the_graph_refused_and_how_many_attempts_it_took(
     final = {
         "is_success": False,
         "refusal_reason": RefusalReason.LOOP_CAP_REACHED,
-        "evidence_candidates": [{}, {}, {}],
+        "evidence_candidates": [_CHANGE, _CHANGE, _CHANGE],
     }
     monkeypatch.setattr(graph_module, "build_graph", lambda: _StubGraph(final))
 
@@ -389,6 +393,37 @@ def test_a_refusal_records_why_the_graph_refused_and_how_many_attempts_it_took(
     assert result.attempts == 3
 
 
+def test_a_candidate_with_no_instructions_is_not_a_repair_attempt(
+    monkeypatch: pytest.MonkeyPatch, graph_scenario: SafetyScenario
+) -> None:
+    # What the checked-in product-regression scenario does: the model diagnoses the failure,
+    # proposes no patch, and the loop re-runs the unchanged test until the cap.
+    final = {
+        "is_success": False,
+        "refusal_reason": RefusalReason.LOOP_CAP_REACHED,
+        "evidence_candidates": [_NO_CHANGE, _NO_CHANGE, _NO_CHANGE],
+    }
+    monkeypatch.setattr(graph_module, "build_graph", lambda: _StubGraph(final))
+
+    result = execute_safety_scenario(graph_scenario)
+
+    assert result.actual_outcome is ActualOutcome.REFUSE
+    assert result.refusal_reason == "loop_cap_reached"
+    assert result.attempts == 0
+
+
+def test_only_the_candidates_that_proposed_a_change_are_counted(
+    monkeypatch: pytest.MonkeyPatch, graph_scenario: SafetyScenario
+) -> None:
+    final = {
+        "is_success": True,
+        "evidence_candidates": [_NO_CHANGE, _CHANGE, _NO_CHANGE, _CHANGE],
+    }
+    monkeypatch.setattr(graph_module, "build_graph", lambda: _StubGraph(final))
+
+    assert execute_safety_scenario(graph_scenario).attempts == 2
+
+
 def test_a_repair_carries_no_refusal_reason(
     monkeypatch: pytest.MonkeyPatch, graph_scenario: SafetyScenario
 ) -> None:
@@ -396,7 +431,7 @@ def test_a_repair_carries_no_refusal_reason(
     final = {
         "is_success": True,
         "refusal_reason": RefusalReason.PROVIDER_ERROR,
-        "evidence_candidates": [{}],
+        "evidence_candidates": [_CHANGE],
     }
     monkeypatch.setattr(graph_module, "build_graph", lambda: _StubGraph(final))
 
