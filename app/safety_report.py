@@ -168,17 +168,19 @@ def _scenario_section(
     report: SafetyBenchmarkReport, baseline: SafetyBenchmarkReport | None
 ) -> list[str]:
     base_by_name = {r.name: r for r in baseline.results} if baseline is not None else {}
-    header = "| Scenario | Class | Expected | Actual | Latency | Attempts |"
-    divider = "| --- | --- | --- | --- | --- | --- |"
+    header = "| Scenario | Class | Expected | Actual | Refusal reason | Latency | Attempts |"
+    divider = "| --- | --- | --- | --- | --- | --- | --- |"
     if baseline is not None:
         header += " vs baseline |"
         divider += " --- |"
     rows = [header, divider]
     for result in report.results:
         attempts = "—" if result.attempts is None else str(result.attempts)
+        reason = "—" if result.refusal_reason is None else f"`{result.refusal_reason}`"
         row = (
             f"| {result.name} | `{result.scenario_class.value}` | {result.expected_outcome.value} "
-            f"| {result.actual_outcome.value} | {result.latency_seconds:.1f} s | {attempts} |"
+            f"| {result.actual_outcome.value} | {reason} | {result.latency_seconds:.1f} s "
+            f"| {attempts} |"
         )
         if baseline is not None:
             row += f" {_outcome_change(result, base_by_name.get(result.name))} |"

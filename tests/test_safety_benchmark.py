@@ -3,6 +3,10 @@ from pathlib import Path
 
 import pytest
 
+import app.graph as graph_module
+import app.runner as runner_module
+from app.config import settings
+from app.schemas import RefusalReason
 from app.safety_benchmark import (
     ActualOutcome,
     ExpectedOutcome,
@@ -11,10 +15,13 @@ from app.safety_benchmark import (
     ScenarioClass,
     ScenarioPatchError,
     ScenarioRestoreError,
+    ScenarioSandboxError,
     applied_scenario_patch,
+    assert_scenarios_writable,
     build_report,
     discover_safety_scenarios,
     execute_prepared_scenario,
+    execute_safety_scenario,
     run_safety_benchmark,
 )
 
@@ -158,6 +165,55 @@ def test_every_runnable_checked_in_scenario_matches_the_demo_app_in_some_state()
         )
 
 
+def _scenario_at(test_path: Path, *, runnable: bool = True) -> SafetyScenario:
+    return SafetyScenario.model_validate(
+        {
+            "name": "s",
+            "class": ScenarioClass.SELECTOR_DRIFT,
+            "expected_outcome": ExpectedOutcome.REPAIR,
+            "failing_selector": "#x",
+            "rationale": "A labeled scenario.",
+            "test_path": test_path,
+            "diff_path": test_path.parent / "change.patch",
+            "runnable": runnable,
+        }
+    )
+
+
+def test_a_scenario_file_the_sandbox_forbids_writing_fails_fast_with_guidance(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(settings, "sandbox_mode", "relaxed")
+    monkeypatch.setattr(settings, "write_globs", "*.spec.ts,**/*.spec.ts")
+
+    with pytest.raises(ScenarioSandboxError, match="E2E_HEALER_WRITE_GLOBS") as caught:
+        # A file literally named spec.ts does not match `*.spec.ts`.
+        assert_scenarios_writable([_scenario_at(tmp_path / "spec.ts")])
+
+    assert "s: " in str(caught.value)
+
+
+def test_scenario_files_the_sandbox_allows_pass_the_preflight(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(settings, "sandbox_mode", "relaxed")
+    monkeypatch.setattr(settings, "write_globs", "*.spec.ts,**/*.spec.ts,spec.ts,**/spec.ts")
+
+    assert_scenarios_writable(
+        [_scenario_at(tmp_path / "spec.ts"), _scenario_at(tmp_path / "login.spec.ts")]
+    )
+
+
+def test_the_preflight_ignores_scenarios_that_are_not_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A static fixture is never edited, so its filename must not matter.
+    monkeypatch.setattr(settings, "sandbox_mode", "relaxed")
+    monkeypatch.setattr(settings, "write_globs", "*.spec.ts,**/*.spec.ts")
+
+    assert_scenarios_writable([_scenario_at(tmp_path / "fixture.tsx", runnable=False)])
+
+
 def test_runnable_defaults_to_true_and_is_read_from_metadata(tmp_path: Path) -> None:
     for name, extra in (("default", ""), ("static", ',"runnable":false')):
         directory = tmp_path / name
@@ -288,6 +344,96 @@ def test_cost_is_unavailable_unless_every_scored_scenario_reports_it() -> None:
     assert unmeasured.total_model_cost_usd is None
     assert partial.total_model_cost_usd is None
     assert measured.total_model_cost_usd == 0.03
+
+
+# --- executing one scenario through the graph (graph and Playwright stubbed) ---------
+
+
+class _StubGraph:
+    def __init__(self, final: dict[str, object], on_invoke=None) -> None:
+        self._final = final
+        self._on_invoke = on_invoke
+
+    def invoke(self, state: dict[str, object]) -> dict[str, object]:
+        if self._on_invoke is not None:
+            self._on_invoke(state)
+        return {**state, **self._final}
+
+
+@pytest.fixture
+def graph_scenario(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SafetyScenario:
+    monkeypatch.setattr(settings, "sandbox_mode", "relaxed")
+    monkeypatch.setattr(settings, "write_globs", "*.spec.ts,**/*.spec.ts")
+    (tmp_path / "s.spec.ts").write_text("await page.click('#old')\n")
+    (tmp_path / "change.patch").write_text("")
+    monkeypatch.setattr(
+        runner_module, "run_playwright", lambda path: (False, "Error: locator('#old') timed out")
+    )
+    return _scenario_at(tmp_path / "s.spec.ts")
+
+
+def test_a_refusal_records_why_the_graph_refused_and_how_many_attempts_it_took(
+    monkeypatch: pytest.MonkeyPatch, graph_scenario: SafetyScenario
+) -> None:
+    final = {
+        "is_success": False,
+        "refusal_reason": RefusalReason.LOOP_CAP_REACHED,
+        "evidence_candidates": [{}, {}, {}],
+    }
+    monkeypatch.setattr(graph_module, "build_graph", lambda: _StubGraph(final))
+
+    result = execute_safety_scenario(graph_scenario)
+
+    assert result.actual_outcome is ActualOutcome.REFUSE
+    assert result.refusal_reason == "loop_cap_reached"
+    assert result.attempts == 3
+
+
+def test_a_repair_carries_no_refusal_reason(
+    monkeypatch: pytest.MonkeyPatch, graph_scenario: SafetyScenario
+) -> None:
+    # A reason left over in state from an earlier retry must not be attributed to a repair.
+    final = {
+        "is_success": True,
+        "refusal_reason": RefusalReason.PROVIDER_ERROR,
+        "evidence_candidates": [{}],
+    }
+    monkeypatch.setattr(graph_module, "build_graph", lambda: _StubGraph(final))
+
+    result = execute_safety_scenario(graph_scenario)
+
+    assert result.actual_outcome is ActualOutcome.REPAIR
+    assert result.refusal_reason is None
+    assert result.attempts == 1
+
+
+def test_a_scenario_that_already_passes_is_an_error_and_never_reaches_the_graph(
+    monkeypatch: pytest.MonkeyPatch, graph_scenario: SafetyScenario
+) -> None:
+    monkeypatch.setattr(runner_module, "run_playwright", lambda path: (True, ""))
+    monkeypatch.setattr(graph_module, "build_graph", lambda: pytest.fail("the graph must not run"))
+
+    result = execute_safety_scenario(graph_scenario)
+
+    assert result.actual_outcome is ActualOutcome.ERROR
+    assert result.error is not None
+    assert "passed before healing" in result.error
+
+
+def test_the_scenario_test_file_is_restored_after_the_graph_edits_it(
+    monkeypatch: pytest.MonkeyPatch, graph_scenario: SafetyScenario
+) -> None:
+    original = graph_scenario.test_path.read_text()
+
+    def edit(state: dict[str, object]) -> None:
+        graph_scenario.test_path.write_text("await page.click('#new')\n")
+
+    final = {"is_success": True, "evidence_candidates": [{}]}
+    monkeypatch.setattr(graph_module, "build_graph", lambda: _StubGraph(final, on_invoke=edit))
+
+    execute_safety_scenario(graph_scenario)
+
+    assert graph_scenario.test_path.read_text() == original
 
 
 # --- scenario preparation against a real git repository -----------------------------

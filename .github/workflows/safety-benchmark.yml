@@ -97,6 +97,9 @@ jobs:
           # failing test. Benchmark scenarios fail on purpose, so that would add unrelated model
           # calls and distort latency. Use the plain list reporter.
           E2E_HEALER_PLAYWRIGHT_CMD: npx playwright test --reporter=list
+          # The default write globs match `*.spec.ts`, not a file literally named `spec.ts`,
+          # which is what the scenarios are called. Without this every repair is denied.
+          E2E_HEALER_WRITE_GLOBS: "*.spec.ts,**/*.spec.ts,spec.ts,**/spec.ts"
         run: |
           uv run e2e-healer safety-benchmark \
             --scenario-root scenarios \

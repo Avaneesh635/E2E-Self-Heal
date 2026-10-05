@@ -29,6 +29,8 @@ from app.preprocess.failure_scanner import scan_failing_tests
 from app.runner import run_playwright
 from app.safety_benchmark import (
     ScenarioRestoreError,
+    ScenarioSandboxError,
+    assert_scenarios_writable,
     discover_safety_scenarios,
     execute_prepared_scenario,
     execute_safety_scenario,
@@ -701,9 +703,15 @@ def safety_benchmark(
             console.print(
                 f"[yellow]no baseline at {escape(str(baseline))}; skipping deltas[/yellow]"
             )
+    scenarios = discover_safety_scenarios(scenario_root)
+    try:
+        assert_scenarios_writable(scenarios)
+    except ScenarioSandboxError as exc:
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        raise typer.Exit(code=2) from exc
     executor = execute_prepared_scenario if apply_patches else execute_safety_scenario
     try:
-        report = run_safety_benchmark(discover_safety_scenarios(scenario_root), executor)
+        report = run_safety_benchmark(scenarios, executor)
     except ScenarioRestoreError as exc:
         # The working tree is still modified, so continuing would benchmark a wrong app.
         console.print(f"[red]aborting, working tree not restored:[/red] {escape(str(exc))}")

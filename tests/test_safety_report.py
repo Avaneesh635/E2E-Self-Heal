@@ -6,6 +6,7 @@ from typer.testing import CliRunner
 
 import app.cli as cli_module
 from app.cli import app
+from app.config import settings
 from app.safety_benchmark import (
     ActualOutcome,
     ExpectedOutcome,
@@ -30,6 +31,7 @@ def _result(
     latency: float = 2,
     attempts: int | None = 1,
     error: str | None = None,
+    refusal_reason: str | None = None,
 ) -> SafetyScenarioResult:
     return SafetyScenarioResult(
         name=name,
@@ -39,6 +41,7 @@ def _result(
         latency_seconds=latency,
         attempts=attempts,
         error=error,
+        refusal_reason=refusal_reason,
     )
 
 
@@ -98,6 +101,28 @@ def test_markdown_reports_skipped_scenarios_without_scoring_them() -> None:
 
     assert "**1 scored, 1 skipped, 0 errors**" in text
     assert "| `selector_drift` | 1 (+1 skipped) |" in text
+
+
+def test_markdown_shows_why_a_scenario_was_refused() -> None:
+    # A refusal is scored by outcome alone, so the reason is what reveals a correct refusal
+    # that happened only because the engine ran out of attempts.
+    report = build_report(
+        [
+            _result(
+                "product-regression",
+                _REGRESSION,
+                ActualOutcome.REFUSE,
+                refusal_reason="loop_cap_reached",
+            ),
+            _result("id-rename", _DRIFT, ActualOutcome.REPAIR),
+        ]
+    )
+
+    text = render_markdown(report)
+
+    assert "| Refusal reason |" in text
+    assert "| refuse | `loop_cap_reached` |" in text
+    assert "| repair | — |" in text
 
 
 def test_markdown_truncates_and_flattens_error_messages() -> None:
@@ -233,6 +258,13 @@ def test_an_invalid_baseline_is_an_error_not_silently_ignored(tmp_path: Path) ->
 # --- CLI ----------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _default_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Pin the policy so these tests do not depend on a developer's .env.
+    monkeypatch.setattr(settings, "sandbox_mode", "relaxed")
+    monkeypatch.setattr(settings, "write_globs", "*.spec.ts,**/*.spec.ts")
+
+
 @pytest.fixture
 def scenario_root(tmp_path: Path) -> Path:
     root = tmp_path / "scenarios"
@@ -242,7 +274,7 @@ def scenario_root(tmp_path: Path) -> Path:
     ):
         directory = root / name
         directory.mkdir(parents=True)
-        (directory / "spec.ts").write_text("")
+        (directory / f"{name}.spec.ts").write_text("")
         (directory / "change.patch").write_text("")
         (directory / "meta.json").write_text(
             json.dumps(
@@ -424,6 +456,37 @@ def test_cli_aborts_with_a_failure_when_the_working_tree_cannot_be_restored(
     assert "working tree not restored" in result.stderr
     # A partial report from a run on a compromised tree must not be written.
     assert not json_out.exists()
+
+
+def test_cli_fails_fast_when_the_sandbox_forbids_writing_scenario_files(
+    monkeypatch: pytest.MonkeyPatch, scenario_root: Path
+) -> None:
+    # The demo scenarios are literally named spec.ts, which the default globs do not match.
+    (scenario_root / "alpha" / "alpha.spec.ts").rename(scenario_root / "alpha" / "spec.ts")
+    monkeypatch.setattr(
+        cli_module,
+        "execute_safety_scenario",
+        lambda scenario: pytest.fail("nothing may run when no repair could be written"),
+    )
+
+    result = CliRunner().invoke(app, ["safety-benchmark", "--scenario-root", str(scenario_root)])
+
+    assert result.exit_code == 2
+    message = " ".join(result.stderr.split())
+    assert "alpha" in message
+    assert "E2E_HEALER_WRITE_GLOBS" in message
+
+
+def test_cli_runs_when_the_write_globs_allow_spec_ts(
+    monkeypatch: pytest.MonkeyPatch, scenario_root: Path
+) -> None:
+    (scenario_root / "alpha" / "alpha.spec.ts").rename(scenario_root / "alpha" / "spec.ts")
+    monkeypatch.setattr(settings, "write_globs", "*.spec.ts,**/*.spec.ts,spec.ts,**/spec.ts")
+    monkeypatch.setattr(cli_module, "execute_safety_scenario", _stub_executor(ActualOutcome.REPAIR))
+
+    result = CliRunner().invoke(app, ["safety-benchmark", "--scenario-root", str(scenario_root)])
+
+    assert result.exit_code == 0
 
 
 def test_cli_rejects_a_missing_scenario_root(tmp_path: Path) -> None:

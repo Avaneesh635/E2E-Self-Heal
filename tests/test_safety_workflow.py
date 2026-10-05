@@ -91,6 +91,18 @@ def test_the_benchmark_breaks_the_demo_app_itself_and_avoids_the_review_reporter
     assert step["working-directory"] == "examples"
 
 
+def test_the_sandbox_lets_the_engine_edit_the_scenarios_named_spec_ts(
+    job: dict[str, Any],
+) -> None:
+    (step,) = _steps_running(job, "safety-benchmark")
+    globs = step["env"]["E2E_HEALER_WRITE_GLOBS"].split(",")
+
+    # The default globs only match `*.spec.ts`; the scenarios are literally named spec.ts.
+    assert "**/spec.ts" in globs
+    # It must stay a narrow allowance, not a wildcard over the workspace.
+    assert not any(glob in {"*", "**/*", "**"} for glob in globs)
+
+
 def test_the_report_is_published_even_when_the_benchmark_step_fails(job: dict[str, Any]) -> None:
     (summary,) = _steps_running(job, "GITHUB_STEP_SUMMARY")
     (upload,) = [step for step in job["steps"] if "upload-artifact" in step.get("uses", "")]

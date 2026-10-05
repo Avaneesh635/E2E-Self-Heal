@@ -14,7 +14,7 @@ from typing import cast
 import structlog
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.sandbox import assert_command_allowed
+from app.sandbox import SandboxViolation, assert_command_allowed, assert_write_allowed
 from app.state import AgentState
 from app.utils.files import atomic_write
 
@@ -68,6 +68,10 @@ class SafetyScenarioResult(BaseModel):
     latency_seconds: float = Field(ge=0)
     # Repair candidates the graph generated: a provider-independent proxy for model spend.
     attempts: int | None = Field(default=None, ge=0)
+    # Why the graph refused, when it did. A refusal is scored by outcome, so this is what shows
+    # a correct refusal reached for the wrong reason (for example ``loop_cap_reached`` on a
+    # product regression means it ran out of attempts, not that it recognised the regression).
+    refusal_reason: str | None = None
     # Not populated yet: no provider reports usage through the repair graph. ``None`` means
     # "not measured", never zero.
     model_cost_usd: float | None = Field(default=None, ge=0)
@@ -126,6 +130,10 @@ class ScenarioRestoreError(RuntimeError):
     """The working tree could not be restored after a scenario. The run must stop."""
 
 
+class ScenarioSandboxError(RuntimeError):
+    """The sandbox forbids editing scenario test files, so no repair could be applied."""
+
+
 def discover_safety_scenarios(root: Path) -> tuple[SafetyScenario, ...]:
     """Load scenario metadata in deterministic directory-name order."""
     scenarios: list[SafetyScenario] = []
@@ -148,12 +156,36 @@ def discover_safety_scenarios(root: Path) -> tuple[SafetyScenario, ...]:
     return tuple(scenarios)
 
 
+def assert_scenarios_writable(scenarios: Iterable[SafetyScenario]) -> None:
+    """Fail fast if the sandbox would stop the repair engine from editing a scenario's test.
+
+    The default write globs only match ``*.spec.ts`` and ``*.test.ts`` style names, so a file
+    literally named ``spec.ts`` is not writable. Without this check every scenario would spend
+    a browser run and a model call, then fail on its first write with a generic denial.
+    """
+    denied: list[str] = []
+    for scenario in scenarios:
+        if not scenario.runnable:
+            continue
+        try:
+            assert_write_allowed(scenario.test_path, reason="repair_target")
+        except SandboxViolation as exc:
+            denied.append(f"{scenario.name}: {exc}")
+    if denied:
+        raise ScenarioSandboxError(
+            "the sandbox forbids writing these scenario test files, so no repair could be "
+            "applied: " + "; ".join(denied) + ". Allow them with E2E_HEALER_WRITE_GLOBS, "
+            "for example `*.spec.ts,**/*.spec.ts,spec.ts,**/spec.ts`."
+        )
+
+
 def _result(
     scenario: SafetyScenario,
     outcome: ActualOutcome,
     started: float,
     *,
     attempts: int | None = None,
+    refusal_reason: str | None = None,
     error: str | None = None,
 ) -> SafetyScenarioResult:
     return SafetyScenarioResult(
@@ -163,6 +195,7 @@ def _result(
         actual_outcome=outcome,
         latency_seconds=round(time.monotonic() - started, 3),
         attempts=attempts,
+        refusal_reason=refusal_reason,
         error=error,
     )
 
@@ -206,11 +239,13 @@ def execute_safety_scenario(scenario: SafetyScenario) -> SafetyScenarioResult:
         }
         final_state = cast(AgentState, build_graph().invoke(initial_state))
         actual = ActualOutcome.REPAIR if final_state["is_success"] else ActualOutcome.REFUSE
+        reason = final_state.get("refusal_reason")
         return _result(
             scenario,
             actual,
             started,
             attempts=len(final_state.get("evidence_candidates", [])),
+            refusal_reason=reason.value if actual is ActualOutcome.REFUSE and reason else None,
         )
     except Exception as exc:
         return _result(scenario, ActualOutcome.ERROR, started, error=str(exc))
