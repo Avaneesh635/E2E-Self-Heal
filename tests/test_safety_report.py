@@ -32,6 +32,7 @@ def _result(
     attempts: int | None = 1,
     error: str | None = None,
     refusal_reason: str | None = None,
+    declined: int | None = None,
 ) -> SafetyScenarioResult:
     return SafetyScenarioResult(
         name=name,
@@ -40,6 +41,7 @@ def _result(
         actual_outcome=actual,
         latency_seconds=latency,
         attempts=attempts,
+        declined=declined,
         error=error,
         refusal_reason=refusal_reason,
     )
@@ -123,6 +125,36 @@ def test_markdown_shows_why_a_scenario_was_refused() -> None:
     assert "| Refusal reason |" in text
     assert "| refuse | `loop_cap_reached` |" in text
     assert "| repair | — |" in text
+
+
+def test_markdown_separates_patches_proposed_from_declines() -> None:
+    # The signature of the empty-patch loop: nothing proposed, several declines, refused at the cap.
+    report = build_report(
+        [
+            _result(
+                "product-regression",
+                _REGRESSION,
+                ActualOutcome.REFUSE,
+                attempts=0,
+                declined=3,
+                refusal_reason="loop_cap_reached",
+            ),
+            _result("id-rename", _DRIFT, ActualOutcome.REPAIR, attempts=2, declined=0),
+        ]
+    )
+
+    text = render_markdown(report)
+
+    assert "| Attempts | Declined |" in text
+    assert "| `loop_cap_reached` | 2.0 s | 0 | 3 |" in text
+    assert "| repair | — | 2.0 s | 2 | 0 |" in text
+
+
+def test_a_scenario_without_a_decline_count_renders_a_dash() -> None:
+    # Errors and reports saved before the field existed have no count; not zero.
+    report = build_report([_result("broken", _DRIFT, ActualOutcome.ERROR, attempts=None)])
+
+    assert "| — | — |" in render_markdown(report)
 
 
 def test_markdown_truncates_and_flattens_error_messages() -> None:

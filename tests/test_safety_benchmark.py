@@ -391,6 +391,7 @@ def test_a_refusal_records_why_the_graph_refused_and_how_many_attempts_it_took(
     assert result.actual_outcome is ActualOutcome.REFUSE
     assert result.refusal_reason == "loop_cap_reached"
     assert result.attempts == 3
+    assert result.declined == 0
 
 
 def test_a_candidate_with_no_instructions_is_not_a_repair_attempt(
@@ -410,6 +411,8 @@ def test_a_candidate_with_no_instructions_is_not_a_repair_attempt(
     assert result.actual_outcome is ActualOutcome.REFUSE
     assert result.refusal_reason == "loop_cap_reached"
     assert result.attempts == 0
+    # They are not lost: the report counts them separately as declines.
+    assert result.declined == 3
 
 
 def test_only_the_candidates_that_proposed_a_change_are_counted(
@@ -421,7 +424,9 @@ def test_only_the_candidates_that_proposed_a_change_are_counted(
     }
     monkeypatch.setattr(graph_module, "build_graph", lambda: _StubGraph(final))
 
-    assert execute_safety_scenario(graph_scenario).attempts == 2
+    result = execute_safety_scenario(graph_scenario)
+
+    assert (result.attempts, result.declined) == (2, 2)
 
 
 def test_a_repair_carries_no_refusal_reason(

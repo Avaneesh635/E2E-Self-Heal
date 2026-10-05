@@ -70,6 +70,10 @@ class SafetyScenarioResult(BaseModel):
     # spend. A candidate where the model returned no instructions (it declined to patch) is
     # not an attempt, so a scenario whose model never proposes a fix reports 0.
     attempts: int | None = Field(default=None, ge=0)
+    # Candidates where the model returned no instructions. The engine does not treat that as a
+    # signal, so each one re-runs the unchanged test. Many declines with ``loop_cap_reached``
+    # is the signature of a model that diagnosed a problem no selector fix can solve.
+    declined: int | None = Field(default=None, ge=0)
     # Why the graph refused, when it did. A refusal is scored by outcome, so this is what shows
     # a correct refusal reached for the wrong reason (for example ``loop_cap_reached`` on a
     # product regression means it ran out of attempts, not that it recognised the regression).
@@ -187,6 +191,7 @@ def _result(
     started: float,
     *,
     attempts: int | None = None,
+    declined: int | None = None,
     refusal_reason: str | None = None,
     error: str | None = None,
 ) -> SafetyScenarioResult:
@@ -197,6 +202,7 @@ def _result(
         actual_outcome=outcome,
         latency_seconds=round(time.monotonic() - started, 3),
         attempts=attempts,
+        declined=declined,
         refusal_reason=refusal_reason,
         error=error,
     )
@@ -242,12 +248,14 @@ def execute_safety_scenario(scenario: SafetyScenario) -> SafetyScenarioResult:
         final_state = cast(AgentState, build_graph().invoke(initial_state))
         actual = ActualOutcome.REPAIR if final_state["is_success"] else ActualOutcome.REFUSE
         reason = final_state.get("refusal_reason")
-        proposed = [c for c in final_state.get("evidence_candidates", []) if c.get("instructions")]
+        candidates = final_state.get("evidence_candidates", [])
+        proposed = [c for c in candidates if c.get("instructions")]
         return _result(
             scenario,
             actual,
             started,
             attempts=len(proposed),
+            declined=len(candidates) - len(proposed),
             refusal_reason=reason.value if actual is ActualOutcome.REFUSE and reason else None,
         )
     except Exception as exc:

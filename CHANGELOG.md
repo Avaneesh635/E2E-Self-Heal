@@ -10,7 +10,8 @@ All notable changes to this project are documented here. The format is based on
 - **Safety benchmark report and non-blocking CI job** — `e2e-healer safety-benchmark` now
   reports results per mutation class (all six classes are listed, so coverage gaps are visible),
   the number of scenarios behind each rate, total and per-class latency, and mean repair
-  attempts (candidates that proposed a change; a model that declines to patch reports 0).
+  attempts (candidates that proposed a change; a model that declines to patch reports 0) and,
+  separately, how many times it declined to patch.
   `--output` writes the diffable JSON report, `--markdown` a summary, and `--baseline`
   compares against a previous run (outcome flips, percentage-point movement, latency and
   attempts). `--apply-patches` breaks the demo app with each scenario's `change.patch` and always

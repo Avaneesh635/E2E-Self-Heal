@@ -99,7 +99,10 @@ score. Any number says nothing about those classes.
 **Cost and latency.** The report shows total and per-class latency and the mean number of repair
 *attempts* (candidates that proposed at least one change; a candidate where the model declined to
 patch is not counted, so a scenario where it never proposes a fix shows `0`), which tracks model
-spend independently of provider.
+spend independently of provider. The **Declined** column counts those empty candidates
+separately. Each one still costs a Diagnoser call, a Patch Generator call and a full re-run of the
+unchanged test, so `0` attempts with several declines and `loop_cap_reached` is the signature of a
+model that diagnosed a problem no selector fix can solve while the engine kept looping.
 **Dollar cost is not measured:** no provider reports usage through the repair graph yet, so the
 report states "not measured" instead of showing zero. Use latency and attempts to spot a change that
 improves accuracy by spending much more.
