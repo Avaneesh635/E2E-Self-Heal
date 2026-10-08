@@ -7,8 +7,9 @@ from pydantic import BaseModel, Field
 
 # Version of the machine-readable CI contract emitted as `--json`. Version 2 adds the
 # ``refusal`` discriminator and closed refusal reasons, which the published compatibility
-# policy classifies as a breaking change.
-SCHEMA_VERSION: Literal["2.0"] = "2.0"
+# policy classifies as a breaking change. Version 2.1 adds the optional
+# ``CandidateEvidence.ast_lock`` detail object, a compatible minor addition.
+SCHEMA_VERSION: Literal["2.1"] = "2.1"
 
 
 class DomDiff(BaseModel):
@@ -81,12 +82,31 @@ class SnapshotReference(BaseModel):
     """Stable reference to a redacted failure-time ARIA snapshot."""
 
     sha256: str = Field(description="SHA-256 digest of the redacted extracted snapshot content")
-    sha256: str = Field(description="SHA-256 digest of the redacted snapshot content")
     source_path: str | None = Field(
         default=None,
         description="workspace-relative error-context.md provenance path, when available",
     )
     chars: int = Field(ge=0, description="character count of the redacted snapshot")
+
+
+class AstLockRejection(BaseModel):
+    """What the structural AST lock rejected in a refused candidate.
+
+    ``reason`` is an open string, not a closed enum: the lock may report new reasons without
+    a schema major bump, so consumers must tolerate values they do not recognize. Current
+    values are ``disallowed_ast_change``, ``original_parse_error`` and ``patched_parse_error``.
+    """
+
+    reason: str = Field(description="why the lock rejected the candidate")
+    node_kind: str | None = Field(
+        default=None,
+        description="tree-sitter node type of the first offending node, when one is known",
+    )
+    line: int | None = Field(
+        default=None,
+        ge=1,
+        description="1-based line of the offending node in the patched (or unparsable) source",
+    )
 
 
 class CandidateEvidence(BaseModel):
@@ -101,6 +121,13 @@ class CandidateEvidence(BaseModel):
     test_passed: bool | None = None
     outcome: Literal["generated", "accepted", "rejected"] = "generated"
     rejection: str | None = None
+    ast_lock: AstLockRejection | None = Field(
+        default=None,
+        description=(
+            "structured AST lock verdict when the lock rejected this candidate; absent for "
+            "rejections from other checks, whose cause is only in ``rejection``"
+        ),
+    )
 
 
 class LoopEvidenceDetails(BaseModel):
@@ -153,7 +180,7 @@ class EvidenceBundle(BaseModel):
 class RefusalReport(BaseModel):
     """Machine-readable outcome when the repair workflow refuses to change a test."""
 
-    schema_version: Literal["2.0"] = Field(
+    schema_version: Literal["2.1"] = Field(
         default=SCHEMA_VERSION,
         description="version of this machine-readable contract; bump on breaking changes",
     )
@@ -180,7 +207,7 @@ class RefusalReport(BaseModel):
 class RepairSummary(BaseModel):
     """Machine-readable result emitted for the CI wrapper to consume."""
 
-    schema_version: Literal["2.0"] = Field(
+    schema_version: Literal["2.1"] = Field(
         default=SCHEMA_VERSION,
         description="version of this machine-readable contract; bump on breaking changes",
     )
@@ -201,7 +228,7 @@ HealResult = Annotated[RepairSummary | RefusalReport, Field(discriminator="kind"
 class SuiteSummary(BaseModel):
     """Aggregate result when healing a whole suite (multiple failing tests)."""
 
-    schema_version: Literal["2.0"] = Field(
+    schema_version: Literal["2.1"] = Field(
         default=SCHEMA_VERSION,
         description="version of this machine-readable contract; bump on breaking changes",
     )
@@ -248,7 +275,7 @@ class ReviewOutput(BaseModel):
 class ReviewReport(BaseModel):
     """Machine-readable review result emitted for the CI wrapper to post as PR comments."""
 
-    schema_version: Literal["2.0"] = Field(
+    schema_version: Literal["2.1"] = Field(
         default=SCHEMA_VERSION,
         description="version of this machine-readable contract; bump on breaking changes",
     )

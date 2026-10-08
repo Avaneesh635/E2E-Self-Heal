@@ -6,7 +6,7 @@ import structlog
 
 from app.evidence import add_candidate, add_loop_event
 from app.healing_history import find_match
-from app.nodes.patch_generator import PatchApplicationError, _apply
+from app.nodes.patch_generator import PatchApplicationError, _apply, ast_lock_verdict
 from app.sandbox import SandboxViolation, assert_patch_boundary_allowed
 from app.schemas import PatchInstruction
 from app.state import AgentState
@@ -65,6 +65,7 @@ def memory_lookup(state: AgentState) -> dict:
                 memory_score=score,
                 outcome="rejected",
                 rejection=str(exc),
+                ast_lock=ast_lock_verdict(exc),
             ),
         }
     logger.info("memory_hit", score=score, source=record.source)

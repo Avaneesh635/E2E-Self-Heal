@@ -45,6 +45,14 @@ class EvidenceInstructionRecord(TypedDict):
     selector: str
 
 
+class EvidenceAstLockRecord(TypedDict):
+    """Serialized AST lock verdict retained on a rejected candidate."""
+
+    reason: str
+    node_kind: str | None
+    line: int | None
+
+
 class EvidenceCandidateRecord(TypedDict):
     """One ordered candidate record captured while traversing the repair graph."""
 
@@ -57,6 +65,7 @@ class EvidenceCandidateRecord(TypedDict):
     shadow_score: NotRequired[float]
     selector_counts: NotRequired[dict[str, int]]
     test_passed: NotRequired[bool]
+    ast_lock: NotRequired[EvidenceAstLockRecord]
 
 
 class EvidenceLoopDetails(TypedDict, total=False):

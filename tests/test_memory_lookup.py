@@ -128,6 +128,9 @@ def test_memory_lookup_rejects_a_history_candidate_that_violates_the_ast_lock(
     candidate = result["evidence_candidates"][0]
     assert candidate["source"] == "memory"
     assert candidate["outcome"] == "rejected"
+    assert candidate["ast_lock"]["reason"] == "disallowed_ast_change"
+    assert candidate["ast_lock"]["node_kind"]
+    assert candidate["ast_lock"]["line"] == 1
 
 
 def test_memory_lookup_rejects_duplicate_source_lines_without_mutating(
@@ -170,3 +173,5 @@ def test_memory_lookup_rejects_duplicate_source_lines_without_mutating(
     assert candidate["memory_score"] is not None
     assert candidate["outcome"] == "rejected"
     assert "matched 2" in candidate["rejection"]
+    # Not an AST lock rejection, so no lock verdict is attributed.
+    assert "ast_lock" not in candidate

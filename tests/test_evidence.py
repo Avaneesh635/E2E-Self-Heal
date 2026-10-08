@@ -4,8 +4,9 @@ from pathlib import Path
 import pytest
 
 from app.evidence import add_candidate, add_loop_event, build_evidence_bundle
-from app.schemas import EvidenceDomDiff, PatchInstruction
+from app.schemas import AstLockRejection, EvidenceDomDiff, PatchInstruction
 from app.state import AgentState
+from app.verify.ast_lock import AstLockVerdict
 
 
 def _state(**overrides: object) -> AgentState:
@@ -77,6 +78,62 @@ def test_evidence_bundle_redacts_sensitive_values_and_references_snapshot(
         bundle.aria_snapshot.sha256
         == hashlib.sha256(b"page: https://example.test/?token=[REDACTED]").hexdigest()
     )
+
+
+def _instruction() -> PatchInstruction:
+    return PatchInstruction(
+        line=1,
+        original="page.locator('#old')",
+        replacement="page.locator('#new')",
+        reason="id renamed",
+        selector="#new",
+    )
+
+
+def test_rejected_candidate_carries_the_ast_lock_verdict_into_the_bundle() -> None:
+    verdict = AstLockVerdict(
+        allowed=False, reason="disallowed_ast_change", node_kind="expression_statement", line=3
+    )
+    candidates = add_candidate(
+        _state(),
+        source="llm",
+        instructions=[_instruction()],
+        outcome="rejected",
+        rejection="AST lock rejected the patch",
+        ast_lock=verdict,
+    )
+
+    bundle = build_evidence_bundle(
+        _state(evidence_candidates=candidates),
+        initial_error_log="Error: locator('#old') timed out",
+    )
+
+    assert bundle.candidates[0].ast_lock == AstLockRejection(
+        reason="disallowed_ast_change", node_kind="expression_statement", line=3
+    )
+
+
+def test_an_allowing_verdict_is_not_recorded_as_a_rejection() -> None:
+    allowed = AstLockVerdict(allowed=True, reason="structurally_equivalent")
+
+    candidates = add_candidate(
+        _state(), source="llm", instructions=[_instruction()], ast_lock=allowed
+    )
+
+    assert "ast_lock" not in candidates[0]
+
+
+def test_candidate_without_a_lock_verdict_has_no_ast_lock_detail() -> None:
+    candidates = add_candidate(
+        _state(), source="llm", instructions=[_instruction()], outcome="rejected"
+    )
+
+    bundle = build_evidence_bundle(
+        _state(evidence_candidates=candidates),
+        initial_error_log="Error: locator('#old') timed out",
+    )
+
+    assert bundle.candidates[0].ast_lock is None
 
 
 def test_candidate_and_loop_history_preserve_attempt_order() -> None:

@@ -8,6 +8,7 @@ from app.nodes.patch_generator import (
     PatchGuardrailViolation,
     _apply,
     _mask_js_non_code,
+    ast_lock_verdict,
 )
 from app.schemas import PatchInstruction, PatchOutput
 from app.state import AgentState
@@ -708,6 +709,74 @@ def test_patch_generator_preserves_the_rejection_and_spends_a_loop(
     candidate = result["evidence_candidates"][-1]
     assert candidate["outcome"] == "rejected"
     assert "AST lock rejected" in candidate["rejection"]
+    # The verdict is carried as structured fields, not only inside the message string.
+    assert candidate["ast_lock"]["reason"] == "disallowed_ast_change"
+    assert candidate["ast_lock"]["node_kind"]
+    assert candidate["ast_lock"]["line"] == 1
+
+
+def test_ast_lock_violation_carries_the_verdict() -> None:
+    with pytest.raises(PatchGuardrailViolation) as caught:
+        _apply(f"{LOCK_ORIGINAL}\n", [_instruction(1, LOCK_ORIGINAL, LOCK_VIOLATION)])
+
+    verdict = ast_lock_verdict(caught.value)
+    assert verdict is not None
+    assert verdict.allowed is False
+    assert verdict.reason == "disallowed_ast_change"
+    assert verdict.node_kind
+    assert verdict.line == 1
+
+
+def test_parse_failure_is_reported_as_a_structured_verdict() -> None:
+    code = "const submit = page.locator('#old'\n"  # unbalanced parenthesis
+    instruction = _instruction(
+        1, "const submit = page.locator('#old'", "const submit = page.locator('#new'"
+    )
+
+    with pytest.raises(PatchGuardrailViolation) as caught:
+        _apply(code, [instruction])
+
+    verdict = ast_lock_verdict(caught.value)
+    assert verdict is not None
+    assert verdict.reason == "original_parse_error"
+    assert isinstance(verdict.line, int)
+
+
+def test_scope_gate_violation_has_no_ast_lock_verdict() -> None:
+    # A per-line scope-gate rejection is a guardrail violation too, but the structural lock
+    # did not produce it, so it must not be attributed one.
+    instruction = _instruction(
+        1,
+        "await expect(page.locator('#old')).toBeVisible()",
+        "await expect(page.locator('#new')).toBeHidden()",
+    )
+    with pytest.raises(PatchGuardrailViolation) as caught:
+        _apply("await expect(page.locator('#old')).toBeVisible()\n", [instruction])
+
+    assert ast_lock_verdict(caught.value) is None
+    assert ast_lock_verdict(PatchApplicationError("stale line")) is None
+
+
+def test_patch_generator_records_no_ast_lock_detail_for_a_scope_gate_rejection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = PatchOutput(
+        instructions=[
+            _instruction(
+                1,
+                "await page.click('#old')",
+                "expect(page.locator('#new')).toBeVisible()",
+            )
+        ]
+    )
+    monkeypatch.setattr(patch_node, "generate_patch", lambda system, user: output)
+
+    result = patch_node.patch_generator(_state())
+
+    assert result["patch_application_report"]["guardrail_violation"] is True
+    candidate = result["evidence_candidates"][-1]
+    assert candidate["outcome"] == "rejected"
+    assert "ast_lock" not in candidate
 
 
 def test_ast_lock_rejection_retries_below_the_cap_and_refuses_at_it(
