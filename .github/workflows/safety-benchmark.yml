@@ -1,0 +1,128 @@
+name: safety-benchmark
+
+# Informational only. This workflow never gates a merge: the job is `continue-on-error`, and
+# it is skipped (not failed) wherever the model API key is unavailable, such as pull requests
+# from forks. Numbers over a small corpus are not evidence yet, and release-gate thresholds
+# are undecided (#292), so nothing here may block work.
+#
+# Cost control: pull requests only run it when something that can change repair behaviour
+# changed. It also runs on pushes to main, weekly, and on demand.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * 1"
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "examples/**"
+      - "benchmarks/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/safety-benchmark.yml"
+  pull_request:
+    paths:
+      - "app/**"
+      - "examples/**"
+      - "benchmarks/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/safety-benchmark.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: safety-benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-secret:
+    runs-on: ubuntu-latest
+    outputs:
+      has-key: ${{ steps.check.outputs.has-key }}
+    steps:
+      - id: check
+        env:
+          E2E_HEALER_NVIDIA_API_KEY: ${{ secrets.E2E_HEALER_NVIDIA_API_KEY }}
+        run: |
+          if [ -n "$E2E_HEALER_NVIDIA_API_KEY" ]; then
+            echo "has-key=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-key=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  safety-benchmark:
+    needs: check-secret
+    if: needs.check-secret.outputs.has-key == 'true'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install Python dependencies
+        run: uv sync --locked --extra dev
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: examples/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: examples/pnpm-lock.yaml
+
+      - name: Install Playwright demo deps
+        working-directory: examples
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        working-directory: examples
+        run: pnpm exec playwright install chromium
+
+      - name: Run safety benchmark
+        working-directory: examples
+        env:
+          E2E_HEALER_NVIDIA_API_KEY: ${{ secrets.E2E_HEALER_NVIDIA_API_KEY }}
+          # The example Playwright config adds a reporter that runs `e2e-healer review` on every
+          # failing test. Benchmark scenarios fail on purpose, so that would add unrelated model
+          # calls and distort latency. Use the plain list reporter.
+          E2E_HEALER_PLAYWRIGHT_CMD: npx playwright test --reporter=list
+          # The default write globs match `*.spec.ts`, not a file literally named `spec.ts`,
+          # which is what the scenarios are called. Without this every repair is denied.
+          E2E_HEALER_WRITE_GLOBS: "*.spec.ts,**/*.spec.ts,spec.ts,**/spec.ts"
+        run: |
+          uv run e2e-healer safety-benchmark \
+            --scenario-root scenarios \
+            --apply-patches \
+            --output "$RUNNER_TEMP/safety-report.json" \
+            --markdown "$RUNNER_TEMP/safety-report.md" \
+            --baseline ../benchmarks/safety-baseline.json
+
+      - name: Publish summary
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/safety-report.md" ]; then
+            cat "$RUNNER_TEMP/safety-report.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "The safety benchmark did not produce a report; see the run log." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: safety-report
+          path: |
+            ${{ runner.temp }}/safety-report.json
+            ${{ runner.temp }}/safety-report.md
+          if-no-files-found: warn

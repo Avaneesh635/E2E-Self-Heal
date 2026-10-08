@@ -27,6 +27,16 @@ from app.preprocess.diff_ast_analyzer import analyze_diff
 from app.preprocess.error_log_parser import parse_error_log
 from app.preprocess.failure_scanner import scan_failing_tests
 from app.runner import run_playwright
+from app.safety_benchmark import (
+    ScenarioRestoreError,
+    ScenarioSandboxError,
+    assert_scenarios_writable,
+    discover_safety_scenarios,
+    execute_prepared_scenario,
+    execute_safety_scenario,
+    run_safety_benchmark,
+)
+from app.safety_report import load_baseline, render_markdown
 from app.sandbox import (
     SandboxViolation,
     assert_auto_discovered_target,
@@ -637,6 +647,12 @@ def review(
         raise typer.Exit(code=2) from exc
 
 
+def _write_report_file(path: Path, content: str) -> None:
+    """Write a benchmark output file. These are harness artifacts, not repair-target writes."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+
+
 @app.command()
 def safety_benchmark(
     scenario_root: Path = typer.Option(
@@ -644,15 +660,68 @@ def safety_benchmark(
         "--scenario-root",
         help="Directory containing labeled scenario subdirectories.",
     ),
+    apply_patches: bool = typer.Option(
+        False,
+        "--apply-patches/--no-apply-patches",
+        help=(
+            "Apply each scenario's change.patch before running it and reverse it afterwards, so "
+            "the benchmark breaks the demo app itself. Without this, scenarios must already be "
+            "broken. Needs a git checkout with the app files unmodified."
+        ),
+    ),
+    output: Path | None = typer.Option(
+        None, "--output", help="Also write the JSON report to this file (diffable; baselines)."
+    ),
+    markdown: Path | None = typer.Option(
+        None, "--markdown", help="Also write a Markdown summary to this file."
+    ),
+    baseline: Path | None = typer.Option(
+        None,
+        "--baseline",
+        help=(
+            "A previous JSON report to compare against in the Markdown summary. A missing file "
+            "means no baseline yet; an invalid one is an error."
+        ),
+    ),
 ) -> None:
-    """Run the opt-in repair/refusal safety benchmark and print a stable JSON report."""
-    from app.safety_benchmark import discover_safety_scenarios, run_safety_benchmark
+    """Run the opt-in repair/refusal safety benchmark and print a stable JSON report.
 
+    Informational only: it exits 0 whenever the run completes, whatever the scores. There are
+    no pass/fail thresholds until they are decided (#292).
+    """
     if not scenario_root.is_dir():
         console.print(f"[red]scenario root does not exist:[/red] {escape(str(scenario_root))}")
         raise typer.Exit(code=2)
-    report = run_safety_benchmark(discover_safety_scenarios(scenario_root))
-    typer.echo(report.model_dump_json(indent=2))
+    previous = None
+    if baseline is not None:
+        try:
+            previous = load_baseline(baseline)
+        except ValueError as exc:
+            console.print(f"[red]{escape(str(exc))}[/red]")
+            raise typer.Exit(code=2) from exc
+        if previous is None:
+            console.print(
+                f"[yellow]no baseline at {escape(str(baseline))}; skipping deltas[/yellow]"
+            )
+    scenarios = discover_safety_scenarios(scenario_root)
+    try:
+        assert_scenarios_writable(scenarios)
+    except ScenarioSandboxError as exc:
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        raise typer.Exit(code=2) from exc
+    executor = execute_prepared_scenario if apply_patches else execute_safety_scenario
+    try:
+        report = run_safety_benchmark(scenarios, executor)
+    except ScenarioRestoreError as exc:
+        # The working tree is still modified, so continuing would benchmark a wrong app.
+        console.print(f"[red]aborting, working tree not restored:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=1) from exc
+    json_report = report.model_dump_json(indent=2)
+    if output is not None:
+        _write_report_file(output, json_report + "\n")
+    if markdown is not None:
+        _write_report_file(markdown, render_markdown(report, previous))
+    typer.echo(json_report)
 
 
 @app.command()

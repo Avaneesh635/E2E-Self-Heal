@@ -59,6 +59,7 @@ const sidebars: SidebarsConfig = {
                 "reference/configuration",
                 "reference/exit-codes",
                 "reference/schema-versioning",
+                "reference/safety-benchmark",
             ],
         },
         {

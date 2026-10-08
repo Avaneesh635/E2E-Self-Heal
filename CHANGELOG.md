@@ -7,20 +7,29 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
-- **Structured AST lock detail in the evidence bundle (schema `2.1`)** — a candidate refused by
-  the AST lock now carries `evidence.candidates[].ast_lock` with the lock's `reason`, the
-  tree-sitter `node_kind` where the trees diverge, and the `line`, for both generated and
-  history candidates. Previously this existed only inside the free-text `rejection` string, so
-  consumers and the safety benchmark could not tell what a caught guardrail violation was.
-  This is a compatible **minor** addition: `ast_lock` is optional and `null` for candidates
-  refused by other checks. Consumers on `2.0` need no change, but a producer now emits
-  `schema_version` `"2.1"`. `ast_lock.reason` is an open string; ignore values you do not
-  recognize (#287).
+- **Safety benchmark report and non-blocking CI job** — `e2e-healer safety-benchmark` now
+  reports results per mutation class (all six classes are listed, so coverage gaps are visible),
+  the number of scenarios behind each rate, total and per-class latency, and mean repair
+  attempts (candidates that proposed a change; a model that declines to patch reports 0) and,
+  separately, how many times it declined to patch.
+  `--output` writes the diffable JSON report, `--markdown` a summary, and `--baseline`
+  compares against a previous run (outcome flips, percentage-point movement, latency and
+  attempts). `--apply-patches` breaks the demo app with each scenario's `change.patch` and always
+  reverses it, which the runner previously left to the caller, so on a clean checkout every
+  scenario used to report `error`. A scenario whose change is already present (the demo app
+  ships `classname-rename` pre-broken) runs as-is and the app is left as found. A new
+  `safety-benchmark` workflow publishes the report as a step summary and artifact. It is
+  `continue-on-error`, read-only, and skipped when the model key is unavailable (for example on
+  fork pull requests). Model cost in dollars is not measured yet and is reported as such, never
+  as zero (#291).
+- `runnable: false` in a scenario's `meta.json` marks a labeled static fixture that is not a
+  Playwright test. It is listed as `skipped` and excluded from every rate. The `jsx-context`
+  token-benchmark fixture is marked this way; it would otherwise have been scored as a failed
+  repair (#291).
 
 ### Fixed
-- `SnapshotReference.sha256` was declared twice, so the published JSON-schema description said
-  "redacted snapshot content" instead of "redacted extracted snapshot content". The duplicate
-  declaration is removed; the payload is unchanged.
+- `classname-rename`'s `meta.json` named `.submit-btn` as the failing selector; its spec clicks
+  `.cta-button`. The label now matches (#291).
 
 ### Changed
 - **Structural AST lock on every patch** — the Patch Generator and the healing-history memory

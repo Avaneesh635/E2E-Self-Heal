@@ -273,6 +273,15 @@ metric, not a provider-billed-token statement. `tiktoken` may download this toke
 use, then serves it from its local cache. A scenario that cannot yield an enclosing JSX node is
 labeled `whole-file fallback` and correctly reports zero savings.
 
+### Safety benchmark
+
+`uv run e2e-healer safety-benchmark` is a separate, opt-in benchmark of repair *safety*: it runs
+labeled scenarios through the real repair graph and reports whether each was repaired or refused
+as it should be, per mutation class, with latency and repair attempts. It needs a model key and
+Playwright browsers, is informational (no pass/fail thresholds), and a scheduled CI job publishes
+its report without ever blocking a merge. See the
+[safety benchmark reference](docs-site/docs/reference/safety-benchmark.mdx).
+
 ## Configuration
 
 All settings use the `E2E_HEALER_` prefix (see [`.env.example`](.env.example)). LLM
