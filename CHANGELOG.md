@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **Structured AST lock detail in the evidence bundle (schema `2.1`)** — a candidate refused by
+  the AST lock now carries `evidence.candidates[].ast_lock` with the lock's `reason`, the
+  tree-sitter `node_kind` where the trees diverge, and the `line`, for both generated and
+  history candidates. Previously this existed only inside the free-text `rejection` string, so
+  consumers and the safety benchmark could not tell what a caught guardrail violation was.
+  This is a compatible **minor** addition: `ast_lock` is optional and `null` for candidates
+  refused by other checks. Consumers on `2.0` need no change, but a producer now emits
+  `schema_version` `"2.1"`. `ast_lock.reason` is an open string; ignore values you do not
+  recognize (#287).
+
+### Fixed
+- `SnapshotReference.sha256` was declared twice, so the published JSON-schema description said
+  "redacted snapshot content" instead of "redacted extracted snapshot content". The duplicate
+  declaration is removed; the payload is unchanged.
+
 ### Changed
 - **Structural AST lock on every patch** — the Patch Generator and the healing-history memory
   lookup now verify each candidate against the original file with the tree-sitter AST lock,

@@ -1,9 +1,11 @@
 """End-to-end graph test with the LLM and Playwright mocked out."""
 
+import json
 import pathlib
 
 import pytest
 
+import app.cli as cli_module
 import app.nodes.diagnoser as diagnoser_node
 import app.nodes.patch_generator as patch_node
 import app.nodes.test_runner as runner_node
@@ -11,7 +13,7 @@ from app.config import settings
 from app.graph import build_graph
 from app.healing_history import append_record, make_record
 from app.preprocess.error_log_parser import parse_error_log
-from app.schemas import PatchInstruction, PatchOutput, RefusalReason
+from app.schemas import SCHEMA_VERSION, PatchInstruction, PatchOutput, RefusalReason
 from app.state import AgentState
 
 ORIGINAL = "await page.click('#old')\n"
@@ -179,6 +181,45 @@ def test_ast_lock_rejections_still_honor_the_loop_cap(
     assert len(candidates) == settings.max_loops
     assert all(c["outcome"] == "rejected" for c in candidates)
     assert all("AST lock rejected" in c["rejection"] for c in candidates)
+
+
+def test_guardrail_refusal_json_reports_what_the_ast_lock_rejected(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    """The emitted `--json` payload names the offending node kind and line per refused candidate."""
+    monkeypatch.chdir(tmp_path)
+    original = "const submit = page.locator('#old');\n"
+    spec = tmp_path / "t.spec.ts"
+    spec.write_text(original)
+    lock_violation = PatchOutput(
+        instructions=[
+            PatchInstruction(
+                line=1,
+                original=original.strip(),
+                replacement="const submit = page.locator('#new'); await page.goto('/admin');",
+                reason="adds navigation",
+            )
+        ]
+    )
+    monkeypatch.setattr(diagnoser_node, "generate_diagnosis", lambda s, u: "selector changed")
+    monkeypatch.setattr(patch_node, "generate_patch", lambda s, u: lock_violation)
+
+    result = cli_module._heal_file(
+        spec, "Error: waiting for locator('#old') timed out", [], dry_run=False
+    )
+    payload = json.loads(result.model_dump_json())
+
+    assert payload["kind"] == "refusal"
+    assert payload["schema_version"] == SCHEMA_VERSION
+    assert payload["reason"] == "guardrail_violation"
+    candidates = payload["evidence"]["candidates"]
+    assert len(candidates) == settings.max_loops
+    for candidate in candidates:
+        assert candidate["outcome"] == "rejected"
+        assert candidate["ast_lock"]["reason"] == "disallowed_ast_change"
+        assert isinstance(candidate["ast_lock"]["node_kind"], str)
+        assert candidate["ast_lock"]["line"] == 1
+    assert spec.read_text() == original
 
 
 def test_failed_memory_candidate_falls_back_to_llm_without_spending_a_loop(monkeypatch, tmp_path):
