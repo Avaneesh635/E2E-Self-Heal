@@ -1,0 +1,1 @@
+{"class":"environment","expected_outcome":"refuse","failing_selector":"page.goto(\"/\")","rationale":"The configured base URL is wrong, so navigation fails; no change to the test is a correct fix."}

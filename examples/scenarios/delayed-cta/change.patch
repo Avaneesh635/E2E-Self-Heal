@@ -1,0 +1,33 @@
+diff --git a/examples/demo-app/src/App.tsx b/examples/demo-app/src/App.tsx
+index ff7e771..ae16482 100644
+--- a/examples/demo-app/src/App.tsx
++++ b/examples/demo-app/src/App.tsx
+@@ -1,4 +1,4 @@
+-import { useState, type FormEvent } from "react";
++import { useEffect, useState, type FormEvent } from "react";
+ 
+ import { SubmitButton } from "./components/SubmitButton";
+ import { CTAButton } from "./components/CTAButton";
+@@ -6,6 +6,13 @@ import { CTAButton } from "./components/CTAButton";
+ export function App() {
+   const [submitted, setSubmitted] = useState(false);
+   const [started, setStarted] = useState(false);
++  const [ctaReady, setCtaReady] = useState(false);
++
++  // The CTA now waits for the onboarding config to load before it renders.
++  useEffect(() => {
++    const timer = setTimeout(() => setCtaReady(true), 4_000);
++    return () => clearTimeout(timer);
++  }, []);
+ 
+   function handleSubmit(event: FormEvent<HTMLFormElement>) {
+     event.preventDefault();
+@@ -26,7 +33,7 @@ export function App() {
+ 
+       <section aria-labelledby="cta-heading">
+         <h2 id="cta-heading">Get started</h2>
+-        <CTAButton onClick={() => setStarted(true)} />
++        {ctaReady && <CTAButton onClick={() => setStarted(true)} />}
+         {started && <p>Welcome!</p>}
+       </section>
+     </main>

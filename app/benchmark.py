@@ -5,35 +5,20 @@ from pathlib import Path
 from typing import Self
 
 import tiktoken
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.config import settings
 
 from app.preprocess.diff_ast_analyzer import analyze_diff
 from app.preprocess.jsx_chunker import CodeChunk, chunk_for_line
 from app.prompts.diagnoser import SYSTEM_PROMPT, build_user_prompt
+from app.safety_benchmark import SafetyScenario, discover_safety_scenarios
+
+# The token and safety benchmarks read the same labeled corpus (each scenario's meta.json).
+BenchmarkScenario = SafetyScenario
 
 _TOKENIZER_NAME = "cl100k_base"
 _REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
-
-
-class BenchmarkScenario(BaseModel):
-    """A stored example with the selector expected to fail after applying its diff."""
-
-    model_config = ConfigDict(frozen=True)
-
-    name: str = Field(min_length=1)
-    test_path: Path
-    diff_path: Path
-    failing_selector: str = Field(min_length=1)
-
-    @field_validator("test_path", "diff_path")
-    @classmethod
-    def validate_scenario_file(cls, path: Path) -> Path:
-        """Require each stored scenario input to be a readable regular file."""
-        if not path.is_file():
-            raise ValueError(f"benchmark scenario file does not exist: {path}")
-        return path
 
 
 class BenchmarkResult(BaseModel):
@@ -53,8 +38,6 @@ class BenchmarkResult(BaseModel):
             raise ValueError("chunked_prompt_tokens must not exceed full_prompt_tokens")
         return self
 
-    chunked_prompt_tokens: int
-
     @property
     def tokens_saved(self) -> int:
         return self.full_prompt_tokens - self.chunked_prompt_tokens
@@ -67,22 +50,8 @@ class BenchmarkResult(BaseModel):
 
 
 def example_scenarios(repository_root: Path = _REPOSITORY_ROOT) -> tuple[BenchmarkScenario, ...]:
-    """Return the breakage scenarios maintained with the runnable example project."""
-    examples = repository_root / "examples"
-    return (
-        BenchmarkScenario(
-            name="id-rename",
-            test_path=examples / "scenarios/id-rename/spec.ts",
-            diff_path=examples / "scenarios/id-rename/change.patch",
-            failing_selector="#submit-btn",
-        ),
-        BenchmarkScenario(
-            name="jsx-context",
-            test_path=examples / "scenarios/jsx-context/benchmark-context.tsx",
-            diff_path=examples / "scenarios/jsx-context/change.patch",
-            failing_selector="legacy-submit",
-        ),
-    )
+    """Return the labeled scenarios maintained with the runnable example project."""
+    return discover_safety_scenarios(repository_root / "examples" / "scenarios")
 
 
 def run_example_benchmark(

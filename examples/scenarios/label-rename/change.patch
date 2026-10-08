@@ -1,0 +1,13 @@
+diff --git a/examples/demo-app/src/components/CTAButton.tsx b/examples/demo-app/src/components/CTAButton.tsx
+index e59c151..5372519 100644
+--- a/examples/demo-app/src/components/CTAButton.tsx
++++ b/examples/demo-app/src/components/CTAButton.tsx
+@@ -6,7 +6,7 @@ type CTAButtonProps = {
+ export function CTAButton({ onClick }: CTAButtonProps) {
+   return (
+     <button className="cta-primary" onClick={onClick} type="button">
+-      Get started
++      Start now
+     </button>
+   );
+ }

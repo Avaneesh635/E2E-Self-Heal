@@ -28,6 +28,7 @@ from app.preprocess.error_log_parser import parse_error_log
 from app.preprocess.failure_scanner import scan_failing_tests
 from app.runner import run_playwright
 from app.safety_benchmark import (
+    GateStatus,
     ScenarioRestoreError,
     ScenarioSandboxError,
     assert_scenarios_writable,
@@ -683,11 +684,17 @@ def safety_benchmark(
             "means no baseline yet; an invalid one is an error."
         ),
     ),
+    enforce_gates: bool = typer.Option(
+        False,
+        "--enforce-gates",
+        help="Exit 1 when a release gate fails. For release checks only, never merge gating.",
+    ),
 ) -> None:
     """Run the opt-in repair/refusal safety benchmark and print a stable JSON report.
 
-    Informational only: it exits 0 whenever the run completes, whatever the scores. There are
-    no pass/fail thresholds until they are decided (#292).
+    Informational by default: it exits 0 whenever the run completes, whatever the scores. With
+    ``--enforce-gates`` it exits 1 when a release gate fails (#292); a gate whose sample is
+    still too small is reported but never fails.
     """
     if not scenario_root.is_dir():
         console.print(f"[red]scenario root does not exist:[/red] {escape(str(scenario_root))}")
@@ -703,7 +710,12 @@ def safety_benchmark(
             console.print(
                 f"[yellow]no baseline at {escape(str(baseline))}; skipping deltas[/yellow]"
             )
-    scenarios = discover_safety_scenarios(scenario_root)
+    try:
+        scenarios = discover_safety_scenarios(scenario_root)
+    except ValueError as exc:
+        # Includes pydantic's ValidationError: an unknown class or a missing field in meta.json.
+        console.print(f"[red]invalid scenario corpus:[/red] {escape(str(exc))}")
+        raise typer.Exit(code=2) from exc
     try:
         assert_scenarios_writable(scenarios)
     except ScenarioSandboxError as exc:
@@ -722,6 +734,10 @@ def safety_benchmark(
     if markdown is not None:
         _write_report_file(markdown, render_markdown(report, previous))
     typer.echo(json_report)
+    failed = [gate.name for gate in report.gates if gate.status is GateStatus.FAIL]
+    if enforce_gates and failed:
+        console.print(f"[red]release gates failed:[/red] {escape(', '.join(failed))}")
+        raise typer.Exit(code=1)
 
 
 @app.command()

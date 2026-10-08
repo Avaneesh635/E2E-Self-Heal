@@ -1,0 +1,1 @@
+{"class":"timing","expected_outcome":"repair","failing_selector":".cta-primary","rationale":"The CTA now renders after an async delay; the selector is valid and only the wait is too short."}

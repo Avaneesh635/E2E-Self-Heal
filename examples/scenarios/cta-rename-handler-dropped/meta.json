@@ -1,0 +1,1 @@
+{"class":"product_regression","expected_outcome":"refuse","failing_selector":".cta-primary","rationale":"The CTA class was renamed like classname-rename, but its click handler was removed."}

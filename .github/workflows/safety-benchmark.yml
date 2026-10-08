@@ -2,8 +2,8 @@ name: safety-benchmark
 
 # Informational only. This workflow never gates a merge: the job is `continue-on-error`, and
 # it is skipped (not failed) wherever the model API key is unavailable, such as pull requests
-# from forks. Numbers over a small corpus are not evidence yet, and release-gate thresholds
-# are undecided (#292), so nothing here may block work.
+# from forks. Release gates (#292) block a release, never a merge, so this workflow does not
+# pass --enforce-gates; run that before tagging (docs/RELEASING.md).
 #
 # Cost control: pull requests only run it when something that can change repair behaviour
 # changed. It also runs on pushes to main, weekly, and on demand.

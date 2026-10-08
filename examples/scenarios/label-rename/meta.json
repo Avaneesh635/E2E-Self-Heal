@@ -1,0 +1,1 @@
+{"class":"accessible_name_drift","expected_outcome":"repair","failing_selector":"name: \"Get started\"","rationale":"Only the button's visible label changed; its role and click behavior are intact."}

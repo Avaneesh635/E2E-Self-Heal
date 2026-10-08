@@ -10,6 +10,7 @@ from app.benchmark import (
     _benchmark_scenario,
     _line_containing,
     _tokenizer,
+    example_scenarios,
     run_example_benchmark,
 )
 from app.config import settings
@@ -48,37 +49,94 @@ def test_semantic_chunk_prompt_has_fewer_tokens_than_full_file_prompt() -> None:
     assert _count_prompt_tokens(semantic_prompt) < _count_prompt_tokens(full_prompt)
 
 
-def test_benchmark_reports_all_checked_in_examples() -> None:
-    results = run_example_benchmark()
-    assert [result.name for result in results] == ["id-rename", "jsx-context"]
-    assert results[0].context_strategy == "whole-file fallback"
-    assert results[0].tokens_saved == 0
-    assert results[1].context_strategy.startswith("semantic JSX chunk")
-    assert results[1].chunked_prompt_tokens < results[1].full_prompt_tokens
-    assert results[1].tokens_saved > 0
-
-
-def test_benchmark_models_validate_paths_and_token_totals(tmp_path: Path) -> None:
-    test_path = tmp_path / "scenario.spec.ts"
-    diff_path = tmp_path / "scenario.diff"
-    test_path.write_text("test('example', () => {})")
-    diff_path.write_text("")
-
-    scenario = BenchmarkScenario(
-        name="example",
-        test_path=test_path,
-        diff_path=diff_path,
-        failing_selector="#submit",
+def _labeled(name: str, test_path: Path, diff_path: Path, selector: str) -> BenchmarkScenario:
+    return BenchmarkScenario.model_validate(
+        {
+            "name": name,
+            "class": "selector_drift",
+            "expected_outcome": "repair",
+            "failing_selector": selector,
+            "rationale": "A labeled scenario.",
+            "test_path": test_path,
+            "diff_path": diff_path,
+        }
     )
 
-    assert scenario.test_path == test_path
-    with pytest.raises(ValidationError, match="does not exist"):
-        BenchmarkScenario(
-            name="missing",
-            test_path=tmp_path / "missing.spec.ts",
-            diff_path=diff_path,
-            failing_selector="#submit",
-        )
+
+def _write_scenario(root: Path, name: str, meta: str | None) -> Path:
+    directory = root / name
+    directory.mkdir()
+    (directory / "spec.ts").write_text("await page.click('#x')")
+    (directory / "change.patch").write_text("")
+    if meta is not None:
+        (directory / "meta.json").write_text(meta)
+    return directory
+
+
+_META = '{"class":"selector_drift","expected_outcome":"repair","failing_selector":"#x","rationale":"ok"}'
+
+
+def test_benchmark_reads_the_whole_labeled_corpus_with_unchanged_token_numbers() -> None:
+    results = {result.name: result for result in run_example_benchmark()}
+
+    assert set(results) == {scenario.name for scenario in example_scenarios()}
+    # Pinned from before the corpus moved to meta.json: discovery must not change them. Totals
+    # embed the checkout's absolute path, so pin only the path-independent savings and chunk.
+    assert results["id-rename"].context_strategy == "whole-file fallback"
+    assert results["id-rename"].tokens_saved == 0
+    jsx = results["jsx-context"]
+    assert jsx.context_strategy == "semantic JSX chunk (26-28)"
+    assert jsx.tokens_saved == 304
+
+
+def _corpus(repository_root: Path) -> Path:
+    root = repository_root / "examples" / "scenarios"
+    root.mkdir(parents=True)
+    return root
+
+
+def test_scenario_metadata_is_loaded_into_the_benchmark_scenario(tmp_path: Path) -> None:
+    _write_scenario(_corpus(tmp_path), "drift", _META)
+
+    (scenario,) = example_scenarios(tmp_path)
+
+    assert scenario.scenario_class.value == "selector_drift"
+    assert scenario.expected_outcome.value == "repair"
+    assert scenario.rationale == "ok"
+    assert scenario.test_path == tmp_path / "examples" / "scenarios" / "drift" / "spec.ts"
+
+
+@pytest.mark.parametrize(
+    ("meta", "message"),
+    [
+        (None, "missing meta.json"),
+        (_META.replace("selector_drift", "selector_dirft"), "class"),
+        (_META.replace('"repair"', '"retry"'), "expected_outcome"),
+        (_META.replace(',"rationale":"ok"', ""), "rationale"),
+        (_META.replace(',"rationale":"ok"', ',"rationale":""'), "rationale"),
+        (_META.replace("}", ',"runable":false}'), "runable"),
+    ],
+)
+def test_malformed_scenario_metadata_fails_loudly_at_load_time(
+    tmp_path: Path, meta: str | None, message: str
+) -> None:
+    root = _corpus(tmp_path)
+    _write_scenario(root, "good", _META)
+    _write_scenario(root, "bad", meta)
+
+    with pytest.raises(ValueError, match=message):
+        example_scenarios(tmp_path)
+
+
+def test_scenario_missing_its_change_patch_fails_loudly(tmp_path: Path) -> None:
+    root = _corpus(tmp_path)
+    (_write_scenario(root, "no-patch", _META) / "change.patch").unlink()
+
+    with pytest.raises(ValueError, match="missing change.patch"):
+        example_scenarios(tmp_path)
+
+
+def test_benchmark_result_rejects_a_chunk_larger_than_the_full_prompt() -> None:
     with pytest.raises(ValidationError, match="must not exceed"):
         BenchmarkResult(
             name="invalid",
@@ -123,14 +181,7 @@ index 1111111..2222222 100644
     )
 
     monkeypatch.setattr(settings, "jsx_chunk_margin_lines", 0)
-    result = _benchmark_scenario(
-        BenchmarkScenario(
-            name="jsx-example",
-            test_path=test_path,
-            diff_path=diff_path,
-            failing_selector="old-button",
-        )
-    )
+    result = _benchmark_scenario(_labeled("jsx-example", test_path, diff_path, "old-button"))
 
     assert result.context_strategy == "semantic JSX chunk (54-54)"
     assert result.chunked_prompt_tokens < result.full_prompt_tokens

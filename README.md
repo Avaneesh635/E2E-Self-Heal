@@ -278,8 +278,9 @@ labeled `whole-file fallback` and correctly reports zero savings.
 `uv run e2e-healer safety-benchmark` is a separate, opt-in benchmark of repair *safety*: it runs
 labeled scenarios through the real repair graph and reports whether each was repaired or refused
 as it should be, per mutation class, with latency and repair attempts. It needs a model key and
-Playwright browsers, is informational (no pass/fail thresholds), and a scheduled CI job publishes
-its report without ever blocking a merge. See the
+Playwright browsers, and a scheduled CI job publishes its report without ever blocking a merge.
+`--enforce-gates` applies the release gates (false-green 0%, refusal accuracy ≥ 95%, incorrect
+refusals ≤ 20%, once a rate covers 20+ scenarios) before a release. See the
 [safety benchmark reference](docs-site/docs/reference/safety-benchmark.mdx).
 
 ## Configuration
