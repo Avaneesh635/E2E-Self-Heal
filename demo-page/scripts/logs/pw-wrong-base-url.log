@@ -1,0 +1,25 @@
+
+Running 1 test using 1 worker
+
+[1/1] scenarios/wrong-base-url/spec.ts:8:1 › submits the form
+  1) scenarios/wrong-base-url/spec.ts:8:1 › submits the form ───────────────────────────────────────
+
+    Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:4174/
+    Call log:
+      - navigating to "http://localhost:4174/", waiting until "load"
+
+
+       7 | // Nothing in the test should change.
+       8 | test("submits the form", async ({ page }) => {
+    >  9 |   await page.goto("/");
+         |              ^
+      10 |   await page.click("#submit-btn");
+      11 |   await expect(page.getByText("Thanks!")).toBeVisible();
+      12 | });
+        at /Users/dlehddnr0713/Desktop/e2e/examples/scenarios/wrong-base-url/spec.ts:9:14
+
+    Error Context: test-results/wrong-base-url-spec.ts-submits-the-form/error-context.md
+
+
+  1 failed
+    scenarios/wrong-base-url/spec.ts:8:1 › submits the form ────────────────────────────────────────

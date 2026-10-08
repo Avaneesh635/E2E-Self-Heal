@@ -1,0 +1,31 @@
+
+Running 1 test using 1 worker
+
+[1/1] scenarios/product-regression/spec.ts:9:1 › submits the form
+  1) scenarios/product-regression/spec.ts:9:1 › submits the form ───────────────────────────────────
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('Thanks!')
+    Expected: visible
+    Timeout: 3000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" with timeout 3000ms
+      - waiting for getByText('Thanks!')
+
+
+      10 |   await page.goto("/");
+      11 |   await page.click("#submit-btn");
+    > 12 |   await expect(page.getByText("Thanks!")).toBeVisible();
+         |                                           ^
+      13 | });
+      14 |
+        at /Users/dlehddnr0713/Desktop/e2e/examples/scenarios/product-regression/spec.ts:12:43
+
+    Error Context: test-results/product-regression-spec.ts-submits-the-form/error-context.md
+
+
+  1 failed
+    scenarios/product-regression/spec.ts:9:1 › submits the form ────────────────────────────────────

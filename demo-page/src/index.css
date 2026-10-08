@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+/* Tokens mirror docs-site/src/css/custom.css: dark-first, one teal accent, and fixed
+   semantic colors (broken = old/failing selector, healed = repaired, warn = refused). */
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --raised: #1c2333;
+  --line: #2a313c;
+  --fg: #e6edf3;
+  --muted: #8b949e;
+  --accent: #2ec7a6;
+  --broken: #f2555a;
+  --healed: #2ec7a6;
+  --warn: #e0a13a;
+  --code: #0a0e14;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #ffffff;
+    --surface: #f6f8fa;
+    --raised: #ffffff;
+    --line: #d9dee3;
+    --fg: #1c2128;
+    --muted: #5b6570;
+    --accent: #0f9d76;
+    --broken: #cf2f35;
+    --healed: #0f8a68;
+    --warn: #a86a0c;
+    --code: #f3f5f7;
+    color-scheme: light;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-broken: var(--broken);
+  --color-healed: var(--healed);
+  --color-warn: var(--warn);
+  --color-code: var(--code);
+  --font-sans: "IBM Plex Sans KR", system-ui, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  --animate-rise: rise 260ms ease both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0.2;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-bg text-fg font-sans leading-relaxed;
+    overflow-wrap: anywhere;
+  }
+  /* Korean breaks between words; Japanese and Chinese must keep breaking between characters. */
+  :lang(ko) body {
+    word-break: keep-all;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}

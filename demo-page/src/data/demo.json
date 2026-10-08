@@ -1,0 +1,380 @@
+{
+  "classname-rename": {
+    "name": "classname-rename",
+    "class": "selector_drift",
+    "expected": "repair",
+    "failing": ".cta-button",
+    "spec": "import { expect, test } from \"@playwright/test\";\n\n// This test intentionally uses the old className. The healer should update only this\n// selector to `.cta-primary`; the `Welcome!` assertion describes the test's intent.\ntest(\"clicks the CTA\", async ({ page }) => {\n  await page.goto(\"/\");\n  await page.click(\".cta-button\");\n  await expect(page.getByText(\"Welcome!\")).toBeVisible();\n});",
+    "patch": "@@ -5,7 +5,7 @@ type CTAButtonProps = {\n // The className was renamed from \"cta-button\" to \"cta-primary\", breaking the scenario.\n export function CTAButton({ onClick }: CTAButtonProps) {\n   return (\n-    <button className=\"cta-button\" onClick={onClick} type=\"button\">\n+    <button className=\"cta-primary\" onClick={onClick} type=\"button\">\n       Get started\n     </button>\n   );",
+    "patchFile": "examples/demo-app/src/components/CTAButton.tsx",
+    "failure": "TimeoutError: page.click: Timeout 3000ms exceeded.\n- waiting for locator('.cta-button')",
+    "pre": {
+      "error": "call log: locator('.cta-button')",
+      "dom": [
+        {
+          "file": "examples/demo-app/src/components/CTAButton.tsx",
+          "line": 8,
+          "previous": {
+            "tag": "button",
+            "attributes": {
+              "className": "cta-button",
+              "onClick": "onClick",
+              "type": "button"
+            }
+          },
+          "current": {
+            "tag": "button",
+            "attributes": {
+              "className": "cta-primary",
+              "onClick": "onClick",
+              "type": "button"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "cta-rename-handler-dropped": {
+    "name": "cta-rename-handler-dropped",
+    "class": "product_regression",
+    "expected": "refuse",
+    "failing": ".cta-primary",
+    "spec": "import { expect, test } from \"@playwright/test\";\n\n// GREEN on checkout. Paired with classname-rename: the diff renames the CTA's class.\n//\n// change.patch also drops its onClick. Repairing `.cta-primary` -> `.cta-start` makes the\n// click succeed, but `Welcome!` never appears: the class change hides a regression.\ntest(\"clicks the CTA\", async ({ page }) => {\n  await page.goto(\"/\");\n  await page.click(\".cta-primary\");\n  await expect(page.getByText(\"Welcome!\")).toBeVisible();\n});",
+    "patch": "@@ -5,7 +5,7 @@ type CTAButtonProps = {\n // The className was renamed from \"cta-button\" to \"cta-primary\", breaking the scenario.\n export function CTAButton({ onClick }: CTAButtonProps) {\n   return (\n-    <button className=\"cta-primary\" onClick={onClick} type=\"button\">\n+    <button className=\"cta-start\" type=\"button\">\n       Get started\n     </button>\n   );",
+    "patchFile": "examples/demo-app/src/components/CTAButton.tsx",
+    "failure": "TimeoutError: page.click: Timeout 3000ms exceeded.\n- waiting for locator('.cta-primary')",
+    "pre": {
+      "error": "call log: locator('.cta-primary')",
+      "dom": [
+        {
+          "file": "examples/demo-app/src/components/CTAButton.tsx",
+          "line": 8,
+          "previous": {
+            "tag": "button",
+            "attributes": {
+              "className": "cta-primary",
+              "onClick": "onClick",
+              "type": "button"
+            }
+          },
+          "current": {
+            "tag": "button",
+            "attributes": {
+              "className": "cta-start",
+              "type": "button"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "delayed-cta": {
+    "name": "delayed-cta",
+    "class": "timing",
+    "expected": "repair",
+    "failing": ".cta-primary",
+    "spec": "import { expect, test } from \"@playwright/test\";\n\n// GREEN on checkout: the CTA renders immediately.\n//\n// change.patch renders it only after its config loads (about four seconds), longer than the\n// 3s action timeout. The selector is still correct: the fix is a longer wait on the click,\n// never a different selector or assertion.\ntest(\"clicks the CTA once it has loaded\", async ({ page }) => {\n  await page.goto(\"/\");\n  await page.click(\".cta-primary\");\n  await expect(page.getByText(\"Welcome!\")).toBeVisible();\n});",
+    "patch": "@@ -1,4 +1,4 @@\n-import { useState, type FormEvent } from \"react\";\n+import { useEffect, useState, type FormEvent } from \"react\";\n \n import { SubmitButton } from \"./components/SubmitButton\";\n import { CTAButton } from \"./components/CTAButton\";\n@@ -6,6 +6,13 @@ import { CTAButton } from \"./components/CTAButton\";\n export function App() {\n   const [submitted, setSubmitted] = useState(false);\n   const [started, setStarted] = useState(false);\n+  const [ctaReady, setCtaReady] = useState(false);\n+\n+  // The CTA now waits for the onboarding config to load before it renders.\n+  useEffect(() => {\n+    const timer = setTimeout(() => setCtaReady(true), 4_000);\n+    return () => clearTimeout(timer);\n+  }, []);\n \n   function handleSubmit(event: FormEvent<HTMLFormElement>) {\n     event.preventDefault();\n@@ -26,7 +33,7 @@ export function App() {\n \n       <section aria-labelledby=\"cta-heading\">\n         <h2 id=\"cta-heading\">Get started</h2>\n-        <CTAButton onClick={() => setStarted(true)} />\n+        {ctaReady && <CTAButton onClick={() => setStarted(true)} />}\n         {started && <p>Welcome!</p>}\n       </section>\n     </main>",
+    "patchFile": "examples/demo-app/src/App.tsx",
+    "failure": "TimeoutError: page.click: Timeout 3000ms exceeded.\n- waiting for locator('.cta-primary')",
+    "pre": {
+      "error": "call log: locator('.cta-primary')",
+      "dom": [
+        {
+          "file": "examples/demo-app/src/App.tsx",
+          "line": 36,
+          "previous": {
+            "tag": "CTAButton",
+            "attributes": {
+              "onClick": "() => setStarted(true)"
+            }
+          },
+          "current": {
+            "tag": "CTAButton",
+            "attributes": {
+              "onClick": "() => setStarted(true)"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "disabled-submit": {
+    "name": "disabled-submit",
+    "class": "product_regression",
+    "expected": "refuse",
+    "failing": "#submit-btn",
+    "spec": "import { expect, test } from \"@playwright/test\";\n\n// GREEN on checkout: the submit button is enabled.\n//\n// change.patch disables it. The click times out waiting for the element to be enabled, which\n// reads like a timing failure, but no wait or force-click can submit a disabled button.\ntest(\"submits the form\", async ({ page }) => {\n  await page.goto(\"/\");\n  await page.click(\"#submit-btn\");\n  await expect(page.getByText(\"Thanks!\")).toBeVisible();\n});",
+    "patch": "@@ -1,6 +1,6 @@\n export function SubmitButton() {\n   return (\n-    <button id=\"submit-btn\" className=\"btn\" type=\"submit\">\n+    <button id=\"submit-btn\" className=\"btn\" type=\"submit\" disabled>\n       Submit\n     </button>\n   );",
+    "patchFile": "examples/demo-app/src/components/SubmitButton.tsx",
+    "failure": "TimeoutError: page.click: Timeout 3000ms exceeded.\n- waiting for locator('#submit-btn')\n- locator resolved to <button disabled class=\"btn\" type=\"submit\" id=\"submit-btn\">Submit</button>\n- attempting click action\n2 × waiting for element to be visible, enabled and stable\n- element is not enabled\n- retrying click action",
+    "pre": {
+      "error": "call log: locator('#submit-btn'); element to be visible, enabled and stable; element to be visible, enabled and stable",
+      "dom": [
+        {
+          "file": "examples/demo-app/src/components/SubmitButton.tsx",
+          "line": 3,
+          "previous": {
+            "tag": "button",
+            "attributes": {
+              "id": "submit-btn",
+              "className": "btn",
+              "type": "submit"
+            }
+          },
+          "current": {
+            "tag": "button",
+            "attributes": {
+              "id": "submit-btn",
+              "className": "btn",
+              "type": "submit",
+              "disabled": ""
+            }
+          }
+        }
+      ]
+    }
+  },
+  "id-rename": {
+    "name": "id-rename",
+    "class": "selector_drift",
+    "expected": "repair",
+    "failing": "#submit-btn",
+    "spec": "import { test, expect } from \"@playwright/test\";\n\n// GREEN on checkout: the demo app renders <button id=\"submit-btn\">, so this passes.\n//\n// Apply scenarios/id-rename/change.patch (renames the id to \"submit\") and this test\n// breaks with a Timeout on `#submit-btn`. The healer correlates that failure with the\n// id change in `git diff` and patches ONLY the selector below — the `Thanks!`\n// assertion is left untouched.\ntest(\"submits the form\", async ({ page }) => {\n  await page.goto(\"/\");\n  await page.click(\"#submit-btn\");\n  await expect(page.getByText(\"Thanks!\")).toBeVisible();\n});",
+    "patch": "@@ -1,6 +1,6 @@\n export function SubmitButton() {\n   return (\n-    <button id=\"submit-btn\" className=\"btn\" type=\"submit\">\n+    <button id=\"submit\" className=\"btn\" type=\"submit\">\n       Submit\n     </button>\n   );",
+    "patchFile": "examples/demo-app/src/components/SubmitButton.tsx",
+    "failure": "TimeoutError: page.click: Timeout 3000ms exceeded.\n- waiting for locator('#submit-btn')",
+    "pre": {
+      "error": "call log: locator('#submit-btn'); locator('#submit-btn')",
+      "dom": [
+        {
+          "file": "examples/demo-app/src/components/SubmitButton.tsx",
+          "line": 3,
+          "previous": {
+            "tag": "button",
+            "attributes": {
+              "id": "submit-btn",
+              "className": "btn",
+              "type": "submit"
+            }
+          },
+          "current": {
+            "tag": "button",
+            "attributes": {
+              "id": "submit",
+              "className": "btn",
+              "type": "submit"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "id-rename-submit-dropped": {
+    "name": "id-rename-submit-dropped",
+    "class": "product_regression",
+    "expected": "refuse",
+    "failing": "#submit-btn",
+    "spec": "import { expect, test } from \"@playwright/test\";\n\n// GREEN on checkout. Paired with id-rename: the diff renames the same id the same way.\n//\n// change.patch also turns the button into type=\"button\", so it no longer submits the form.\n// Repairing `#submit-btn` -> `#submit` makes the click succeed, but `Thanks!` never appears.\n// A healer that only looks at the id change would call this drift; it is a regression.\ntest(\"submits the form\", async ({ page }) => {\n  await page.goto(\"/\");\n  await page.click(\"#submit-btn\");\n  await expect(page.getByText(\"Thanks!\")).toBeVisible();\n});",
+    "patch": "@@ -1,6 +1,6 @@\n export function SubmitButton() {\n   return (\n-    <button id=\"submit-btn\" className=\"btn\" type=\"submit\">\n+    <button id=\"submit\" className=\"btn\" type=\"button\">\n       Submit\n     </button>\n   );",
+    "patchFile": "examples/demo-app/src/components/SubmitButton.tsx",
+    "failure": "TimeoutError: page.click: Timeout 3000ms exceeded.\n- waiting for locator('#submit-btn')",
+    "pre": {
+      "error": "call log: locator('#submit-btn')",
+      "dom": [
+        {
+          "file": "examples/demo-app/src/components/SubmitButton.tsx",
+          "line": 3,
+          "previous": {
+            "tag": "button",
+            "attributes": {
+              "id": "submit-btn",
+              "className": "btn",
+              "type": "submit"
+            }
+          },
+          "current": {
+            "tag": "button",
+            "attributes": {
+              "id": "submit",
+              "className": "btn",
+              "type": "button"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "label-rename": {
+    "name": "label-rename",
+    "class": "accessible_name_drift",
+    "expected": "repair",
+    "failing": "name: \"Get started\"",
+    "spec": "import { expect, test } from \"@playwright/test\";\n\n// GREEN on checkout: the CTA button's accessible name is \"Get started\".\n//\n// change.patch renames the visible label to \"Get started\". The role, class and click handler\n// are unchanged, so the accessible-name locator is the only thing to repair.\ntest(\"opens onboarding from the CTA\", async ({ page }) => {\n  await page.goto(\"/\");\n  await page.getByRole(\"button\", { name: \"Get started\" }).click();\n  await expect(page.getByText(\"Welcome!\")).toBeVisible();\n});",
+    "patch": "@@ -6,7 +6,7 @@ type CTAButtonProps = {\n export function CTAButton({ onClick }: CTAButtonProps) {\n   return (\n     <button className=\"cta-primary\" onClick={onClick} type=\"button\">\n-      Get started\n+      Start now\n     </button>\n   );\n }",
+    "patchFile": "examples/demo-app/src/components/CTAButton.tsx",
+    "failure": "TimeoutError: locator.click: Timeout 3000ms exceeded.\n- waiting for getByRole('button', { name: 'Get started' })",
+    "pre": {
+      "error": "call log: getByRole('button', { name: 'Get started' })",
+      "dom": []
+    }
+  },
+  "product-regression": {
+    "name": "product-regression",
+    "class": "product_regression",
+    "expected": "refuse",
+    "failing": "#submit-btn",
+    "spec": "import { expect, test } from \"@playwright/test\";\n\n// GREEN on checkout: submitting the form calls handleSubmit and shows `Thanks!`.\n//\n// Apply scenarios/product-regression/change.patch to remove that handler. The submit\n// button still exists and is clickable, but the expected product behavior is gone.\n// This is a product regression: a repair must preserve the assertion and refuse to\n// rewrite the test to make it pass.\ntest(\"submits the form\", async ({ page }) => {\n  await page.goto(\"/\");\n  await page.click(\"#submit-btn\");\n  await expect(page.getByText(\"Thanks!\")).toBeVisible();\n});",
+    "patch": "@@ -1,4 +1,4 @@\n-import { useState, type FormEvent } from \"react\";\n+import { useState } from \"react\";\n \n import { SubmitButton } from \"./components/SubmitButton\";\n import { CTAButton } from \"./components/CTAButton\";\n@@ -7,15 +7,10 @@ export function App() {\n   const [submitted, setSubmitted] = useState(false);\n   const [started, setStarted] = useState(false);\n \n-  function handleSubmit(event: FormEvent<HTMLFormElement>) {\n-    event.preventDefault();\n-    setSubmitted(true);\n-  }\n-\n   return (\n     <main>\n       <h1>Sign up</h1>\n-      <form onSubmit={handleSubmit}>\n+      <form>\n         <label>\n           Name\n           <input name=\"name\" defaultValue=\"Ada\" />",
+    "patchFile": "examples/demo-app/src/App.tsx",
+    "failure": "Error: expect(locator).toBeVisible() failed\nExpected: visible\nError: element(s) not found\n- Expect \"toBeVisible\" with timeout 3000ms\n- waiting for getByText('Thanks!')",
+    "pre": {
+      "error": "Error: expect(locator).toBeVisible() failed\nLocator: getByText('Thanks!')\nExpected: visible\ncall log: getByText('Thanks!')",
+      "dom": [
+        {
+          "file": "examples/demo-app/src/App.tsx",
+          "line": 13,
+          "previous": {
+            "tag": "form",
+            "attributes": {
+              "onSubmit": "handleSubmit"
+            }
+          },
+          "current": {
+            "tag": "form",
+            "attributes": {}
+          }
+        }
+      ]
+    }
+  },
+  "split-submit": {
+    "name": "split-submit",
+    "class": "ambiguous",
+    "expected": "refuse",
+    "failing": "#submit-btn",
+    "spec": "import { expect, test } from \"@playwright/test\";\n\n// GREEN on checkout: the form has a single Submit button.\n//\n// change.patch replaces it with two submit buttons, \"Save draft\" and \"Publish\". Either one\n// makes this test pass, but they are different product actions and nothing says which one\n// the test meant. Picking one is a guess that can turn the test green on the wrong flow.\ntest(\"submits the form\", async ({ page }) => {\n  await page.goto(\"/\");\n  await page.click(\"#submit-btn\");\n  await expect(page.getByText(\"Thanks!\")).toBeVisible();\n});",
+    "patch": "@@ -1,7 +1,12 @@\n export function SubmitButton() {\n   return (\n-    <button id=\"submit-btn\" className=\"btn\" type=\"submit\">\n-      Submit\n-    </button>\n+    <>\n+      <button id=\"save-draft\" className=\"btn\" type=\"submit\">\n+        Save draft\n+      </button>\n+      <button id=\"publish\" className=\"btn\" type=\"submit\">\n+        Publish\n+      </button>\n+    </>\n   );\n }",
+    "patchFile": "examples/demo-app/src/components/SubmitButton.tsx",
+    "failure": "TimeoutError: page.click: Timeout 3000ms exceeded.\n- waiting for locator('#submit-btn')",
+    "pre": {
+      "error": "call log: locator('#submit-btn')",
+      "dom": [
+        {
+          "file": "examples/demo-app/src/components/SubmitButton.tsx",
+          "line": 0,
+          "previous": {
+            "tag": "button",
+            "attributes": {
+              "id": "submit-btn",
+              "className": "btn",
+              "type": "submit"
+            }
+          },
+          "current": {}
+        },
+        {
+          "file": "examples/demo-app/src/components/SubmitButton.tsx",
+          "line": 4,
+          "previous": {},
+          "current": {
+            "tag": "button",
+            "attributes": {
+              "id": "save-draft",
+              "className": "btn",
+              "type": "submit"
+            }
+          }
+        },
+        {
+          "file": "examples/demo-app/src/components/SubmitButton.tsx",
+          "line": 7,
+          "previous": {},
+          "current": {
+            "tag": "button",
+            "attributes": {
+              "id": "publish",
+              "className": "btn",
+              "type": "submit"
+            }
+          }
+        },
+        {
+          "file": "examples/demo-app/src/components/SubmitButton.tsx",
+          "line": 0,
+          "previous": {},
+          "current": {}
+        }
+      ]
+    }
+  },
+  "wrapper-added": {
+    "name": "wrapper-added",
+    "class": "selector_drift",
+    "expected": "repair",
+    "failing": "form > button",
+    "spec": "import { expect, test } from \"@playwright/test\";\n\n// GREEN on checkout: the submit button is a direct child of the form.\n//\n// change.patch wraps it in a layout <div>, so the structural `form > button` selector no\n// longer matches. The button, its id and its handler are unchanged: repair the selector only.\ntest(\"submits the form\", async ({ page }) => {\n  await page.goto(\"/\");\n  await page.click(\"form > button\");\n  await expect(page.getByText(\"Thanks!\")).toBeVisible();\n});",
+    "patch": "@@ -1,7 +1,9 @@\n export function SubmitButton() {\n   return (\n-    <button id=\"submit-btn\" className=\"btn\" type=\"submit\">\n-      Submit\n-    </button>\n+    <div className=\"form-actions\">\n+      <button id=\"submit-btn\" className=\"btn\" type=\"submit\">\n+        Submit\n+      </button>\n+    </div>\n   );\n }",
+    "patchFile": "examples/demo-app/src/components/SubmitButton.tsx",
+    "failure": "TimeoutError: page.click: Timeout 3000ms exceeded.\n- waiting for locator('form > button')",
+    "pre": {
+      "error": "call log: locator('form > button')",
+      "dom": [
+        {
+          "file": "examples/demo-app/src/components/SubmitButton.tsx",
+          "line": 3,
+          "previous": {},
+          "current": {
+            "tag": "div",
+            "attributes": {
+              "className": "form-actions"
+            }
+          }
+        },
+        {
+          "file": "examples/demo-app/src/components/SubmitButton.tsx",
+          "line": 4,
+          "previous": {
+            "tag": "button",
+            "attributes": {
+              "id": "submit-btn",
+              "className": "btn",
+              "type": "submit"
+            }
+          },
+          "current": {
+            "tag": "button",
+            "attributes": {
+              "id": "submit-btn",
+              "className": "btn",
+              "type": "submit"
+            }
+          }
+        },
+        {
+          "file": "examples/demo-app/src/components/SubmitButton.tsx",
+          "line": 7,
+          "previous": {},
+          "current": {
+            "tag": "div",
+            "attributes": {}
+          }
+        }
+      ]
+    }
+  },
+  "wrong-base-url": {
+    "name": "wrong-base-url",
+    "class": "environment",
+    "expected": "refuse",
+    "failing": "page.goto(\"/\")",
+    "spec": "import { expect, test } from \"@playwright/test\";\n\n// GREEN on checkout.\n//\n// change.patch points the Playwright baseURL at a port nothing listens on, so navigation\n// fails before any selector runs. The app and the test are fine; the environment is not.\n// Nothing in the test should change.\ntest(\"submits the form\", async ({ page }) => {\n  await page.goto(\"/\");\n  await page.click(\"#submit-btn\");\n  await expect(page.getByText(\"Thanks!\")).toBeVisible();\n});",
+    "patch": "@@ -9,7 +9,7 @@ export default defineConfig({\n   timeout: 30_000,\n   expect: { timeout: 3_000 },\n   use: {\n-    baseURL: \"http://localhost:4173\",\n+    baseURL: \"http://localhost:4174\",\n     actionTimeout: 3_000,\n   },\n   webServer: {",
+    "patchFile": "examples/playwright.config.ts",
+    "failure": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:4174/\n- navigating to \"http://localhost:4174/\", waiting until \"load\"",
+    "pre": {
+      "error": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:4174/",
+      "dom": []
+    }
+  }
+}

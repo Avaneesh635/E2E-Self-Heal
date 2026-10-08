@@ -1,0 +1,25 @@
+
+Running 1 test using 1 worker
+
+[1/1] scenarios/classname-rename/spec.ts:5:1 › clicks the CTA
+  1) scenarios/classname-rename/spec.ts:5:1 › clicks the CTA ───────────────────────────────────────
+
+    TimeoutError: page.click: Timeout 3000ms exceeded.
+    Call log:
+      - waiting for locator('.cta-button')
+
+
+       5 | test("clicks the CTA", async ({ page }) => {
+       6 |   await page.goto("/");
+    >  7 |   await page.click(".cta-button");
+         |              ^
+       8 |   await expect(page.getByText("Welcome!")).toBeVisible();
+       9 | });
+      10 |
+        at /Users/dlehddnr0713/Desktop/e2e/examples/scenarios/classname-rename/spec.ts:7:14
+
+    Error Context: test-results/classname-rename-spec.ts-clicks-the-CTA/error-context.md
+
+
+  1 failed
+    scenarios/classname-rename/spec.ts:5:1 › clicks the CTA ────────────────────────────────────────
