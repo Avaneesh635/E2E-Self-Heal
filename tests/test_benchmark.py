@@ -80,12 +80,13 @@ def test_benchmark_reads_the_whole_labeled_corpus_with_unchanged_token_numbers()
     results = {result.name: result for result in run_example_benchmark()}
 
     assert set(results) == {scenario.name for scenario in example_scenarios()}
-    # Pinned from before the corpus moved to meta.json: discovery must not change them.
-    assert (results["id-rename"].full_prompt_tokens, results["id-rename"].tokens_saved) == (431, 0)
+    # Pinned from before the corpus moved to meta.json: discovery must not change them. Totals
+    # embed the checkout's absolute path, so pin only the path-independent savings and chunk.
     assert results["id-rename"].context_strategy == "whole-file fallback"
+    assert results["id-rename"].tokens_saved == 0
     jsx = results["jsx-context"]
-    assert (jsx.full_prompt_tokens, jsx.chunked_prompt_tokens) == (594, 290)
     assert jsx.context_strategy == "semantic JSX chunk (26-28)"
+    assert jsx.tokens_saved == 304
 
 
 def _corpus(repository_root: Path) -> Path:
