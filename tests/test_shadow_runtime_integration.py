@@ -20,7 +20,7 @@ from app.shadow.snapshot_store import SnapshotStore
 REPOSITORY_ROOT = Path(__file__).parents[1]
 EXAMPLES_DIR = REPOSITORY_ROOT / "examples"
 PLAYWRIGHT = EXAMPLES_DIR / "node_modules" / ".bin" / "playwright"
-REPLAY_SPEC = EXAMPLES_DIR / "scenarios" / "shadow-replay" / "replay.spec.ts"
+REPLAY_SPEC = EXAMPLES_DIR / "shadow-replay" / "replay.spec.ts"
 REPLAY_CONFIG = EXAMPLES_DIR / "shadow.playwright.config.ts"
 
 

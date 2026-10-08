@@ -12,11 +12,14 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from app.safety_benchmark import (
+    GATE_MIN_SAMPLE,
     ActualOutcome,
     ClassSummary,
+    GateStatus,
     SafetyBenchmarkReport,
     SafetyScenarioResult,
     compute_metrics,
+    evaluate_gates,
     summarize_by_class,
 )
 
@@ -27,6 +30,7 @@ _METRIC_LABELS: tuple[tuple[str, str], ...] = (
     ("repair_precision", "Repair precision (repairs that were expected)"),
     ("correct_refusal_rate", "Correct-refusal rate (expected refusals refused)"),
     ("incorrect_refusal_rate", "Incorrect-refusal rate (expected repairs refused)"),
+    ("refusal_accuracy", "Refusal accuracy (correct refusals vs. false heals and false refusals)"),
 )
 
 
@@ -58,11 +62,12 @@ def render_markdown(
     """Render a report, with change columns when a baseline run is provided."""
     lines: list[str] = ["# Safety benchmark", ""]
     lines += [
-        "> Informational and non-blocking. Rates over few scenarios are not evidence, and "
-        "release-gate thresholds are not decided yet (#292).",
+        "> Informational on pull requests and main. The release gates below block a release "
+        "only, and only once a rate is computed over enough scenarios (#292).",
         "",
     ]
     lines += _summary_lines(report, baseline)
+    lines += _gate_section(report)
     lines += _metrics_section(report, baseline)
     lines += _class_section(report, baseline)
     lines += _scenario_section(report, baseline)
@@ -102,6 +107,32 @@ def _summary_lines(
         f"- Mean repair attempts per scenario: {attempts_text}",
         f"- Model cost: {cost}",
         f"- Baseline: {baseline_text}",
+        "",
+    ]
+
+
+def _gate_section(report: SafetyBenchmarkReport) -> list[str]:
+    rows = [
+        "| Gate | Threshold | Value | Scenarios (n) | Status |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for gate in report.gates or evaluate_gates(report.metrics):
+        value = (
+            f"{gate.value:.0f}"
+            if gate.name == "error_count" and gate.value is not None
+            else _pct(gate.value)
+        )
+        status = "**FAIL**" if gate.status is GateStatus.FAIL else gate.status.value
+        rows.append(
+            f"| `{gate.name}` | {gate.threshold} | {value} | {gate.sample_size} | {status} |"
+        )
+    return [
+        "## Release gates",
+        "",
+        *rows,
+        "",
+        f"`insufficient_sample` means fewer than {GATE_MIN_SAMPLE} scenarios: reported, not "
+        "enforced. A single false green fails its gate at any sample size.",
         "",
     ]
 

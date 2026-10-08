@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Labeled mutation corpus and release gates for the safety benchmark** (#281). The corpus now
+  covers all six mutation classes (12 scenarios), including `ambiguous`, `environment` and four
+  `product_regression` cases, two of which look the same from the diff as a drift scenario
+  (`id-rename-submit-dropped`, `cta-rename-handler-dropped`). Every scenario folder must carry
+  a valid `meta.json`; a missing file, unknown class or key, or empty rationale fails at load time
+  (exit `2`) instead of being skipped. The token benchmark reads the same corpus, with unchanged
+  numbers for the existing scenarios (#289). A new `refusal_accuracy` metric and a **Release
+  gates** table (false-green 0%, refusal accuracy ≥ 95%, incorrect refusals ≤ 20%, no errors; rate
+  gates enforced only from 20 scenarios) are added to the report, and `--enforce-gates` exits `1`
+  when one fails. Gates block a release, never a merge (#292). The shadow replay spec moved from
+  `examples/scenarios/` to `examples/shadow-replay/`, since it is not a mutation scenario.
 - **Safety benchmark report and non-blocking CI job** — `e2e-healer safety-benchmark` now
   reports results per mutation class (all six classes are listed, so coverage gaps are visible),
   the number of scenarios behind each rate, total and per-class latency, and mean repair

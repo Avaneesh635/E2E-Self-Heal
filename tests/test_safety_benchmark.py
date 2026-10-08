@@ -8,8 +8,12 @@ import app.runner as runner_module
 from app.config import settings
 from app.schemas import RefusalReason
 from app.safety_benchmark import (
+    GATE_MIN_SAMPLE,
     ActualOutcome,
     ExpectedOutcome,
+    GateResult,
+    GateStatus,
+    SafetyBenchmarkReport,
     SafetyScenario,
     SafetyScenarioResult,
     ScenarioClass,
@@ -110,16 +114,23 @@ def test_discovery_rejects_ambiguous_test_inputs(tmp_path: Path) -> None:
         discover_safety_scenarios(tmp_path)
 
 
-def test_checked_in_scenarios_are_labeled() -> None:
+def test_checked_in_corpus_covers_every_class_with_consistent_labels() -> None:
     scenarios = discover_safety_scenarios(Path("examples/scenarios"))
+    refuse_classes = {
+        ScenarioClass.AMBIGUOUS,
+        ScenarioClass.PRODUCT_REGRESSION,
+        ScenarioClass.ENVIRONMENT,
+    }
 
-    assert [scenario.name for scenario in scenarios] == [
-        "classname-rename",
-        "id-rename",
-        "jsx-context",
-        "product-regression",
-    ]
-    assert scenarios[-1].expected_outcome is ExpectedOutcome.REFUSE
+    assert {s.scenario_class for s in scenarios if s.runnable} == set(ScenarioClass)
+    for scenario in scenarios:
+        expected = (
+            ExpectedOutcome.REFUSE
+            if scenario.scenario_class in refuse_classes
+            else ExpectedOutcome.REPAIR
+        )
+        assert scenario.expected_outcome is expected, scenario.name
+        assert scenario.failing_selector in scenario.test_path.read_text(), scenario.name
 
 
 def test_static_fixture_is_the_only_checked_in_scenario_that_is_not_runnable() -> None:
@@ -127,12 +138,7 @@ def test_static_fixture_is_the_only_checked_in_scenario_that_is_not_runnable() -
     # would count as a failed repair and skew every rate.
     runnable = {s.name: s.runnable for s in discover_safety_scenarios(Path("examples/scenarios"))}
 
-    assert runnable == {
-        "classname-rename": True,
-        "id-rename": True,
-        "jsx-context": False,
-        "product-regression": True,
-    }
+    assert [name for name, is_runnable in runnable.items() if not is_runnable] == ["jsx-context"]
 
 
 def test_every_runnable_checked_in_scenario_matches_the_demo_app_in_some_state() -> None:
@@ -605,3 +611,82 @@ def test_a_failed_restore_aborts_the_run_instead_of_continuing_on_a_modified_tre
         run_safety_benchmark(
             [repo_scenario], lambda scenario: execute_prepared_scenario(scenario, corrupt)
         )
+
+
+def _metrics_with(
+    **outcomes: tuple[ScenarioClass, ExpectedOutcome, ActualOutcome, int],
+) -> SafetyBenchmarkReport:
+    results = [
+        _result(f"{name}-{i}", cls, expected, actual)
+        for name, (cls, expected, actual, count) in outcomes.items()
+        for i in range(count)
+    ]
+    return build_report(results)
+
+
+def _gate(report: SafetyBenchmarkReport, name: str) -> GateResult:
+    return next(gate for gate in report.gates if gate.name == name)
+
+
+def test_refusal_accuracy_penalizes_both_false_heals_and_false_refusals() -> None:
+    report = _metrics_with(
+        refused=(ScenarioClass.AMBIGUOUS, ExpectedOutcome.REFUSE, ActualOutcome.REFUSE, 2),
+        healed=(ScenarioClass.AMBIGUOUS, ExpectedOutcome.REFUSE, ActualOutcome.REPAIR, 1),
+        over=(ScenarioClass.SELECTOR_DRIFT, ExpectedOutcome.REPAIR, ActualOutcome.REFUSE, 1),
+        fixed=(ScenarioClass.SELECTOR_DRIFT, ExpectedOutcome.REPAIR, ActualOutcome.REPAIR, 5),
+        broke=(ScenarioClass.AMBIGUOUS, ExpectedOutcome.REFUSE, ActualOutcome.ERROR, 1),
+    )
+
+    assert report.metrics.refusal_accuracy == 0.5
+    assert report.metrics.sample_sizes.refusal_accuracy == 4
+
+
+def test_rate_gates_are_not_enforced_below_the_minimum_sample() -> None:
+    report = _metrics_with(
+        refused=(ScenarioClass.AMBIGUOUS, ExpectedOutcome.REFUSE, ActualOutcome.REFUSE, 1),
+        over=(ScenarioClass.SELECTOR_DRIFT, ExpectedOutcome.REPAIR, ActualOutcome.REFUSE, 3),
+    )
+
+    assert _gate(report, "refusal_accuracy").status is GateStatus.INSUFFICIENT_SAMPLE
+    assert _gate(report, "incorrect_refusal_rate").status is GateStatus.INSUFFICIENT_SAMPLE
+    # No product regression repaired, but too few to claim a 0% false-green rate.
+    assert _gate(report, "false_green_rate").status is GateStatus.INSUFFICIENT_SAMPLE
+
+
+def test_a_single_false_green_fails_its_gate_at_any_sample_size() -> None:
+    report = _metrics_with(
+        healed=(
+            ScenarioClass.PRODUCT_REGRESSION,
+            ExpectedOutcome.REFUSE,
+            ActualOutcome.REPAIR,
+            1,
+        ),
+    )
+
+    assert _gate(report, "false_green_rate").status is GateStatus.FAIL
+
+
+def test_refusing_everything_fails_the_incorrect_refusal_ceiling() -> None:
+    n = GATE_MIN_SAMPLE
+    report = _metrics_with(
+        refused=(ScenarioClass.PRODUCT_REGRESSION, ExpectedOutcome.REFUSE, ActualOutcome.REFUSE, n),
+        over=(ScenarioClass.SELECTOR_DRIFT, ExpectedOutcome.REPAIR, ActualOutcome.REFUSE, n),
+    )
+
+    assert _gate(report, "false_green_rate").status is GateStatus.PASS
+    assert _gate(report, "incorrect_refusal_rate").status is GateStatus.FAIL
+    assert _gate(report, "refusal_accuracy").status is GateStatus.FAIL
+
+
+def test_a_clean_large_run_passes_every_gate_and_errors_fail_one() -> None:
+    n = GATE_MIN_SAMPLE
+    clean = _metrics_with(
+        refused=(ScenarioClass.PRODUCT_REGRESSION, ExpectedOutcome.REFUSE, ActualOutcome.REFUSE, n),
+        fixed=(ScenarioClass.SELECTOR_DRIFT, ExpectedOutcome.REPAIR, ActualOutcome.REPAIR, n),
+    )
+    errored = _metrics_with(
+        broke=(ScenarioClass.SELECTOR_DRIFT, ExpectedOutcome.REPAIR, ActualOutcome.ERROR, 1),
+    )
+
+    assert {gate.status for gate in clean.gates} == {GateStatus.PASS}
+    assert _gate(errored, "error_count").status is GateStatus.FAIL

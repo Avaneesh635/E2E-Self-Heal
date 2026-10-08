@@ -10,8 +10,9 @@ whether each one ended the way it should. Some scenarios should be **repaired** 
 drifted); others should be **refused** (the product behavior changed, so the right answer is to
 leave the failure alone). It is the only way to measure the claim that the tool refuses to guess.
 
-It is **informational**. It exits `0` whenever the run completes, whatever the scores, because
-release-gate thresholds are not decided yet ([#292](https://github.com/Lee-Dongwook/E2E-Self-Heal/issues/292)).
+It is **informational** by default: it exits `0` whenever the run completes, whatever the scores.
+With `--enforce-gates` it exits `1` when a [release gate](#release-gates) fails. That is for release
+checks only; nothing gates a merge.
 It is separate from `e2e-healer benchmark`, which only measures prompt tokens.
 
 ## Run it locally
@@ -54,6 +55,7 @@ E2E_HEALER_WRITE_GLOBS="*.spec.ts,**/*.spec.ts,spec.ts,**/spec.ts" \
 | `--output FILE` | Also write the JSON report. This is the diffable artifact and the format of a baseline. |
 | `--markdown FILE` | Also write the Markdown summary described below. |
 | `--baseline FILE` | A previous JSON report to compare against. A missing file means "no baseline yet". An invalid file exits with code `2`. |
+| `--enforce-gates` | Exit `1` when a release gate fails. A gate whose sample is too small is reported, never failed. |
 
 For each scenario, `--apply-patches` finds the demo app in one of three states:
 
@@ -71,7 +73,7 @@ report, because every later scenario would run on a modified app. The error incl
 
 ## Reading the report
 
-**Metrics.** Four rates, each shown with the number of scenarios it was computed over:
+**Metrics.** Five rates, each shown with the number of scenarios it was computed over:
 
 | Metric | Computed over | Meaning |
 | --- | --- | --- |
@@ -79,6 +81,7 @@ report, because every later scenario would run on a modified app. The error incl
 | Repair precision | scenarios that were repaired | How often a repair was one that was expected. |
 | Correct-refusal rate | scenarios labeled `refuse` | How often a refusal was correct. |
 | Incorrect-refusal rate | scenarios labeled `repair` | How often a repairable scenario was refused. |
+| Refusal accuracy | correct refusals + false heals + false refusals | `correct refusals / (correct refusals + false heals + false refusals)`. Penalizes both patching what should be refused and refusing what should be repaired, so refusing a lot does not score well. |
 
 A rate over two scenarios is not evidence. Always read it with its `n`. Errors and skipped
 scenarios are never counted as refusals.
@@ -111,6 +114,29 @@ improves accuracy by spending much more.
 is highlighted), percentage-point movement per metric, the previous score per class when it changed,
 and the change in total latency and mean attempts.
 
+## Release gates
+
+Decided in [#292](https://github.com/Lee-Dongwook/E2E-Self-Heal/issues/292). Each report carries
+a **Release gates** table:
+
+| Gate | Threshold | Enforced when |
+| --- | --- | --- |
+| `false_green_rate` | `= 0%` | Fails on the first false green, at any sample size. Passes only with 20 or more `product_regression` scenarios; below that, `0%` is not a credible claim. |
+| `refusal_accuracy` | `>= 95%` | 20 or more scenarios in its denominator. |
+| `incorrect_refusal_rate` | `<= 20%` | 20 or more scenarios labeled `repair`. This is the ceiling that stops "refuse everything" from passing the other gates. |
+| `error_count` | `= 0` | Always. A run with errors measured less than it claims. |
+
+- **Below 20 scenarios, a rate is reported as `insufficient_sample`.** It is not enforced. At 20,
+  one scenario is worth 5 points, which is the smallest step a 95% threshold can tell apart.
+- **Gates block a release, never a merge.** Pull request and `main` runs stay informational.
+  Before tagging a release, run the benchmark with `--enforce-gates` (see
+  [Releasing](https://github.com/Lee-Dongwook/E2E-Self-Heal/blob/main/docs/RELEASING.md)). Do not
+  release on exit code `1`.
+- **The corpus is the limit.** Thresholds are only as strong as the scenarios behind them. The
+  `product_regression` and `ambiguous` scenarios are paired with drift scenarios that look the same
+  from the diff (`id-rename` and `id-rename-submit-dropped`, `classname-rename` and
+  `cta-rename-handler-dropped`), so the gates measure discrimination, not the absence of hard cases.
+
 ## Labeling a scenario
 
 Each scenario is a folder under the scenario root:
@@ -133,7 +159,10 @@ scenarios/id-rename/
 
 `class` is one of `selector_drift`, `accessible_name_drift`, `timing`, `ambiguous`,
 `product_regression`, `environment`. `expected_outcome` is `repair` or `refuse`. `rationale` is
-required. Add `"runnable": false` for a static fixture that is labeled but is not a Playwright test
+required. Every folder under the scenario root is a scenario. A folder without `meta.json`, an
+unknown `class` or `expected_outcome`, an empty `rationale` or an unknown key fails the run at load
+time (exit code `2`) instead of silently dropping the scenario. The token benchmark
+(`e2e-healer benchmark`) reads the same corpus. Add `"runnable": false` for a static fixture that is labeled but is not a Playwright test
 (for example the prompt-context fixture used by the token benchmark). It is listed as `skipped` and
 excluded from every rate.
 

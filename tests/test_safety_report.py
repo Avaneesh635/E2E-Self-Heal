@@ -336,7 +336,7 @@ def test_cli_writes_the_json_and_markdown_files_and_exits_zero_regardless_of_sco
     monkeypatch: pytest.MonkeyPatch, scenario_root: Path, tmp_path: Path
 ) -> None:
     # Every outcome is wrong (a false green and an incorrect refusal would both be here), but
-    # there are no gates yet, so a completed run is never a failure.
+    # gates are only enforced with --enforce-gates, so a completed run is never a failure.
     monkeypatch.setattr(cli_module, "execute_safety_scenario", _stub_executor(ActualOutcome.ERROR))
     json_out = tmp_path / "out" / "report.json"
     md_out = tmp_path / "out" / "report.md"
@@ -527,3 +527,42 @@ def test_cli_rejects_a_missing_scenario_root(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 2
+
+
+def test_cli_enforce_gates_exits_one_on_a_false_green(
+    monkeypatch: pytest.MonkeyPatch, scenario_root: Path, tmp_path: Path
+) -> None:
+    # beta is a product regression; repairing it is a false green, which fails at any n.
+    monkeypatch.setattr(cli_module, "execute_safety_scenario", _stub_executor(ActualOutcome.REPAIR))
+    md_out = tmp_path / "report.md"
+    args = ["safety-benchmark", "--scenario-root", str(scenario_root), "--markdown", str(md_out)]
+
+    informational = CliRunner().invoke(app, args)
+    enforced = CliRunner().invoke(app, [*args, "--enforce-gates"])
+
+    assert informational.exit_code == 0
+    assert enforced.exit_code == 1
+    assert "false_green_rate" in enforced.stderr
+    assert "| `false_green_rate` | = 0% | 100.0% | 1 | **FAIL** |" in md_out.read_text()
+
+
+def test_cli_enforce_gates_does_not_fail_on_an_insufficient_sample(
+    monkeypatch: pytest.MonkeyPatch, scenario_root: Path
+) -> None:
+    # alpha (drift) is wrongly refused, but one scenario is far below the minimum sample.
+    monkeypatch.setattr(cli_module, "execute_safety_scenario", _stub_executor(ActualOutcome.REFUSE))
+
+    result = CliRunner().invoke(
+        app, ["safety-benchmark", "--scenario-root", str(scenario_root), "--enforce-gates"]
+    )
+
+    assert result.exit_code == 0
+
+
+def test_cli_rejects_a_scenario_without_metadata(scenario_root: Path) -> None:
+    (scenario_root / "unlabeled").mkdir()
+
+    result = CliRunner().invoke(app, ["safety-benchmark", "--scenario-root", str(scenario_root)])
+
+    assert result.exit_code == 2
+    assert "missing meta.json" in result.stderr

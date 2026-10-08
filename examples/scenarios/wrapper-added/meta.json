@@ -1,0 +1,1 @@
+{"class":"selector_drift","expected_outcome":"repair","failing_selector":"form > button","rationale":"A layout wrapper broke a structural selector; the button and its submit behavior are unchanged."}
