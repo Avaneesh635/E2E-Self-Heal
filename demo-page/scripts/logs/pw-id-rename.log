@@ -1,0 +1,46 @@
+
+Running 2 tests using 2 workers
+
+[1/2] scenarios/id-rename/spec.ts:9:1 › submits the form
+[2/2] scenarios/id-rename-submit-dropped/spec.ts:8:1 › submits the form
+  1) scenarios/id-rename/spec.ts:9:1 › submits the form ────────────────────────────────────────────
+
+    TimeoutError: page.click: Timeout 3000ms exceeded.
+    Call log:
+      - waiting for locator('#submit-btn')
+
+
+       9 | test("submits the form", async ({ page }) => {
+      10 |   await page.goto("/");
+    > 11 |   await page.click("#submit-btn");
+         |              ^
+      12 |   await expect(page.getByText("Thanks!")).toBeVisible();
+      13 | });
+      14 |
+        at /Users/dlehddnr0713/Desktop/e2e/examples/scenarios/id-rename/spec.ts:11:14
+
+    Error Context: test-results/id-rename-spec.ts-submits-the-form/error-context.md
+
+
+  2) scenarios/id-rename-submit-dropped/spec.ts:8:1 › submits the form ─────────────────────────────
+
+    TimeoutError: page.click: Timeout 3000ms exceeded.
+    Call log:
+      - waiting for locator('#submit-btn')
+
+
+       8 | test("submits the form", async ({ page }) => {
+       9 |   await page.goto("/");
+    > 10 |   await page.click("#submit-btn");
+         |              ^
+      11 |   await expect(page.getByText("Thanks!")).toBeVisible();
+      12 | });
+      13 |
+        at /Users/dlehddnr0713/Desktop/e2e/examples/scenarios/id-rename-submit-dropped/spec.ts:10:14
+
+    Error Context: test-results/id-rename-submit-dropped-spec.ts-submits-the-form/error-context.md
+
+
+  2 failed
+    scenarios/id-rename/spec.ts:9:1 › submits the form ─────────────────────────────────────────────
+    scenarios/id-rename-submit-dropped/spec.ts:8:1 › submits the form ──────────────────────────────

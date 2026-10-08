@@ -1,0 +1,25 @@
+
+Running 1 test using 1 worker
+
+[1/1] scenarios/label-rename/spec.ts:7:1 › opens onboarding from the CTA
+  1) scenarios/label-rename/spec.ts:7:1 › opens onboarding from the CTA ────────────────────────────
+
+    TimeoutError: locator.click: Timeout 3000ms exceeded.
+    Call log:
+      - waiting for getByRole('button', { name: 'Get started' })
+
+
+       7 | test("opens onboarding from the CTA", async ({ page }) => {
+       8 |   await page.goto("/");
+    >  9 |   await page.getByRole("button", { name: "Get started" }).click();
+         |                                                           ^
+      10 |   await expect(page.getByText("Welcome!")).toBeVisible();
+      11 | });
+      12 |
+        at /Users/dlehddnr0713/Desktop/e2e/examples/scenarios/label-rename/spec.ts:9:59
+
+    Error Context: test-results/label-rename-spec.ts-opens-onboarding-from-the-CTA/error-context.md
+
+
+  1 failed
+    scenarios/label-rename/spec.ts:7:1 › opens onboarding from the CTA ─────────────────────────────

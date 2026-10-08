@@ -1,0 +1,27 @@
+{
+  "name": "e2e-healer-demo-page",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Presentation page that replays E2E Self-Heal repair and refusal runs",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "data": "cd .. && E2E_HEALER_LLM_MODEL=x uv run python demo-page/scripts/build_data.py"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.1.11",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "4.1.11",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

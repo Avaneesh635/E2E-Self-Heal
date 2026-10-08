@@ -1,0 +1,40 @@
+
+Running 1 test using 1 worker
+
+[1/1] scenarios/disabled-submit/spec.ts:7:1 › submits the form
+  1) scenarios/disabled-submit/spec.ts:7:1 › submits the form ──────────────────────────────────────
+
+    TimeoutError: page.click: Timeout 3000ms exceeded.
+    Call log:
+      - waiting for locator('#submit-btn')
+        - locator resolved to <button disabled class="btn" type="submit" id="submit-btn">Submit</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not enabled
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not enabled
+        - retrying click action
+          - waiting 100ms
+        5 × waiting for element to be visible, enabled and stable
+          - element is not enabled
+        - retrying click action
+          - waiting 500ms
+        - waiting for element to be visible, enabled and stable
+
+
+       7 | test("submits the form", async ({ page }) => {
+       8 |   await page.goto("/");
+    >  9 |   await page.click("#submit-btn");
+         |              ^
+      10 |   await expect(page.getByText("Thanks!")).toBeVisible();
+      11 | });
+      12 |
+        at /Users/dlehddnr0713/Desktop/e2e/examples/scenarios/disabled-submit/spec.ts:9:14
+
+    Error Context: test-results/disabled-submit-spec.ts-submits-the-form/error-context.md
+
+
+  1 failed
+    scenarios/disabled-submit/spec.ts:7:1 › submits the form ───────────────────────────────────────

@@ -1,0 +1,25 @@
+
+Running 1 test using 1 worker
+
+[1/1] scenarios/delayed-cta/spec.ts:8:1 › clicks the CTA once it has loaded
+  1) scenarios/delayed-cta/spec.ts:8:1 › clicks the CTA once it has loaded ─────────────────────────
+
+    TimeoutError: page.click: Timeout 3000ms exceeded.
+    Call log:
+      - waiting for locator('.cta-primary')
+
+
+       8 | test("clicks the CTA once it has loaded", async ({ page }) => {
+       9 |   await page.goto("/");
+    > 10 |   await page.click(".cta-primary");
+         |              ^
+      11 |   await expect(page.getByText("Welcome!")).toBeVisible();
+      12 | });
+      13 |
+        at /Users/dlehddnr0713/Desktop/e2e/examples/scenarios/delayed-cta/spec.ts:10:14
+
+    Error Context: test-results/delayed-cta-spec.ts-clicks-the-CTA-once-it-has-loaded/error-context.md
+
+
+  1 failed
+    scenarios/delayed-cta/spec.ts:8:1 › clicks the CTA once it has loaded ──────────────────────────
