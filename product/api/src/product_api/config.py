@@ -17,13 +17,11 @@ class Settings(BaseSettings):
 
     @field_validator("log_level")
     @classmethod
-    def validate_log_level(cls, value: str) -> str:
-        level = value.upper()
-        valid_levels = logging.getLevelNamesMapping()
-        if level not in valid_levels:
-            raise ValueError(
-                "PRODUCT_API_LOG_LEVEL must be one of: " + ", ".join(sorted(valid_levels))
-            )
+    def _known_log_level(cls, value: str) -> str:
+        level = value.strip().upper()
+        if level not in logging.getLevelNamesMapping():
+            names = ", ".join(sorted(logging.getLevelNamesMapping()))
+            raise ValueError(f"unknown log level {value!r}; expected one of {names}")
         return level
 
 
