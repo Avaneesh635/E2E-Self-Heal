@@ -72,6 +72,8 @@ line-length = 100
 [tool.pyright]
 pythonVersion = "3.13"
 typeCheckingMode = "standard"
+# product/ is its own uv project with its own dependencies and checks.
+exclude = ["product", "**/node_modules", "**/__pycache__", "**/.*"]
 
 [tool.pytest.ini_options]
 # Collect only the test suite; app/nodes/test_runner.py defines a node fn named
