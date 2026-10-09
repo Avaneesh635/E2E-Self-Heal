@@ -38,6 +38,10 @@ use that port in `api/.env`.
 The page shows the API's health. `curl localhost:8000/healthz` returns
 `{"status":"ok","database":true}`, or a 503 with `"database":false` when Postgres is down.
 
+`curl localhost:8000/version` returns `api_version` from the installed `product-api`
+package and `schema_version` from the core's JSON contract. This endpoint does not
+access Postgres. The API version also appears in `/docs` and `/openapi.json`.
+
 ## Checks
 
 ```bash
