@@ -453,6 +453,68 @@ def test_a_repair_carries_no_refusal_reason(
     assert result.attempts == 1
 
 
+def test_a_provider_failure_is_an_error_not_a_refusal(
+    monkeypatch: pytest.MonkeyPatch, graph_scenario: SafetyScenario
+) -> None:
+    # The model never returned a usable answer (for example unparseable structured output
+    # on every retry), so it made no judgment about the scenario.
+    final = {
+        "is_success": False,
+        "refusal_reason": RefusalReason.PROVIDER_ERROR,
+        "evidence_candidates": [_CHANGE, _NO_CHANGE],
+    }
+    monkeypatch.setattr(graph_module, "build_graph", lambda: _StubGraph(final))
+
+    result = execute_safety_scenario(graph_scenario)
+
+    assert result.actual_outcome is ActualOutcome.ERROR
+    assert result.error is not None
+    assert "provider_error" in result.error
+    # An error is not a refusal, so it carries no refusal reason; the spend is still reported.
+    assert result.refusal_reason is None
+    assert (result.attempts, result.declined) == (1, 1)
+
+
+def test_a_provider_failure_never_counts_as_a_correct_refusal(
+    monkeypatch: pytest.MonkeyPatch, graph_scenario: SafetyScenario
+) -> None:
+    # The harmful case: a scenario labeled `refuse` whose provider failed. Scored as a
+    # refusal it would be a correct one, hiding the outage behind a good number.
+    must_refuse = graph_scenario.model_copy(update={"expected_outcome": ExpectedOutcome.REFUSE})
+    final = {
+        "is_success": False,
+        "refusal_reason": RefusalReason.PROVIDER_ERROR,
+        "evidence_candidates": [],
+    }
+    monkeypatch.setattr(graph_module, "build_graph", lambda: _StubGraph(final))
+
+    report = build_report([execute_safety_scenario(must_refuse)])
+
+    assert report.metrics.error_count == 1
+    assert report.metrics.correct_refusal_rate == 0.0
+    # Errors are outside the refusal-accuracy population, so they cannot raise it either.
+    assert report.metrics.refusal_accuracy is None
+    gates = {gate.name: gate for gate in report.gates}
+    assert gates["error_count"].status is GateStatus.FAIL
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [reason for reason in RefusalReason if reason is not RefusalReason.PROVIDER_ERROR],
+)
+def test_every_other_refusal_reason_is_still_a_refusal(
+    monkeypatch: pytest.MonkeyPatch, graph_scenario: SafetyScenario, reason: RefusalReason
+) -> None:
+    final = {"is_success": False, "refusal_reason": reason, "evidence_candidates": [_CHANGE]}
+    monkeypatch.setattr(graph_module, "build_graph", lambda: _StubGraph(final))
+
+    result = execute_safety_scenario(graph_scenario)
+
+    assert result.actual_outcome is ActualOutcome.REFUSE
+    assert result.refusal_reason == reason.value
+    assert result.error is None
+
+
 def test_a_scenario_that_already_passes_is_an_error_and_never_reaches_the_graph(
     monkeypatch: pytest.MonkeyPatch, graph_scenario: SafetyScenario
 ) -> None:

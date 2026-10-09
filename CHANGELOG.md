@@ -41,6 +41,10 @@ All notable changes to this project are documented here. The format is based on
 ### Fixed
 - `classname-rename`'s `meta.json` named `.submit-btn` as the failing selector; its spec clicks
   `.cta-button`. The label now matches (#291).
+- The safety benchmark scored a model-provider failure (for example unparseable structured
+  output on every retry, refusal reason `provider_error`) as a refusal. On a scenario labeled
+  `refuse` that counted as a correct refusal and hid the outage. It is now an `error`: it fails
+  the `error_count` gate and is outside the refusal-accuracy population (#326).
 
 ### Changed
 - **Structural AST lock on every patch** — the Patch Generator and the healing-history memory
