@@ -1,0 +1,10 @@
+node_modules
+.venv
+docs-site
+demo-page
+examples
+tests
+.git
+.github
+*.pyc
+__pycache__

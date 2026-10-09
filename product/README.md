@@ -15,9 +15,21 @@ core's machine-readable output (`app/schemas.py`). The core does not depend on `
 
 Requires Docker, uv, and pnpm 9.
 
+### Option 1: Docker Compose (Database + API)
+
+```bash
+# Start both Postgres and the API
+docker compose -f product/docker-compose.yml up --build
+
+# Run database migrations in another terminal
+docker compose -f product/docker-compose.yml exec api uv run alembic upgrade head
+```
+
+### Option 2: Manual (uv)
+
 ```bash
 # 1. Database
-docker compose -f product/docker-compose.yml up -d --wait
+docker compose -f product/docker-compose.yml up -d --wait postgres
 
 # 2. API on http://localhost:8000
 cd product/api
