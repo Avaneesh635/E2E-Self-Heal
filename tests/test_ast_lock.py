@@ -34,6 +34,14 @@ from app.verify.ast_lock import AstLockAllowlist, check_ast_lock
         ("await page.waitForSelector('#old');", "await page.waitForSelector('#new');"),
         ("await page.click(`#old-${id}`);", "await page.click(`#new-${id}`);"),
         ("await page.click(/* why */ '#old');", "await page.click(/* why */ '#new');"),
+        # A timeout-only options object is a wait condition: it may be added or removed.
+        ("await page.click('#a');", "await page.click('#a', { timeout: 10_000 });"),
+        ("await page.click('#a', { timeout: 10_000 });", "await page.click('#a');"),
+        (
+            "await page.locator('#a').click();",
+            "await page.locator('#a').click({ timeout: 10_000 });",
+        ),
+        ("await page.waitForURL('/done');", "await page.waitForURL('/done', { timeout: 9 });"),
     ],
 )
 def test_allows_explicitly_safe_ast_changes(original: str, patched: str) -> None:
@@ -99,6 +107,17 @@ def test_allows_explicitly_safe_ast_changes(original: str, patched: str) -> None
         # A computed selector is executable code, not a literal.
         ("await page.click(pick('#old'));", "await page.click(pick('#new'));"),
         ("await page.click(() => '#old');", "await page.click(() => '#new');"),
+        # Only a trailing ``{ timeout: <number> }`` on an action or wait may be added.
+        ("await page.click('#a');", "await page.click('#a', { force: true });"),
+        ("await page.click('#a');", "await page.click('#a', { timeout: 1, force: true });"),
+        ("await page.click('#a');", "await page.click('#a', { timeout: slow() });"),
+        ("await page.click('#a');", "await page.click('#a', { timeout: 1 }, 2);"),
+        ("await expect(x).toBeVisible();", "await expect(x).toBeVisible({ timeout: 9 });"),
+        ("await submit('#a');", "await submit('#a', { timeout: 9 });"),
+        (
+            "await page.click('#a');",
+            "await page.waitForSelector('#a', { timeout: 9 }); await page.click('#a');",
+        ),
     ],
 )
 def test_rejects_assertion_and_control_flow_changes(original: str, patched: str) -> None:

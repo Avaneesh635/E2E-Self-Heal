@@ -31,7 +31,10 @@ SYSTEM_PROMPT = (
     "page.setInputFiles(), or page.press(), you may change only the selector (first) argument; "
     "preserve every input value, file, option, and key argument exactly. For each edit, return "
     "the 1-based line number, the exact original line, the "
-    "replacement line, and a short reason. When the edit changes a locator, also return "
+    "replacement line, and a short reason. Each edit replaces exactly one existing line with "
+    "exactly one line: you cannot add, remove, or split lines. To wait longer for an element, "
+    "add or raise a timeout option on the existing call, e.g. "
+    "page.click('#submit', { timeout: 10000 }); never insert a separate wait statement. When the edit changes a locator, also return "
     "'selector' as a Playwright selector-engine string usable by page.locator() (e.g. "
     "'#submit', 'role=button[name=\"Submit\"]', 'text=Submit') matching the new locator, so "
     "it can be verified against the live DOM; leave 'selector' empty for non-locator edits "
@@ -50,8 +53,8 @@ SELECTOR_PROMPT_STRATEGIES: Mapping[FrameworkName, SelectorPromptStrategy] = {
             "getByRole()/role= with accessible names first, then getByLabel()/getByText() when "
             "stable, then getByTestId()/data-testid for intentionally stable hooks. Avoid "
             "generated class names, CSS-module hashes, and implementation-only component markup. "
-            "For React async rendering or hydration timing, prefer locator waits "
-            "such as locator.waitFor() or page.waitForSelector() over arbitrary fixed timeouts."
+            "For React async rendering or hydration timing, raise the timeout option of the "
+            "action that waits for the element rather than adding a fixed sleep."
         ),
     ),
     "vue": SelectorPromptStrategy(
@@ -60,8 +63,8 @@ SELECTOR_PROMPT_STRATEGIES: Mapping[FrameworkName, SelectorPromptStrategy] = {
             "Detected framework: Vue 3. Prefer role/name locators for rendered UI, then stable "
             "data-testid or data-test attributes commonly used in Vue apps. Avoid scoped-style "
             "artifacts such as data-v-* attributes, generated classes, and transient dynamic ids. "
-            "For async component updates, route changes, or transitions, prefer locator-aware "
-            "Playwright waits such as locator.waitFor() instead of fixed sleeps."
+            "For async component updates, route changes, or transitions, raise the timeout "
+            "option of the action that waits for the element instead of adding a fixed sleep."
         ),
     ),
     "svelte": SelectorPromptStrategy(
@@ -70,8 +73,8 @@ SELECTOR_PROMPT_STRATEGIES: Mapping[FrameworkName, SelectorPromptStrategy] = {
             "Detected framework: Svelte. Prefer accessible role/name locators, then stable "
             "data-testid or data-test hooks. Avoid compiled Svelte class names, generated "
             "attributes, transition-only state, and DOM structure that may shift during "
-            "compilation. For transitions or reactive updates, prefer locator "
-            "waits such as locator.waitFor() or page.waitForSelector() over arbitrary timeouts."
+            "compilation. For transitions or reactive updates, raise the timeout option of the "
+            "action that waits for the element rather than adding a fixed sleep."
         ),
     ),
     "generic": SelectorPromptStrategy(
@@ -80,7 +83,7 @@ SELECTOR_PROMPT_STRATEGIES: Mapping[FrameworkName, SelectorPromptStrategy] = {
             "Detected framework: generic or unknown. Prefer resilient Playwright locators in this "
             "order: role/name, label, text that reflects user-visible intent, then stable "
             "data-testid/data-test hooks. Avoid brittle CSS classes, generated ids, and DOM-depth "
-            "selectors. Use locator-aware waits such as locator.waitFor() instead of fixed sleeps."
+            "selectors. For slow elements, raise the action's timeout option instead of a sleep."
         ),
     ),
 }

@@ -152,14 +152,16 @@ def _first_difference(
     if original_marker is not None or patched_marker is not None:
         return None if original_marker == patched_marker else patched
 
-    if original.type != patched.type or len(original.children) != len(patched.children):
+    original_children = _comparable_children(original, original_source, allowlist)
+    patched_children = _comparable_children(patched, patched_source, allowlist)
+    if original.type != patched.type or len(original_children) != len(patched_children):
         return patched
     if not original.children:
         if _node_text(original, original_source) != _node_text(patched, patched_source):
             return patched
         return None
 
-    for original_child, patched_child in zip(original.children, patched.children, strict=True):
+    for original_child, patched_child in zip(original_children, patched_children, strict=True):
         difference = _first_difference(
             original_child,
             patched_child,
@@ -170,6 +172,37 @@ def _first_difference(
         if difference is not None:
             return difference
     return None
+
+
+def _comparable_children(node: Node, source: bytes, allowlist: AstLockAllowlist) -> list[Node]:
+    """Children to compare, without a trailing timeout-only options object on an action or wait.
+
+    ``click(sel)`` and ``click(sel, { timeout: 10_000 })`` wait differently but do the same
+    thing, so adding or removing ``{ timeout: <number> }`` is a wait-condition edit. Any other
+    key, a computed value, or a call outside the action/wait methods stays locked.
+    """
+    children = list(node.children)
+    call = node.parent
+    if node.type != "arguments" or call is None or call.type != "call_expression":
+        return children
+    if _call_name(call, source) not in allowlist.page_selector_methods | allowlist.wait_methods:
+        return children
+    last = next((c for c in reversed(node.named_children) if c.type != "comment"), None)
+    if last is None or not _is_timeout_only_object(last, source, allowlist):
+        return children
+    index = next(i for i, child in enumerate(children) if child.id == last.id)
+    start = index - 1 if index > 0 and children[index - 1].type == "," else index
+    return children[:start] + children[index + 1 :]
+
+
+def _is_timeout_only_object(node: Node, source: bytes, allowlist: AstLockAllowlist) -> bool:
+    pairs = [child for child in node.named_children if child.type != "comment"]
+    if node.type != "object" or len(pairs) != 1 or pairs[0].type != "pair":
+        return False
+    value = pairs[0].child_by_field_name("value")
+    return (
+        value is not None and value.type == "number" and _is_timeout_value(value, source, allowlist)
+    )
 
 
 def _allowed_marker(
