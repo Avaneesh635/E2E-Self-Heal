@@ -1,0 +1,21 @@
+# Local development database for product/api. Credentials are for local use only.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: product
+      POSTGRES_PASSWORD: product
+      POSTGRES_DB: product
+    ports:
+      # Override with PRODUCT_DB_PORT if a local Postgres already uses 5432.
+      - "${PRODUCT_DB_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U product -d product"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  postgres-data:
