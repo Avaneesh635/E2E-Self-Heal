@@ -1,5 +1,17 @@
 # Local development database for product/api. Credentials are for local use only.
 services:
+  api:
+    build:
+      context: ..
+      dockerfile: product/api/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      PRODUCT_API_DATABASE_URL: postgresql+psycopg://product:product@postgres:5432/product
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   postgres:
     image: postgres:16
     environment:
