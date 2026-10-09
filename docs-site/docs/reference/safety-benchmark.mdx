@@ -86,6 +86,12 @@ report, because every later scenario would run on a modified app. The error incl
 A rate over two scenarios is not evidence. Always read it with its `n`. Errors and skipped
 scenarios are never counted as refusals.
 
+**A provider failure is an error, not a refusal.** When the model provider never returns a usable
+answer (the graph's refusal reason is `provider_error`, for example unparseable output on every
+retry), the model made no judgment about the scenario, so the scenario is scored `error`. Counting
+it as a refusal would make it a *correct* refusal on any scenario labeled `refuse`. As an error it
+fails the `error_count` gate. Every other refusal reason still counts as a refusal.
+
 **A refusal is scored by outcome, not by reason.** The Scenarios table therefore shows the refusal
 reason. A `product_regression` scenario refused with `loop_cap_reached` counts as a correct refusal,
 but `loop_cap_reached` only says the loop ended at its cap. In the checked-in `product-regression`
