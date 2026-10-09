@@ -42,6 +42,9 @@ _SELECTOR_CALL = re.compile(
     r"(?:\bpage\.|\.)(locator|getByRole|getByText|getByLabel|getByPlaceholder|"
     r"getByAltText|getByTitle|getByTestId)\s*\("
 )
+# A trailing ``{ timeout: <number> }`` argument is a wait condition, not action data, so an
+# action may gain, lose, or retune one. The AST lock re-checks the same rule structurally.
+_TIMEOUT_ONLY_OPTION = re.compile(r"(?:,\s*)?\{\s*timeout\s*:\s*\d[\d_]*\s*\}\s*(?=\))")
 
 
 class _MaskState(Enum):
@@ -373,7 +376,11 @@ def _validate_action_calls(instruction: PatchInstruction) -> None:
     """Allow selector edits while preserving every other argument (data and options)."""
     original = _masked_selector_line(instruction.original)
     replacement = _masked_selector_line(instruction.replacement)
-    if original is None or replacement is None or original != replacement:
+    if (
+        original is None
+        or replacement is None
+        or _TIMEOUT_ONLY_OPTION.sub("", original) != _TIMEOUT_ONLY_OPTION.sub("", replacement)
+    ):
         raise PatchGuardrailViolation(
             f"line {instruction.line} changes an argument other than the selector "
             "of a Playwright action"
@@ -494,8 +501,14 @@ def _apply(code: str, instructions: list[PatchInstruction]) -> str:
 
         current, line_ending = split_line_ending(lines[index])
         if current != instruction.original:
+            found = [
+                n
+                for n, line in enumerate(lines, 1)
+                if split_line_ending(line)[0] == instruction.original
+            ]
+            hint = f" (that text is on line {', '.join(map(str, found))})" if found else ""
             raise PatchApplicationError(
-                f"line {instruction.line} no longer matches the expected original text"
+                f"line {instruction.line} no longer matches the expected original text{hint}"
             )
         masked_current, _ = split_line_ending(masked_lines[index])
         _validate_patch_scope(instruction, masked_original=masked_current)
@@ -506,6 +519,11 @@ def _apply(code: str, instructions: list[PatchInstruction]) -> str:
     patched = "".join(lines)
     _enforce_ast_lock(code, patched)
     return patched
+
+
+def _numbered(code: str) -> str:
+    """Prefix each line with its 1-based number so the model need not count lines."""
+    return "\n".join(f"{n}| {line}" for n, line in enumerate(code.splitlines(), 1))
 
 
 def patch_generator(state: AgentState) -> dict:
@@ -535,7 +553,8 @@ def patch_generator(state: AgentState) -> dict:
         }
     user_prompt = (
         f"Failure diagnosis:\n{state['analysis_report']}\n\n"
-        f"Current test code:\n{state['current_code']}"
+        f"Current test code (each line is prefixed with its 1-based number and '| ', which "
+        f"is not part of the line):\n{_numbered(state['current_code'])}"
     )
     framework = state.get("detected_framework") or detect_framework(
         state["test_script_path"],

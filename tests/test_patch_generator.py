@@ -59,6 +59,25 @@ def test_patch_generator_prefers_explicit_framework_hint(
     assert "Detected framework: React" in prompts[0]
 
 
+def test_patch_generator_shows_the_code_with_line_numbers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The model returns a line number per edit; counting lines itself is where it went wrong.
+    prompts: list[str] = []
+
+    def fake_generate_patch(system_prompt: str, user_prompt: str) -> PatchOutput:
+        prompts.append(user_prompt)
+        return PatchOutput(instructions=[])
+
+    monkeypatch.setattr(patch_node, "generate_patch", fake_generate_patch)
+
+    patch_node.patch_generator(
+        _state(current_code="await page.goto('/')\nawait page.click('#a')\n")
+    )
+
+    assert prompts[0].endswith("1| await page.goto('/')\n2| await page.click('#a')")
+
+
 def test_patch_generator_records_provider_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     def raise_provider_error(_system_prompt: str, _user_prompt: str) -> PatchOutput:
         raise RuntimeError("provider unavailable")

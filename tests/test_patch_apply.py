@@ -88,6 +88,14 @@ def test_rejects_mismatched_original_line() -> None:
         )
 
 
+def test_mismatched_original_line_says_where_the_text_is() -> None:
+    with pytest.raises(PatchApplicationError, match=r"that text is on line 2\)"):
+        _apply(
+            "await page.goto('/')\nawait page.click('#old')\n",
+            [_instruction(1, "await page.click('#old')", "await page.click('#new')")],
+        )
+
+
 def test_rejects_duplicate_line_targets() -> None:
     instructions = [
         _instruction(1, "await page.click('#old')", "await page.click('#first')"),
@@ -246,6 +254,24 @@ def test_allows_locator_selector_edit_without_changing_fill_value() -> None:
         _apply("await page.locator('#old-email').fill('user@example.com')\n", [instruction])
         == "await page.locator('#new-email').fill('user@example.com')\n"
     )
+
+
+def test_allows_adding_a_timeout_to_a_click() -> None:
+    # A slow element is fixed on the action's own line; no extra wait line is needed.
+    instruction = _instruction(
+        1, "await page.click('#a')", "await page.click('#a', { timeout: 10000 })", selector=""
+    )
+    assert _apply("await page.click('#a')\n", [instruction]) == (
+        "await page.click('#a', { timeout: 10000 })\n"
+    )
+
+
+def test_rejects_adding_a_non_timeout_option_with_a_timeout() -> None:
+    instruction = _instruction(
+        1, "await page.click('#a')", "await page.click('#a', { timeout: 10000, force: true })"
+    )
+    with pytest.raises(PatchApplicationError, match="argument other than the selector"):
+        _apply("await page.click('#a')\n", [instruction])
 
 
 def test_rejects_click_force_option_edit() -> None:
