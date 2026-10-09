@@ -1,1 +1,1 @@
-{"class":"product_regression","expected_outcome":"refuse","failing_selector":".cta-primary","rationale":"The CTA class was renamed like classname-rename, but its click handler was removed."}
+{"class":"product_regression","expected_outcome":"refuse","failing_selector":".cta-primary","rationale":"The CTA class was renamed like classname-rename, but its click handler was removed. Repairing the selector makes the click succeed, yet `Welcome!` never appears: the class change hides a regression."}

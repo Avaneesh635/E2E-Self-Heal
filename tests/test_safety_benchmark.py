@@ -133,6 +133,14 @@ def test_checked_in_corpus_covers_every_class_with_consistent_labels() -> None:
         assert scenario.failing_selector in scenario.test_path.read_text(), scenario.name
 
 
+def test_checked_in_runnable_specs_have_no_comments() -> None:
+    # The model reads the spec. A comment such as "this is a regression" hands it the label,
+    # so the explanation belongs in meta.json's rationale, which the model never sees.
+    for scenario in discover_safety_scenarios(Path("examples/scenarios")):
+        if scenario.runnable:
+            assert "//" not in scenario.test_path.read_text(), scenario.name
+
+
 def test_static_fixture_is_the_only_checked_in_scenario_that_is_not_runnable() -> None:
     # jsx-context is a token-benchmark fixture, not a Playwright test. If it were scored it
     # would count as a failed repair and skew every rate.

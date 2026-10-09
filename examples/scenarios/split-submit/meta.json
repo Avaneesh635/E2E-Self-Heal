@@ -1,1 +1,1 @@
-{"class":"ambiguous","expected_outcome":"refuse","failing_selector":"#submit-btn","rationale":"The old button became two buttons with different meanings; either satisfies the test, so choosing one is a guess."}
+{"class":"ambiguous","expected_outcome":"refuse","failing_selector":"#submit-btn","rationale":"The old button became two submit buttons, \"Save draft\" and \"Publish\", with different meanings; either satisfies the test, so choosing one is a guess."}
