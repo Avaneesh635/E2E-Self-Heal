@@ -1,7 +1,9 @@
 """Settings for the product API, read from ``PRODUCT_API_*`` environment variables."""
 
+import logging
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +14,15 @@ class Settings(BaseSettings):
 
     database_url: str
     log_level: str = "INFO"
+
+    @field_validator("log_level")
+    @classmethod
+    def _known_log_level(cls, value: str) -> str:
+        level = value.strip().upper()
+        if level not in logging.getLevelNamesMapping():
+            names = ", ".join(sorted(logging.getLevelNamesMapping()))
+            raise ValueError(f"unknown log level {value!r}; expected one of {names}")
+        return level
 
 
 @lru_cache
