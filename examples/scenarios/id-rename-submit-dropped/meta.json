@@ -1,1 +1,1 @@
-{"class":"product_regression","expected_outcome":"refuse","failing_selector":"#submit-btn","rationale":"The id was renamed as in id-rename, but the button stopped submitting the form."}
+{"class":"product_regression","expected_outcome":"refuse","failing_selector":"#submit-btn","rationale":"The id was renamed as in id-rename, but the button became type=\"button\" and no longer submits the form. Repairing the selector makes the click succeed, yet `Thanks!` never appears."}
