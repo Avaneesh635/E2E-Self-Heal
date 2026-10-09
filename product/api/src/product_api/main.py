@@ -4,9 +4,11 @@ The product never runs Playwright or repair logic; it only consumes structured o
 the user's CI sends after running the core (see discussion #332).
 """
 
+from importlib.metadata import version
 from typing import Annotated, Literal
 
 from app.logging import configure_logging
+from app.schemas import SCHEMA_VERSION
 from fastapi import Depends, FastAPI, Response, status
 from pydantic import BaseModel
 from sqlalchemy import Engine
@@ -20,8 +22,18 @@ class Health(BaseModel):
     database: bool
 
 
+class VersionInfo(BaseModel):
+    api_version: str
+    schema_version: str
+
+
 def create_app() -> FastAPI:
-    api = FastAPI(title="E2E Self-Heal API")
+    api_version = version("product-api")
+    api = FastAPI(title="E2E Self-Heal API", version=api_version)
+
+    @api.get("/version")
+    def version_info() -> VersionInfo:
+        return VersionInfo(api_version=api_version, schema_version=SCHEMA_VERSION)
 
     @api.get("/healthz")
     def healthz(response: Response, engine: Annotated[Engine, Depends(get_engine)]) -> Health:
