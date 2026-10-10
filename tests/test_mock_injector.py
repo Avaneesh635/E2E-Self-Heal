@@ -452,3 +452,26 @@ async def test_miss_policy_record_and_augment_async():
     assert injector.recorded_snapshots[0].response.body == "live-body"
     assert injector.matcher is not None
     assert len(injector.matcher.snapshots) == 1
+
+
+def test_mock_injector_fulfills_with_folded_duplicate_headers_unchanged():
+    # Playwright's route.fulfill takes a dict and turns each newline in a Set-Cookie value back
+    # into its own header, so the folded form from the parsers must reach it untouched (#226).
+    folded = {
+        "Set-Cookie": "session=one; Path=/\ncsrf=two; Path=/",
+        "Link": "<a>; rel=preload, <b>; rel=preload",
+    }
+    snapshot = NetworkSnapshot(
+        request=CapturedRequest(method="GET", url="https://api.example.com/login"),
+        response=CapturedResponse(status=200, headers=folded, body="ok"),
+    )
+    mock_page = MagicMock()
+    mock_route = MagicMock()
+    mock_request = _make_request("https://api.example.com/login")
+
+    injector = MockInjector(page_or_context=mock_page)
+    injector.inject_mock("**/*", [snapshot])
+    _, handler = mock_page.route.call_args[0]
+    handler(mock_route, mock_request)
+
+    mock_route.fulfill.assert_called_once_with(status=200, headers=folded, body=b"ok")

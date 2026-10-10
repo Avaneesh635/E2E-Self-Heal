@@ -39,6 +39,12 @@ All notable changes to this project are documented here. The format is based on
   repair (#291).
 
 ### Fixed
+- Shadow replay no longer drops repeated HTTP headers when parsing a HAR or Playwright trace.
+  Each repeat used to overwrite the one before, so a response with two `Set-Cookie` headers
+  kept only the last. Repeats are now folded the way Playwright represents them: `Set-Cookie`
+  values are joined with a newline and any other repeated header with `, `, grouped
+  case-insensitively with the first spelling kept. The snapshot schema is unchanged, so saved
+  snapshots load as before (#226).
 - `classname-rename`'s `meta.json` named `.submit-btn` as the failing selector; its spec clicks
   `.cta-button`. The label now matches (#291).
 - The safety benchmark scored a model-provider failure (for example unparseable structured
