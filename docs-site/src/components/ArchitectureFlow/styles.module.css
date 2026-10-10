@@ -41,6 +41,15 @@
     background-color: var(--eeh-surface-raised);
 }
 
+/* Stages with a tooltip are focusable (tabindex=0). Only keyboard focus shows the ring, so a
+   mouse click does not leave the tooltip pinned open. */
+.stageBox:focus-visible {
+    outline: 2px solid var(--ifm-color-primary);
+    outline-offset: 2px;
+    border-color: var(--ifm-color-primary);
+    background-color: var(--eeh-surface-raised);
+}
+
 .stageLabel {
     font-family: var(--eeh-font-mono);
     font-size: 0.95rem;
@@ -73,7 +82,7 @@
 }
 
 .stageBox:hover .stageTooltip,
-.stageBox:focus-within .stageTooltip {
+.stageBox:focus-visible .stageTooltip {
     opacity: 1;
 }
 
@@ -85,9 +94,54 @@
     line-height: 1;
 }
 
-/* Hide the styled tooltip on narrow screens (the native title still works). */
+/* Mermaid variant. The diagram is an inline SVG, so it resolves the --eeh-* tokens from the
+   page and follows the light/dark theme like the boxes above. Mermaid injects its own
+   theme styles with higher specificity (an id selector), and its definition syntax cannot
+   express var(--token), so these rules need !important. */
+.mermaidFlow {
+    display: flex;
+    justify-content: center;
+    margin: var(--eeh-space-6) 0;
+}
+
+.mermaidFlow svg {
+    max-width: 100%;
+    height: auto;
+}
+
+.mermaidFlow :global(.node rect),
+.mermaidFlow :global(.node polygon) {
+    fill: var(--eeh-surface) !important;
+    stroke: var(--eeh-border) !important;
+    rx: var(--eeh-radius-md);
+    ry: var(--eeh-radius-md);
+}
+
+.mermaidFlow :global(.node .label),
+.mermaidFlow :global(.node .nodeLabel),
+.mermaidFlow :global(.node text) {
+    color: var(--eeh-text) !important;
+    fill: var(--eeh-text) !important;
+    font-family: var(--eeh-font-mono) !important;
+}
+
+.mermaidFlow :global(.flowchart-link) {
+    stroke: var(--eeh-text-muted) !important;
+}
+
+.mermaidFlow :global(marker path) {
+    fill: var(--eeh-text-muted) !important;
+    stroke: var(--eeh-text-muted) !important;
+}
+
+/* Hide the hover tooltip on narrow screens (the native title still works), but keep it for
+   keyboard focus so it is never lost to a small or zoomed viewport. */
 @media (max-width: 767px) {
     .stageTooltip {
         display: none;
+    }
+
+    .stageBox:focus-visible .stageTooltip {
+        display: block;
     }
 }

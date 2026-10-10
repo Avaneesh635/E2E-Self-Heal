@@ -94,6 +94,11 @@ const config: Config = {
         locales: ["en"],
     },
 
+    // Mermaid theme: provides the `@theme/Mermaid` component that
+    // <ArchitectureFlow variant="mermaid" /> renders through. `markdown.mermaid` stays off
+    // because no page uses ```mermaid fences.
+    themes: ["@docusaurus/theme-mermaid"],
+
     presets: [
         [
             "classic",
