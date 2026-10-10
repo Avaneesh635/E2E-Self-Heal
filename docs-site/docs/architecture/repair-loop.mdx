@@ -3,9 +3,26 @@ title: "The repair loop"
 description: "Four layers drive a LangGraph loop: Diagnoser → Patch Generator → Selector Verifier → Test Runner."
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+import ArchitectureFlow from "@site/src/components/ArchitectureFlow";
+
 # The repair loop
 
 Four layers drive a LangGraph loop: Diagnoser → Patch Generator → Selector Verifier → Test Runner.
+
+## The loop at a glance
+
+Hover a stage, or tab to it, for a one-line description.
+
+<Tabs>
+  <TabItem value="boxes" label="Boxes" default>
+    <ArchitectureFlow />
+  </TabItem>
+  <TabItem value="mermaid" label="Mermaid">
+    <ArchitectureFlow variant="mermaid" />
+  </TabItem>
+</Tabs>
 
 :::note Draft — scaffolded page
 This page is a stub. Planned contents:
