@@ -194,6 +194,20 @@ ShadowSnapshot  ──save/get (JSON on disk)──▶  ShadowSnapshot
 network_snapshots[]  ──inject──▶  SnapshotMatcher  ──match(CapturedRequest)──▶  CapturedResponse  ──▶  route.fulfill(...)
 ```
 
+**Repeated headers.** `headers` is a `dict[str, str]`, but HTTP lets a name repeat, so the
+parsers fold repeats into one entry the way Playwright does in both directions
+(`Response.headers` out, `route.fulfill(headers=...)` in):
+
+- `Set-Cookie` values are joined with a newline. A header value cannot contain one, so
+  nothing is lost, and Playwright turns each line back into its own `Set-Cookie` header on
+  replay.
+- Every other repeated header is joined with `, ` (equivalent under RFC 9110 §5.3).
+- Names are grouped case-insensitively and the first spelling seen is kept. Values keep their
+  original order and identical repeats are kept. Empty values are ignored when combining.
+
+Persisted snapshots redact `Set-Cookie` as one value, so cookie values from a saved snapshot are
+never replayed; the folding matters for live captures and for headers such as `Link` and `Vary`.
+
 Because every boundary is a validated Pydantic model, a malformed snapshot fails **at the
 boundary it crosses** (parse, store, or match) with a typed error — it never reaches
 Playwright as a silent bad replay.

@@ -308,3 +308,36 @@ def test_archive_without_trace_streams_raises(tmp_path):
 
 def test_errors_derive_from_trace_parse_error():
     assert issubclass(InvalidTraceArchiveError, TraceParseError)
+
+
+# --- repeated header names (#226) ---------------------------------------------------------
+
+
+def test_trace_keeps_duplicate_request_and_response_headers(tmp_path):
+    trace = _write_trace_zip(
+        tmp_path / "trace.zip",
+        network_lines=[
+            _resource_snapshot(
+                request_headers=[
+                    {"name": "Accept", "value": "text/html"},
+                    {"name": "Accept", "value": "application/json"},
+                ],
+                response_headers=[
+                    {"name": "Content-Type", "value": "text/html"},
+                    {"name": "Set-Cookie", "value": "session=one; Path=/"},
+                    {"name": "set-cookie", "value": "csrf=two; Path=/"},
+                    {"name": "Vary", "value": "Accept"},
+                    {"name": "Vary", "value": "Origin"},
+                ],
+            )
+        ],
+    )
+
+    (snap,) = PlaywrightTraceParser().parse(trace)
+
+    assert snap.request.headers == {"Accept": "text/html, application/json"}
+    assert snap.response.headers == {
+        "Content-Type": "text/html",
+        "Set-Cookie": "session=one; Path=/\ncsrf=two; Path=/",
+        "Vary": "Accept, Origin",
+    }

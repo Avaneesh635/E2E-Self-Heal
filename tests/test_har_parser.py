@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from app.shadow.har_entry import headers_to_dict
 from app.shadow.har_parser import HarTraceParser, InvalidHarFileError
 from app.shadow.interfaces import ITraceParser
 from app.shadow.trace_parser import TraceParseError
@@ -290,3 +291,135 @@ def test_invalid_utf8_raises_typed_error(tmp_path: Path) -> None:
 
 def test_error_derives_from_trace_parse_error() -> None:
     assert issubclass(InvalidHarFileError, TraceParseError)
+
+
+# --- repeated header names (#226) ---------------------------------------------------------
+
+
+def _header_list(*pairs: tuple[str, str]) -> list[dict[str, str]]:
+    return [{"name": name, "value": value} for name, value in pairs]
+
+
+def test_every_set_cookie_survives_in_order() -> None:
+    folded = headers_to_dict(
+        _header_list(
+            ("Set-Cookie", "a=1; Path=/"),
+            ("Set-Cookie", "b=2; Path=/"),
+            ("Set-Cookie", "c=3"),
+        )
+    )
+
+    # Newline is Playwright's own separator for Set-Cookie and cannot occur inside a value.
+    assert folded == {"Set-Cookie": "a=1; Path=/\nb=2; Path=/\nc=3"}
+
+
+def test_other_repeated_headers_are_joined_with_a_comma() -> None:
+    folded = headers_to_dict(
+        _header_list(
+            ("Link", "<a>; rel=preload"),
+            ("Link", "<b>; rel=preload"),
+            ("Vary", "Accept"),
+            ("Vary", "Origin"),
+        )
+    )
+
+    assert folded == {"Link": "<a>; rel=preload, <b>; rel=preload", "Vary": "Accept, Origin"}
+
+
+def test_repeated_names_fold_regardless_of_case_and_keep_the_first_spelling() -> None:
+    folded = headers_to_dict(
+        _header_list(
+            ("set-cookie", "a=1"),
+            ("Set-Cookie", "b=2"),
+            ("Vary", "Accept"),
+            ("vary", "Origin"),
+        )
+    )
+
+    assert folded == {"set-cookie": "a=1\nb=2", "Vary": "Accept, Origin"}
+
+
+def test_identical_repeated_values_are_all_kept() -> None:
+    folded = headers_to_dict(
+        _header_list(
+            ("Set-Cookie", "a=1"),
+            ("Set-Cookie", "a=1"),
+            ("X-Trace", "x"),
+            ("X-Trace", "x"),
+        )
+    )
+
+    assert folded == {"Set-Cookie": "a=1\na=1", "X-Trace": "x, x"}
+
+
+def test_a_header_that_appears_once_is_unchanged() -> None:
+    folded = headers_to_dict(
+        _header_list(("Accept", "application/json"), ("content-type", "text/html"))
+    )
+
+    assert folded == {"Accept": "application/json", "content-type": "text/html"}
+    assert list(folded) == ["Accept", "content-type"]
+
+
+def test_distinct_headers_keep_the_order_of_their_first_appearance() -> None:
+    folded = headers_to_dict(_header_list(("A", "1"), ("B", "2"), ("A", "3")))
+
+    assert list(folded) == ["A", "B"]
+    assert folded["A"] == "1, 3"
+
+
+def test_empty_values_leave_no_dangling_separator() -> None:
+    assert headers_to_dict(_header_list(("Vary", "Accept"), ("Vary", ""))) == {"Vary": "Accept"}
+    assert headers_to_dict(_header_list(("Vary", ""), ("Vary", "Accept"))) == {"Vary": "Accept"}
+    assert headers_to_dict(_header_list(("X-Empty", ""), ("X-Empty", ""))) == {"X-Empty": ""}
+    assert headers_to_dict(_header_list(("X-Empty", ""))) == {"X-Empty": ""}
+
+
+def test_malformed_header_entries_are_skipped() -> None:
+    assert headers_to_dict(None) == {}
+    assert headers_to_dict({"name": "Accept", "value": "x"}) == {}
+    assert headers_to_dict(
+        [
+            "not-a-dict",
+            {"value": "no name"},
+            {"name": "", "value": "empty name"},
+            {"name": 7, "value": "numeric name"},
+            {"name": "X-Count", "value": 3},
+            {"name": "Accept", "value": "ok"},
+        ]
+    ) == {"X-Count": "", "Accept": "ok"}
+
+
+def test_parsing_a_har_keeps_duplicate_request_and_response_headers(tmp_path: Path) -> None:
+    entry = {
+        "request": {
+            "method": "GET",
+            "url": "https://example.com/login",
+            "headers": _header_list(
+                ("Accept", "text/html"),
+                ("Accept", "application/json"),
+                ("Cookie", "a=1"),
+            ),
+        },
+        "response": {
+            "status": 200,
+            "headers": _header_list(
+                ("Content-Type", "text/html"),
+                ("Set-Cookie", "session=one; Path=/"),
+                ("Set-Cookie", "csrf=two; Path=/"),
+                ("Link", "<a>; rel=preload"),
+                ("Link", "<b>; rel=preload"),
+            ),
+            "content": {"text": "ok"},
+        },
+    }
+    path = _write_har(tmp_path / "duplicates.har", [entry])
+
+    (snapshot,) = HarTraceParser().parse(path)
+
+    assert snapshot.request.headers == {"Accept": "text/html, application/json", "Cookie": "a=1"}
+    assert snapshot.response.headers == {
+        "Content-Type": "text/html",
+        "Set-Cookie": "session=one; Path=/\ncsrf=two; Path=/",
+        "Link": "<a>; rel=preload, <b>; rel=preload",
+    }
