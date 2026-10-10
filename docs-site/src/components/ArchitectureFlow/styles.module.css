@@ -134,9 +134,10 @@
     stroke: var(--eeh-text-muted) !important;
 }
 
-/* Hide the hover tooltip on narrow screens (the native title still works), but keep it for
-   keyboard focus so it is never lost to a small or zoomed viewport. */
-@media (max-width: 767px) {
+/* Touch screens cannot hover, so the styled tooltip would only appear stuck after a tap: hide
+   it there (the native title still works) but keep it for keyboard focus. This keys on the
+   device, not the window width, so a narrow desktop window still shows tooltips on hover. */
+@media (hover: none) {
     .stageTooltip {
         display: none;
     }

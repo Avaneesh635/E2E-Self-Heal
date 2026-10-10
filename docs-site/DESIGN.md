@@ -134,8 +134,9 @@ down-arrow. Hovering a box reveals a one-line tooltip (text via props).
   as long as tokens and order are respected. The component ships both: `variant="dom"`
   (default) and `variant="mermaid"`, drawing the same stages in the same order.
 - Keyboard: a stage with a tooltip is focusable, and its tooltip shows on hover and on
-  `:focus-visible` (also on narrow screens, where the hover tooltip is hidden). The native
-  `title` stays as a fallback, and the tooltip is linked with `aria-describedby`.
+  `:focus-visible`. On devices that cannot hover (touch screens) the styled tooltip is hidden
+  except on keyboard focus, regardless of window width. The native `title` stays as a
+  fallback, and the tooltip is linked with `aria-describedby`.
 - Mermaid variant: tokens are applied to the rendered SVG from the component's CSS Module
   (Mermaid's definition syntax cannot express `var(--token)`), and the resolved
   `--eeh-font-mono` stack is passed to Mermaid so boxes are sized for the font drawn. SVG has
