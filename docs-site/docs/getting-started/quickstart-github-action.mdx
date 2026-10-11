@@ -3,7 +3,7 @@ title: "Quickstart — GitHub Action"
 description: "Add self-healing to your PRs in ~5 minutes. No local setup — it runs in the cloud and opens a patch PR."
 ---
 
-import ScopeGuardrailCallout from '@site/src/components/ScopeGuardrailCallout';
+import ScopeGuardrailCallout from "@site/src/components/ScopeGuardrailCallout";
 
 # Quickstart — GitHub Action
 
@@ -27,41 +27,43 @@ engine heals the target test and opens a patch PR:
 ```yaml title=".github/workflows/e2e-self-heal.yml"
 name: e2e-self-heal
 on:
-  pull_request:
+    pull_request:
 
 permissions:
-  contents: write
-  pull-requests: write
+    contents: write
+    pull-requests: write
+    id-token: write # required only when upload-url is set (OIDC to the product API)
 
 jobs:
-  self-heal:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # full history so diff-base can resolve the PR base
+    self-heal:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0 # full history so diff-base can resolve the PR base
 
-      - name: E2E self-heal
-        id: heal
-        uses: Lee-Dongwook/E2E-Self-Heal@v0.4.0
-        with:
-          test-path: tests/example.spec.ts
-          nvidia-api-key: ${{ secrets.NVIDIA_API_KEY }}
-          diff-base: ${{ github.event.pull_request.base.sha }}
-          app-url: http://localhost:4173 # optional: enables live selector verification
+            - name: E2E self-heal
+              id: heal
+              uses: Lee-Dongwook/E2E-Self-Heal@v0.4.0
+              with:
+                  test-path: tests/example.spec.ts
+                  nvidia-api-key: ${{ secrets.NVIDIA_API_KEY }}
+                  diff-base: ${{ github.event.pull_request.base.sha }}
+                  app-url: http://localhost:4173 # optional: enables live selector verification
+                  # upload-url: https://api.example.com # optional: POST result JSON to the product
 
-      - name: Open patch PR
-        if: steps.heal.outputs.outcome == 'healed'
-        uses: peter-evans/create-pull-request@v6
-        with:
-          commit-message: "fix(e2e): auto-heal broken selector"
-          title: "Auto-healed E2E test"
-          body-path: ${{ steps.heal.outputs.summary-path }}
-          branch: e2e-self-heal/${{ github.run_id }}
+            - name: Open patch PR
+              if: steps.heal.outputs.outcome == 'healed'
+              uses: peter-evans/create-pull-request@v6
+              with:
+                  commit-message: "fix(e2e): auto-heal broken selector"
+                  title: "Auto-healed E2E test"
+                  body-path: ${{ steps.heal.outputs.summary-path }}
+                  branch: e2e-self-heal/${{ github.run_id }}
 
-      - name: Fail if unhealed
-        if: steps.heal.outputs.outcome == 'unhealed'
-        run: exit 1
+            - name: Fail if unhealed
+              if: steps.heal.outputs.outcome == 'unhealed'
+              run: exit 1
 ```
 
 That's the whole setup. A **runnable self-demo** that heals this repo's own `examples/`
@@ -70,13 +72,14 @@ project lives in
 
 ## Inputs that matter
 
-| Input | Required | What it's for |
-| --- | --- | --- |
-| `test-path` | ✅ | The Playwright spec to heal when the suite fails (e.g. `tests/login.spec.ts`). |
-| `nvidia-api-key` | ✅ | Your LLM API key, from a GitHub secret. Never hardcode it. |
-| `diff-base` | – | Base git ref (usually the PR base SHA). Scopes the `git diff` the engine reasons over. |
-| `app-url` | – | URL of your running app. Enables **live-DOM selector verification** — patched selectors are checked against the real page before a full test run. |
-| `working-directory` | – | Set this if your Playwright project lives in a subdirectory (monorepos). |
+| Input               | Required | What it's for                                                                                                                                                                                          |
+| ------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `test-path`         | ✅       | The Playwright spec to heal when the suite fails (e.g. `tests/login.spec.ts`).                                                                                                                         |
+| `nvidia-api-key`    | ✅       | Your LLM API key, from a GitHub secret. Never hardcode it.                                                                                                                                             |
+| `diff-base`         | –        | Base git ref (usually the PR base SHA). Scopes the `git diff` the engine reasons over.                                                                                                                 |
+| `app-url`           | –        | URL of your running app. Enables **live-DOM selector verification** — patched selectors are checked against the real page before a full test run.                                                      |
+| `working-directory` | –        | Set this if your Playwright project lives in a subdirectory (monorepos).                                                                                                                               |
+| `upload-url`        | –        | Product API base URL. When set, the action POSTs the result JSON to `<upload-url>/v1/runs` via OIDC. Requires `permissions: id-token: write`. Upload failures warn only — they never change `outcome`. |
 
 Full list: [GitHub Action reference](../reference/github-action).
 
@@ -84,10 +87,10 @@ Full list: [GitHub Action reference](../reference/github-action).
 
 The Action reports what happened via `steps.heal.outputs.outcome`, so you can branch in YAML:
 
-| `outcome` | Meaning | Typical follow-up |
-| --- | --- | --- |
-| `passed` | Suite was green — nothing to do. | — |
-| `healed` | A selector broke and was fixed. | Open a patch PR (as above). |
+| `outcome`  | Meaning                                          | Typical follow-up              |
+| ---------- | ------------------------------------------------ | ------------------------------ |
+| `passed`   | Suite was green — nothing to do.                 | —                              |
+| `healed`   | A selector broke and was fixed.                  | Open a patch PR (as above).    |
 | `unhealed` | Broke and couldn't be fixed within the loop cap. | Fail the job so a human looks. |
 
 ## What the patch PR looks like
@@ -107,8 +110,8 @@ For a successful repair, the PR body is generated from the machine-readable `Rep
 (`steps.heal.outputs.summary-path`), so reviewers see exactly what changed and why.
 
 <ScopeGuardrailCallout>
-  This holds in CI too: the patch always lands as a reviewable PR, and nothing is merged
-  automatically.
+    This holds in CI too: the patch always lands as a reviewable PR, and nothing
+    is merged automatically.
 </ScopeGuardrailCallout>
 
 ## Next steps

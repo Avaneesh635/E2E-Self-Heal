@@ -5,12 +5,44 @@ description: "Every input and output of the E2E-Self-Heal Action, from action.ym
 
 # GitHub Action inputs & outputs
 
-Every input and output of the E2E-Self-Heal Action, from action.yml.
+Every input and output of the E2E-Self-Heal Action, from `action.yml`.
 
-:::note Draft — scaffolded page
-This page is a stub. Planned contents:
+## Inputs
 
-- Inputs table (test-path, nvidia-api-key, diff-base, app-url, mode, working-directory)
-- Outputs: outcome, summary-path, review-path
-- Pinning a version tag
-:::
+| Input               | Required | Default               | What it's for                                                        |
+| ------------------- | -------- | --------------------- | -------------------------------------------------------------------- |
+| `test-path`         | ✅       | —                     | Playwright spec to heal/review when the suite fails.                 |
+| `nvidia-api-key`    | ✅       | —                     | NVIDIA NIM API key (`E2E_HEALER_NVIDIA_API_KEY`).                    |
+| `mode`              | –        | `heal`                | `heal` (patch the test) or `review` (source-level suggestions only). |
+| `diff-base`         | –        | `""`                  | Base git ref for `base...HEAD` (e.g. PR base SHA).                   |
+| `diff-file`         | –        | `""`                  | Path to a diff file; takes precedence over `diff-base`.              |
+| `working-directory` | –        | `.`                   | Directory that contains the Playwright project.                      |
+| `playwright-cmd`    | –        | `npx playwright test` | Command used to run Playwright.                                      |
+| `app-url`           | –        | `""`                  | URL for live selector verification (empty = skip).                   |
+| `upload-url`        | –        | `""`                  | Product API base URL. Empty keeps today's behaviour (no upload).     |
+
+## Outputs
+
+| Output         | Values / meaning                                                            |
+| -------------- | --------------------------------------------------------------------------- |
+| `outcome`      | `passed` \| `healed` \| `unhealed` \| `reviewed` \| `errored`               |
+| `summary-path` | Path to `RepairSummary` / `RefusalReport` JSON (heal mode; empty otherwise) |
+| `review-path`  | Path to `ReviewReport` JSON (review mode; empty otherwise)                  |
+
+## Optional product upload (`upload-url`)
+
+When `upload-url` is set, a final step requests a GitHub Actions OIDC token
+(audience = the upload base URL) and POSTs the core result JSON to
+`<upload-url>/v1/runs`. The wrapper only wraps the existing file as `payload` —
+it does not parse, filter, or reshape that JSON.
+
+- Runs on success and failure (`if: always()`), so refusals are uploaded too.
+- Upload failures print `::warning::` and **never** change the job result or `outcome`.
+- The job must grant OIDC:
+
+```yaml
+permissions:
+    id-token: write
+```
+
+Pin a version tag when you consume the action (e.g. `@v0.4.0`).

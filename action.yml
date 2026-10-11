@@ -35,6 +35,10 @@ inputs:
     description: "URL the Selector Verifier loads to check patched selectors (empty = skip verification)"
     required: false
     default: ""
+  upload-url:
+    description: "Product API base URL; when set, POSTs the result JSON to <upload-url>/v1/runs via OIDC (empty = no upload). Requires permissions: id-token: write."
+    required: false
+    default: ""
 
 outputs:
   outcome:
@@ -138,4 +142,85 @@ runs:
           # No usable summary was produced — don't advertise the empty/garbled file.
           echo "summary-path=" >> "$GITHUB_OUTPUT"
           echo "outcome=errored" >> "$GITHUB_OUTPUT"
+        fi
+
+    # Optional product telemetry. Failures here must never change the job result or
+    # the outcome output — the repair result matters more than upload success.
+    - name: Upload result to product API
+      if: ${{ always() && inputs.upload-url != '' }}
+      shell: bash
+      env:
+        UPLOAD_URL: ${{ inputs.upload-url }}
+        SUMMARY_PATH: ${{ steps.heal.outputs.summary-path }}
+        REVIEW_PATH: ${{ steps.heal.outputs.review-path }}
+        REPO_ID: ${{ github.repository_id }}
+        REPO_FULL_NAME: ${{ github.repository }}
+        RUN_ID: ${{ github.run_id }}
+        RUN_ATTEMPT: ${{ github.run_attempt }}
+        COMMIT_SHA: ${{ github.sha }}
+        REF: ${{ github.ref }}
+      run: |
+        set +e
+        payload_file=""
+        if [ -n "$SUMMARY_PATH" ] && [ -f "$GITHUB_WORKSPACE/$SUMMARY_PATH" ]; then
+          payload_file="$GITHUB_WORKSPACE/$SUMMARY_PATH"
+        elif [ -n "$REVIEW_PATH" ] && [ -f "$GITHUB_WORKSPACE/$REVIEW_PATH" ]; then
+          payload_file="$GITHUB_WORKSPACE/$REVIEW_PATH"
+        fi
+        if [ -z "$payload_file" ]; then
+          echo "No result JSON to upload — skipping"
+          exit 0
+        fi
+
+        base="${UPLOAD_URL%/}"
+        if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+          echo "::warning::upload-url is set but OIDC env is missing — add 'permissions: id-token: write' to the job"
+          exit 0
+        fi
+
+        # Audience matches the product API base URL (same value the API verifies).
+        audience_enc=$(jq -nr --arg a "$base" '$a | @uri')
+        token_json=$(curl -fsS \
+          -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+          "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${audience_enc}")
+        if [ $? -ne 0 ]; then
+          echo "::warning::failed to request OIDC token for product upload"
+          exit 0
+        fi
+        oidc_token=$(jq -r '.value // empty' <<<"$token_json")
+        if [ -z "$oidc_token" ]; then
+          echo "::warning::OIDC token response had no value"
+          exit 0
+        fi
+        echo "::add-mask::$oidc_token"
+
+        # Wrap the core JSON as payload only — do not reshape its contents.
+        body=$(jq -n \
+          --slurpfile payload "$payload_file" \
+          --argjson github_repo_id "$REPO_ID" \
+          --arg full_name "$REPO_FULL_NAME" \
+          --argjson run_id "$RUN_ID" \
+          --argjson run_attempt "$RUN_ATTEMPT" \
+          --arg commit_sha "$COMMIT_SHA" \
+          --arg ref "$REF" \
+          '{
+            repository: {github_repo_id: $github_repo_id, full_name: $full_name},
+            workflow: {run_id: $run_id, run_attempt: $run_attempt},
+            commit_sha: $commit_sha,
+            ref: $ref,
+            payload: $payload[0]
+          }')
+        if [ $? -ne 0 ]; then
+          echo "::warning::failed to build product upload body from result JSON"
+          exit 0
+        fi
+
+        http_code=$(curl -sS -o /tmp/e2e-heal-upload-response.txt -w "%{http_code}" \
+          -X POST "${base}/v1/runs" \
+          -H "Authorization: Bearer ${oidc_token}" \
+          -H "Content-Type: application/json" \
+          --data-binary "$body")
+        if [ $? -ne 0 ] || [[ ! "$http_code" =~ ^2 ]]; then
+          echo "::warning::product upload failed (HTTP ${http_code:-0})"
+          exit 0
         fi
