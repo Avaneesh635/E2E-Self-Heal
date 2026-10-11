@@ -44,3 +44,18 @@ def test_ci_uses_non_mutating_quality_gates() -> None:
     assert "run: make coverage" in workflow
     assert "git-auto-commit-action" not in workflow
     assert "ruff format ." not in workflow
+
+
+def test_action_optional_upload_is_non_blocking_oidc_post() -> None:
+    action = ACTION_FILE.read_text(encoding="utf-8")
+
+    assert "upload-url:" in action
+    assert "always() && inputs.upload-url != ''" in action
+    assert "ACTIONS_ID_TOKEN_REQUEST_URL" in action
+    assert "ACTIONS_ID_TOKEN_REQUEST_TOKEN" in action
+    assert "/v1/runs" in action
+    assert "--slurpfile payload" in action
+    assert "::warning::" in action
+    # Upload step must not fail the job: every error path exits 0.
+    upload_step = action.split("Upload result to product API", 1)[1]
+    assert "exit 1" not in upload_step
