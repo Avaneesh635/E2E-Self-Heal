@@ -1,0 +1,196 @@
+{
+  "schema_version": "2.1",
+  "kind": "refusal",
+  "test_script_path": "scenarios/id-rename/spec.ts",
+  "reason": "provider_error",
+  "is_success": false,
+  "loop_count": 3,
+  "evidence": {
+    "parsed_error": "call log: locator('#submit-btn')",
+    "failing_selector": "#submit-btn",
+    "dom_diff_context": [
+      {
+        "file": "examples/demo-app/src/components/SubmitButton.tsx",
+        "line": 3,
+        "previous": {
+          "tag": "button",
+          "attributes": {
+            "id": "submit-btn",
+            "className": "btn",
+            "type": "submit"
+          }
+        },
+        "current": {
+          "tag": "button",
+          "attributes": {
+            "id": "submit",
+            "className": "btn",
+            "type": "submit"
+          }
+        }
+      }
+    ],
+    "aria_snapshot": {
+      "sha256": "9a97acc4eeb60225fa7ca89eff931265d6a6dd293f9ab18f2491f4f651076fa6",
+      "source_path": "test-results/id-rename-spec.ts-submits-the-form/error-context.md",
+      "chars": 310
+    },
+    "candidates": [],
+    "loop_history": [
+      {
+        "loop_count": 0,
+        "stage": "memory_lookup",
+        "outcome": "disabled",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 0,
+        "stage": "patch_generator",
+        "outcome": "provider_failed",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 0,
+        "stage": "shadow_verifier",
+        "outcome": "skipped",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 0,
+        "stage": "selector_verifier",
+        "outcome": "skipped",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 0,
+        "stage": "test_runner",
+        "outcome": "failed",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 1,
+        "stage": "patch_generator",
+        "outcome": "provider_failed",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 1,
+        "stage": "shadow_verifier",
+        "outcome": "skipped",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 1,
+        "stage": "selector_verifier",
+        "outcome": "skipped",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 1,
+        "stage": "test_runner",
+        "outcome": "failed",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 2,
+        "stage": "patch_generator",
+        "outcome": "provider_failed",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 2,
+        "stage": "shadow_verifier",
+        "outcome": "skipped",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 2,
+        "stage": "selector_verifier",
+        "outcome": "skipped",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 2,
+        "stage": "test_runner",
+        "outcome": "failed",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 3,
+        "stage": "refusal_finalizer",
+        "outcome": "refused",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": "provider_error"
+        }
+      }
+    ]
+  }
+}

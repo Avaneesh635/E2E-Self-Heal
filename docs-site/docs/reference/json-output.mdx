@@ -1,0 +1,406 @@
+---
+title: "JSON output reference"
+description: "Every field of the machine-readable --json contract (schema 2.1), when each document is emitted, and payloads captured from real runs."
+---
+
+import CodeBlock from "@theme/CodeBlock";
+import repair from "@site/src/data/json-contract/repair.json";
+import refusalLoopCap from "@site/src/data/json-contract/refusal-loop-cap.json";
+import refusalGuardrail from "@site/src/data/json-contract/refusal-guardrail.json";
+import refusalInsufficient from "@site/src/data/json-contract/refusal-insufficient.json";
+import refusalProvider from "@site/src/data/json-contract/refusal-provider.json";
+import refusalBoundary from "@site/src/data/json-contract/refusal-boundary.json";
+import suiteMixed from "@site/src/data/json-contract/suite-mixed.json";
+import suiteNoneFound from "@site/src/data/json-contract/suite-none-found.json";
+import review from "@site/src/data/json-contract/review.json";
+
+# JSON output reference
+
+`e2e-healer heal --json` and `e2e-healer review --json` write one machine-readable document to
+stdout. This page documents every field of that contract at schema version `2.1`, says when a
+document is emitted at all, and shows payloads **captured from real runs** rather than written by
+hand. For the exit codes alone see [Exit codes & JSON output](./exit-codes); for how the contract
+may change see the [schema versioning policy](./schema-versioning).
+
+The field tables and the captured payloads are checked in CI against the Pydantic models in
+`app/schemas.py`, so a field that is added, removed or renamed fails the build until this page is
+updated.
+
+## Reading the output
+
+- **stdout carries only the JSON document**, on a single line. Logs and human-readable output go
+  to stderr, so `e2e-healer heal tests/login.spec.ts --json > result.json` produces a valid JSON
+  file.
+- **Dispatch on `schema_version`, then `kind`.** Reject an unsupported major version, and reject a
+  `kind` or `reason` value you do not recognize; ignore unknown fields within a supported major.
+
+| `kind` | Document | Produced by |
+| --- | --- | --- |
+| `repair` | `RepairSummary` | `heal` on one test file, when the repair was accepted |
+| `refusal` | `RefusalReport` | `heal` on one test file, when the workflow declined to change it |
+| `suite` | `SuiteSummary` | `heal` on a directory, or with no path (suite mode) |
+| `review` | `ReviewReport` | `review` on one test file |
+
+Inside a `SuiteSummary`, each entry of `results` is a complete `RepairSummary` or `RefusalReport`
+with its own `schema_version` and `kind`.
+
+## When a document is emitted, and the exit code
+
+| Command and outcome | JSON on stdout | Exit code |
+| --- | --- | --- |
+| `heal <file>`: repaired | `RepairSummary`, `is_success: true` | `0` |
+| `heal <file>`: refused | `RefusalReport` | `1` |
+| `heal <file>` without `--log`: the test already passes | **none** | `0` |
+| Suite mode: the suite passes, nothing to heal | `SuiteSummary`, `total_failed: 0`, `is_success: true` | `0` |
+| Suite mode: every failing test healed and the final full-suite rerun passed | `SuiteSummary`, `is_success: true` | `0` |
+| Suite mode: anything else, including any `--dry-run` | `SuiteSummary`, `is_success: false` | `1` |
+| Suite mode: the suite failed but no failing test file was recognized | `SuiteSummary`, `total_failed: 0`, `is_success: false` | `1` |
+| `review <file>`: review completed, with or without findings | `ReviewReport`, `is_complete: true` | `0` |
+| `review <file>`: the model provider failed | `ReviewReport`, `is_complete: false` | `1` |
+| `review <file>` without `--log`: the test already passes | **none** | `0` |
+| Invalid input, sandbox denial, unreadable diff | **none** | `2` |
+| Unexpected crash | **none** (traceback on stderr) | `1` |
+
+Treat **exit `1` with no parseable document as a crash**, not as a refusal or an unhealed suite.
+Treat exit `0` with no document as "nothing to do".
+
+Suite mode recognizes failing files only when Playwright reports them with a `*.spec.*` or
+`*.test.*` name (for example `login.spec.ts`). A failing file named plain `spec.ts` is not
+recognized, which produces the "no failing test file was recognized" document above.
+
+## Top-level documents
+
+### `RepairSummary`
+
+An accepted repair. In single-file mode a `RepairSummary` always has `is_success: true`; a run that
+does not end in an accepted repair is a `RefusalReport` instead. In suite mode a `RepairSummary` can
+have `is_success: false` (see `is_success` below), so always check it rather than relying on `kind`.
+
+| Field | Type | Present | Meaning and what to do with it |
+| --- | --- | --- | --- |
+| `schema_version` | string | always | Contract version, currently `"2.1"`. Check the major before reading anything else. |
+| `kind` | string | always | `"repair"`. |
+| `test_script_path` | string | always | The test that was repaired. In single-file mode this is the path as given on the command line; in suite mode it is an absolute path for tests the repair loop ran on. Do not assume it is relative to the repository. |
+| `is_success` | boolean | always | `true` when the repair was accepted. In suite mode it becomes `false` if the test still failed in the final full-suite rerun (its last candidate is then marked `rejection: "final_suite_failed"`). |
+| `loop_count` | integer | always | How many repair cycles were rejected before this outcome. A repair accepted on the first attempt reports `0`. |
+| `instructions` | array of `PatchInstruction` | always | The edits of the accepted candidate. They apply to the file **as it stood at that attempt**, which can already contain edits from earlier, rejected attempts, so they are not always the full change from the original file. Diff the file to see the complete change. Empty for a suite test that passed when rerun on its own (no edit was made). |
+| `evidence` | `EvidenceBundle` | always | What the decision was based on. |
+
+### `RefusalReport`
+
+The workflow declined to change the test. The test file is left as it was.
+
+| Field | Type | Present | Meaning and what to do with it |
+| --- | --- | --- | --- |
+| `schema_version` | string | always | Contract version, currently `"2.1"`. |
+| `kind` | string | always | `"refusal"`. |
+| `test_script_path` | string | always | The test that was not changed. Same path rules as in `RepairSummary`. |
+| `reason` | string | always | Why the run ended, from the closed set in [Refusal reasons](#refusal-reasons). It describes how the **final** cycle ended; earlier candidates may have been rejected for other reasons, which `evidence.candidates` records. Reject values you do not recognize. |
+| `is_success` | boolean | always | Always `false`. |
+| `loop_count` | integer | always | Rejected cycles when the refusal was finalized. Equals the loop cap (3 by default) for most refusals; `1` for an architecture boundary refusal; `0` for suite tests the loop never ran on. |
+| `evidence` | `EvidenceBundle` | always | What the refusal was based on. |
+
+### `SuiteSummary`
+
+The result of healing every failing test in a suite.
+
+| Field | Type | Present | Meaning and what to do with it |
+| --- | --- | --- | --- |
+| `schema_version` | string | always | Contract version, currently `"2.1"`. Entries in `results` carry the same version. |
+| `kind` | string | always | `"suite"`. |
+| `total_failed` | integer | always | Number of failing test **files**, which equals the length of `results`. |
+| `healed` | integer | always | Number of entries in `results` that are a `RepairSummary` with `is_success: true`. A test that failed in the suite but passed when rerun on its own is counted here, with no edit made. |
+| `is_success` | boolean | always | `true` only when every failing test was healed **and** the final full-suite rerun passed. Always `false` with `--dry-run`, because a dry run never verifies the suite. |
+| `results` | array of `RepairSummary` or `RefusalReport` | always | One entry per failing test file, in the order Playwright reported them. Dispatch on each entry's `kind`. |
+
+### `ReviewReport`
+
+Review mode suggests source-level fixes and never edits the test.
+
+| Field | Type | Present | Meaning and what to do with it |
+| --- | --- | --- | --- |
+| `schema_version` | string | always | Contract version, currently `"2.1"`. |
+| `kind` | string | always | `"review"`. |
+| `test_script_path` | string | always | The test that was reviewed, as given on the command line. |
+| `findings` | array of `ReviewFinding` | always | Source-level suggestions; empty when there are none or the review did not complete. |
+| `has_findings` | boolean | always | `true` when `findings` is not empty. A convenience for wrappers that only decide whether to comment. |
+| `is_complete` | boolean | always | `false` when the model provider failed, in which case `findings` is empty and the CLI exits `1`. Do not read an incomplete review as "no problems found". |
+| `error` | string or null | always | A safe, user-facing reason when `is_complete` is `false`; otherwise `null`. |
+
+## Nested objects
+
+### `PatchInstruction`
+
+One targeted line edit. An accepted edit may change only locators, timeouts and wait methods. A
+rejected candidate in `evidence.candidates` shows the edit as the model proposed it, which may
+break these rules; that is often why it was rejected.
+
+| Field | Type | Present | Meaning and what to do with it |
+| --- | --- | --- | --- |
+| `line` | integer | always | 1-based line number in the file as it stood when this candidate was generated. In a rejected candidate it may not match the file (a stale line is one reason for rejection). |
+| `original` | string | always | The exact text of that line before the edit, without the line ending. |
+| `replacement` | string | always | The new text of the line. A single line in an accepted edit; a rejected candidate may contain more than one. |
+| `reason` | string | always | The model's explanation of the change. Free text for humans; do not parse it. |
+| `selector` | string | always | The new locator as a Playwright selector-engine string (for example `#submit` or `role=button[name="Submit"]`), used for live-DOM verification. Empty when the edit is not a selector change, such as a timeout. |
+
+### `ReviewFinding`
+
+| Field | Type | Present | Meaning and what to do with it |
+| --- | --- | --- | --- |
+| `file` | string | always | The changed source file, as named in the git diff (relative to the repository root, for example `examples/demo-app/src/components/SubmitButton.tsx`). Use it to anchor a PR comment. |
+| `line` | integer | always | 1-based line in the new version of `file`. |
+| `broken_selector` | string | always | The test locator that no longer matches. |
+| `root_cause` | string | always | Which DOM change broke the locator. Free text. |
+| `suggestion` | string | always | The proposed source-level fix. Free text, suitable as a comment body. |
+| `recommended_selector` | string | always | An accessibility-first locator to prefer, or an empty string. |
+| `severity` | string | always | `"info"` or `"warning"`. |
+
+### `EvidenceBundle`
+
+Redacted, reviewable evidence behind a repair or a refusal. Sensitive values and URL query values
+are redacted before they are written.
+
+| Field | Type | Present | Meaning and what to do with it |
+| --- | --- | --- | --- |
+| `parsed_error` | string | always | The failure, condensed from the Playwright log (for example the error line and its call log). Can be empty. |
+| `failing_selector` | string | always | The locator extracted from `parsed_error`, or an empty string when none was found (for example a navigation error). |
+| `dom_diff_context` | array | always | DOM changes found in the git diff: `EvidenceDomDiff` entries, plus one `SelectorHintEvidence` entry when `--selector-hint` was given. Tell them apart by the `type` key, which only the hint has. In suite mode every result carries the same list. An empty list means no DOM change was found, which is what produces `insufficient_evidence`. |
+| `aria_snapshot` | `SnapshotReference` or null | always | A reference to the failure-time ARIA snapshot, or `null` when Playwright did not leave one for this test. |
+| `candidates` | array of `CandidateEvidence` | always | Every repair candidate, in the order it was produced. Empty when no candidate was produced, for example after a provider failure. |
+| `loop_history` | array of `LoopEvidence` | always | Every stage of every cycle, in order. |
+
+### `EvidenceDomDiff`
+
+One element that changed between the old and new source, parsed from the git diff.
+
+| Field | Type | Present | Meaning and what to do with it |
+| --- | --- | --- | --- |
+| `file` | string | always | The source file, as named in the diff. |
+| `line` | integer | always | 1-based line of the element in the new file, or `0` when unknown (for example a removed element). |
+| `previous` | object | always | The element before the change: `tag` (string) and `attributes` (object of strings). An empty object when the element was added. |
+| `current` | object | always | The element after the change, in the same shape. An empty object when the element was removed. |
+
+### `SelectorHintEvidence`
+
+Present in `dom_diff_context` only when `--selector-hint` was passed.
+
+| Field | Type | Present | Meaning and what to do with it |
+| --- | --- | --- | --- |
+| `type` | string | always | Always `"selector_hint"`; use it to tell this entry from an `EvidenceDomDiff`. |
+| `hint_type` | string | always | `"role"`, `"testid"`, `"text"` or `"css"`. |
+| `value` | string | always | The hinted locator. |
+| `original` | string | always | The locator the hint replaces. |
+| `confidence` | number | always | Between `0` and `1`. |
+| `priority` | string | always | Always `"high"`. |
+
+### `SnapshotReference`
+
+The snapshot content is never embedded; this references it.
+
+| Field | Type | Present | Meaning and what to do with it |
+| --- | --- | --- | --- |
+| `sha256` | string | always | SHA-256 of the **redacted** snapshot text, not of the original `error-context.md` file. Use it to tell whether two runs saw the same page. |
+| `source_path` | string or null | always | Workspace-relative path of the `error-context.md` it came from, or `null` when that file is outside the workspace. Provenance only; the file may not exist after the run. |
+| `chars` | integer | always | Length of the redacted snapshot text. |
+
+### `CandidateEvidence`
+
+One proposed repair and how each check judged it.
+
+| Field | Type | Present | Meaning and what to do with it |
+| --- | --- | --- | --- |
+| `loop_count` | integer | always | The cycle in which the candidate was produced. |
+| `source` | string | always | `"llm"` for a model-generated patch, `"memory"` for one reused from local healing history. |
+| `instructions` | array of `PatchInstruction` | always | The proposed edits. **Can be empty**: the model may propose no change, and the candidate is still recorded and tested. |
+| `memory_score` | number or null | always | Similarity to the healing-history record, between `0` and `1`, for `memory` candidates; `null` for `llm` candidates. |
+| `shadow_score` | number or null | always | Score from shadow-replay verification, or `null` when it did not run. |
+| `selector_counts` | object | always | For each verified selector, how many elements it matched on the live page. Empty when live verification did not run, which is the case unless an app URL is configured (`--app-url`). |
+| `test_passed` | boolean or null | always | The test result with this candidate applied, or `null` when the candidate was rejected before the test ran. |
+| `outcome` | string | always | `"accepted"`, `"rejected"`, or `"generated"` when no check recorded a verdict. |
+| `rejection` | string or null | always | Why the candidate was rejected; `null` otherwise. Values include `test_failed`, `selector_not_unique`, `shadow_failed`, `final_suite_failed`, and free-text messages from the patch checks (for example `line 6 targets an assertion`). Treat it as text for humans, not a closed set. |
+| `ast_lock` | `AstLockRejection` or null | always | Present only when the structural AST lock rejected the candidate; `null` for rejections by any other check. |
+
+### `AstLockRejection`
+
+| Field | Type | Present | Meaning and what to do with it |
+| --- | --- | --- | --- |
+| `reason` | string | always | `disallowed_ast_change`, `original_parse_error` or `patched_parse_error`. An **open** set: ignore values you do not recognize. |
+| `node_kind` | string or null | always | The tree-sitter node type where the original and patched trees first differ. It can be a container such as `program` when a statement was added. |
+| `line` | integer or null | always | 1-based line of that node in the patched source, or of the parse error. |
+
+### `LoopEvidence`
+
+One stage of one repair cycle.
+
+| Field | Type | Present | Meaning and what to do with it |
+| --- | --- | --- | --- |
+| `loop_count` | integer | always | The cycle the stage ran in. |
+| `stage` | string | always | `memory_lookup`, `patch_generator`, `shadow_verifier`, `selector_verifier`, `test_runner` or `refusal_finalizer`. |
+| `outcome` | string | always | What happened at that stage; see the table below. Not a closed set. |
+| `details` | `LoopEvidenceDetails` | always | Extra values for the stage; every key is present and most are `null`. |
+
+### `LoopEvidenceDetails`
+
+| Field | Type | Present | Meaning and what to do with it |
+| --- | --- | --- | --- |
+| `score` | number or null | always | The memory similarity score (`memory_lookup`) or the shadow-replay score (`shadow_verifier`). |
+| `error` | string or null | always | A sanitized error message, for example why a patch was not applied. |
+| `instruction_count` | integer or null | always | Number of edits in a generated candidate (`patch_generator`, `candidate_generated`). `0` means the model proposed no change. |
+| `reason` | string or null | always | The refusal reason (`refusal_finalizer`), the same value as the report's `reason`. |
+
+#### Stage outcomes
+
+| Stage | Outcomes emitted today |
+| --- | --- |
+| `memory_lookup` | `disabled` (`--no-memory`), `miss`, `hit`, `candidate_rejected` |
+| `patch_generator` | `candidate_generated`, `application_rejected` (a guardrail or stale-line check refused the edit), `provider_failed`, `boundary_denied` |
+| `shadow_verifier` | `skipped`, `passed`, `failed`, `error` |
+| `selector_verifier` | `skipped` (no app URL, or no selector to check), `unavailable`, `passed`, `failed` |
+| `test_runner` | `passed`, `failed`, `final_suite_failed` (suite mode only) |
+| `refusal_finalizer` | `refused` |
+
+## Refusal reasons
+
+`reason` is a closed set: a new value is a major schema change. When several causes apply, the
+first in this order wins, judged on the final cycle: boundary, guardrail, provider, ambiguous
+target, insufficient evidence, loop cap.
+
+| `reason` | When it is emitted | Example below |
+| --- | --- | --- |
+| `architecture_boundary_violation` | The test file is outside the paths generated patches may touch (`E2E_HEALER_ARCHITECTURE_ALLOW_GLOBS` / `E2E_HEALER_ARCHITECTURE_DENY_GLOBS`). Refused at the first patch attempt, before any patch is generated. | yes |
+| `guardrail_violation` | The final candidate tried to change something other than a locator, a timeout or a wait: an assertion, an extra argument, or (per the AST lock) the structure of the test. | yes |
+| `provider_error` | The model provider did not return a usable patch on the final attempt (for example an invalid API key or unparseable output). The model made no judgment about the test. | yes |
+| `ambiguous_target` | The final candidate's selector matched zero or several elements on the live page. Only possible when an app URL is configured for live selector verification. | no: needs a live app and a non-unique selector |
+| `insufficient_evidence` | The loop ended and the git diff contained no DOM change to work from. Also used for suite tests the loop could not run on (outside the workspace, missing, or first failing in the final suite rerun), with `loop_count: 0`. | yes |
+| `loop_cap_reached` | The loop reached its cap (3 cycles by default) with no more specific cause. | yes |
+| `likely_product_regression` | Part of the closed set but **not emitted by the current code**. A product regression is refused today as one of the reasons above, usually `loop_cap_reached` or `guardrail_violation`. | no: never emitted |
+
+## Captured payloads
+
+Every payload below was produced by the real CLI and repair graph, with a real model (Claude
+Sonnet 4.6 through `E2E_HEALER_LLM_PROVIDER=anthropic`) and real Playwright, against the demo app
+in `examples/`. Each scenario's `change.patch` was applied with `git apply` first and reversed
+afterwards. The commands ran from `examples/` with:
+
+```bash
+CI=1 \
+E2E_HEALER_PLAYWRIGHT_CMD="npx playwright test --reporter=list" \
+E2E_HEALER_WRITE_GLOBS="*.spec.ts,**/*.spec.ts,spec.ts,**/spec.ts" \
+E2E_HEALER_LLM_PROVIDER=anthropic \
+E2E_HEALER_LLM_MODEL=claude-sonnet-4-6 \
+uv run e2e-healer ...
+```
+
+`--no-memory` keeps local healing history out of the result, and `--dry-run` leaves the test file
+unchanged without changing the JSON. Model output varies between runs, so the same command can end
+differently; that variation is how the different refusal reasons below were captured. The only edit
+made to any payload is in the suite example, where the absolute workspace path is replaced with
+`/path/to/E2E-Self-Heal`.
+
+### Repair
+
+`e2e-healer heal scenarios/id-rename/spec.ts --json --dry-run --no-memory` with the `id-rename`
+patch applied (the button's `id` changes from `submit-btn` to `submit`). Exit code `0`.
+
+<details>
+<summary>Captured payload</summary>
+
+<CodeBlock language="json" title="json-contract/repair.json">{JSON.stringify(repair, null, 2)}</CodeBlock>
+
+</details>
+
+### Refusal: `loop_cap_reached`
+
+`e2e-healer heal scenarios/product-regression/spec.ts --json --dry-run --no-memory` with the
+`product-regression` patch applied (the form's submit handler is removed, so no locator fix can make
+the test pass). Exit code `1`. The first candidate was rejected by a guardrail
+(`line 6 targets an assertion`), but the run ended on a failed test, so the reason is
+`loop_cap_reached`.
+
+<details>
+<summary>Captured payload</summary>
+
+<CodeBlock language="json" title="json-contract/refusal-loop-cap.json">{JSON.stringify(refusalLoopCap, null, 2)}</CodeBlock>
+
+</details>
+
+### Refusal: `guardrail_violation`
+
+The same command and scenario on another run. Exit code `1`. The model's second attempt tried to
+submit the form with `dispatchEvent('submit')`, which the scope check rejected, and the final
+attempt targeted the assertion.
+
+<details>
+<summary>Captured payload</summary>
+
+<CodeBlock language="json" title="json-contract/refusal-guardrail.json">{JSON.stringify(refusalGuardrail, null, 2)}</CodeBlock>
+
+</details>
+
+### Refusal: `insufficient_evidence`
+
+`e2e-healer heal scenarios/wrong-base-url/spec.ts --json --dry-run --no-memory` with the
+`wrong-base-url` patch applied (the Playwright `baseURL` points at a port nothing listens on, so
+the git diff has no DOM change). Exit code `1`. The model proposed no edit on any attempt, so each
+candidate has an empty `instructions` list.
+
+<details>
+<summary>Captured payload</summary>
+
+<CodeBlock language="json" title="json-contract/refusal-insufficient.json">{JSON.stringify(refusalInsufficient, null, 2)}</CodeBlock>
+
+</details>
+
+### Refusal: `provider_error`
+
+`e2e-healer heal scenarios/id-rename/spec.ts --json --dry-run --no-memory` with the `id-rename`
+patch applied and an invalid Anthropic API key. Exit code `1`. No candidate was produced, but the
+unchanged test was still run once per cycle.
+
+<details>
+<summary>Captured payload</summary>
+
+<CodeBlock language="json" title="json-contract/refusal-provider.json">{JSON.stringify(refusalProvider, null, 2)}</CodeBlock>
+
+</details>
+
+### Refusal: `architecture_boundary_violation`
+
+The same command with `E2E_HEALER_ARCHITECTURE_DENY_GLOBS="scenarios/**"`. Exit code `1`. Refused
+at the first patch attempt, with `loop_count: 1`.
+
+<details>
+<summary>Captured payload</summary>
+
+<CodeBlock language="json" title="json-contract/refusal-boundary.json">{JSON.stringify(refusalBoundary, null, 2)}</CodeBlock>
+
+</details>
+
+### Suite: one repaired, one refused
+
+`e2e-healer heal scenarios/docs-capture --diff scenarios/docs-capture/pr.diff --json --no-memory`.
+`scenarios/docs-capture/` was a temporary directory holding copies of two scenario specs renamed to
+`cta.spec.ts` and `submit.spec.ts`, because suite mode only recognizes `*.spec.*` names. `pr.diff`
+combined both scenarios' patches, as a pull request containing both changes would. Exit code `1`:
+one test was repaired and the other refused, so the suite is not a success.
+
+<details>
+<summary>Captured payload</summary>
+
+<CodeBlock language="json" title="json-contract/suite-mixed.json">{JSON.stringify(suiteMixed, null, 2)}</CodeBlock>
+
+</details>
+
+### Suite: failing test not recognized
+
+`e2e-healer heal scenarios/id-rename --json --no-memory` with the `id-rename` patch applied. The
+test failed, but its file is named `spec.ts`, which suite mode does not recognize. Exit code `1`.
+
+<CodeBlock language="json" title="json-contract/suite-none-found.json">{JSON.stringify(suiteNoneFound, null, 2)}</CodeBlock>
+
+### Review
+
+`e2e-healer review scenarios/id-rename/spec.ts --json` with the `id-rename` patch applied. Exit
+code `0`.
+
+<CodeBlock language="json" title="json-contract/review.json">{JSON.stringify(review, null, 2)}</CodeBlock>
