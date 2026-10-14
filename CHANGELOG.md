@@ -7,6 +7,11 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **JSON output reference** (#293). A new docs page documents every field of the schema `2.1`
+  `--json` contract (`RepairSummary`, `RefusalReport`, `SuiteSummary`, `ReviewReport` and every
+  nested object), when a document is emitted and with which exit code, and each `RefusalReason`.
+  Its examples are payloads captured from real CLI runs instead of hand-written ones, and a test
+  fails when a field or a captured payload drifts from the models in `app/schemas.py`.
 - **Labeled mutation corpus and release gates for the safety benchmark** (#281). The corpus now
   covers all six mutation classes (12 scenarios), including `ambiguous`, `environment` and four
   `product_regression` cases, two of which look the same from the diff as a drift scenario

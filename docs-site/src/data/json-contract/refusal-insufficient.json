@@ -1,0 +1,208 @@
+{
+  "schema_version": "2.1",
+  "kind": "refusal",
+  "test_script_path": "scenarios/wrong-base-url/spec.ts",
+  "reason": "insufficient_evidence",
+  "is_success": false,
+  "loop_count": 3,
+  "evidence": {
+    "parsed_error": "Error: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:4174/",
+    "failing_selector": "",
+    "dom_diff_context": [],
+    "aria_snapshot": null,
+    "candidates": [
+      {
+        "loop_count": 0,
+        "source": "llm",
+        "instructions": [],
+        "memory_score": null,
+        "shadow_score": null,
+        "selector_counts": {},
+        "test_passed": false,
+        "outcome": "rejected",
+        "rejection": "test_failed",
+        "ast_lock": null
+      },
+      {
+        "loop_count": 1,
+        "source": "llm",
+        "instructions": [],
+        "memory_score": null,
+        "shadow_score": null,
+        "selector_counts": {},
+        "test_passed": false,
+        "outcome": "rejected",
+        "rejection": "test_failed",
+        "ast_lock": null
+      },
+      {
+        "loop_count": 2,
+        "source": "llm",
+        "instructions": [],
+        "memory_score": null,
+        "shadow_score": null,
+        "selector_counts": {},
+        "test_passed": false,
+        "outcome": "rejected",
+        "rejection": "test_failed",
+        "ast_lock": null
+      }
+    ],
+    "loop_history": [
+      {
+        "loop_count": 0,
+        "stage": "memory_lookup",
+        "outcome": "disabled",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 0,
+        "stage": "patch_generator",
+        "outcome": "candidate_generated",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": 0,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 0,
+        "stage": "shadow_verifier",
+        "outcome": "skipped",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 0,
+        "stage": "selector_verifier",
+        "outcome": "skipped",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 0,
+        "stage": "test_runner",
+        "outcome": "failed",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 1,
+        "stage": "patch_generator",
+        "outcome": "candidate_generated",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": 0,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 1,
+        "stage": "shadow_verifier",
+        "outcome": "skipped",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 1,
+        "stage": "selector_verifier",
+        "outcome": "skipped",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 1,
+        "stage": "test_runner",
+        "outcome": "failed",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 2,
+        "stage": "patch_generator",
+        "outcome": "candidate_generated",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": 0,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 2,
+        "stage": "shadow_verifier",
+        "outcome": "skipped",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 2,
+        "stage": "selector_verifier",
+        "outcome": "skipped",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 2,
+        "stage": "test_runner",
+        "outcome": "failed",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 3,
+        "stage": "refusal_finalizer",
+        "outcome": "refused",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": "insufficient_evidence"
+        }
+      }
+    ]
+  }
+}

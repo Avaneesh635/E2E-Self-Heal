@@ -1,0 +1,126 @@
+{
+  "schema_version": "2.1",
+  "kind": "repair",
+  "test_script_path": "scenarios/id-rename/spec.ts",
+  "is_success": true,
+  "loop_count": 0,
+  "instructions": [
+    {
+      "line": 5,
+      "original": "  await page.click(\"#submit-btn\");",
+      "replacement": "  await page.click(\"#submit\");",
+      "reason": "The button's id attribute was changed from 'submit-btn' to 'submit' in SubmitButton.tsx; updating the CSS ID selector to match the new id.",
+      "selector": "#submit"
+    }
+  ],
+  "evidence": {
+    "parsed_error": "call log: locator('#submit-btn')",
+    "failing_selector": "#submit-btn",
+    "dom_diff_context": [
+      {
+        "file": "examples/demo-app/src/components/SubmitButton.tsx",
+        "line": 3,
+        "previous": {
+          "tag": "button",
+          "attributes": {
+            "id": "submit-btn",
+            "className": "btn",
+            "type": "submit"
+          }
+        },
+        "current": {
+          "tag": "button",
+          "attributes": {
+            "id": "submit",
+            "className": "btn",
+            "type": "submit"
+          }
+        }
+      }
+    ],
+    "aria_snapshot": {
+      "sha256": "9a97acc4eeb60225fa7ca89eff931265d6a6dd293f9ab18f2491f4f651076fa6",
+      "source_path": "test-results/id-rename-spec.ts-submits-the-form/error-context.md",
+      "chars": 310
+    },
+    "candidates": [
+      {
+        "loop_count": 0,
+        "source": "llm",
+        "instructions": [
+          {
+            "line": 5,
+            "original": "  await page.click(\"#submit-btn\");",
+            "replacement": "  await page.click(\"#submit\");",
+            "reason": "The button's id attribute was changed from 'submit-btn' to 'submit' in SubmitButton.tsx; updating the CSS ID selector to match the new id.",
+            "selector": "#submit"
+          }
+        ],
+        "memory_score": null,
+        "shadow_score": null,
+        "selector_counts": {},
+        "test_passed": true,
+        "outcome": "accepted",
+        "rejection": null,
+        "ast_lock": null
+      }
+    ],
+    "loop_history": [
+      {
+        "loop_count": 0,
+        "stage": "memory_lookup",
+        "outcome": "disabled",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 0,
+        "stage": "patch_generator",
+        "outcome": "candidate_generated",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": 1,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 0,
+        "stage": "shadow_verifier",
+        "outcome": "skipped",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 0,
+        "stage": "selector_verifier",
+        "outcome": "skipped",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      },
+      {
+        "loop_count": 0,
+        "stage": "test_runner",
+        "outcome": "passed",
+        "details": {
+          "score": null,
+          "error": null,
+          "instruction_count": null,
+          "reason": null
+        }
+      }
+    ]
+  }
+}

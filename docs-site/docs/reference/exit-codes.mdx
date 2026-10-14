@@ -6,13 +6,23 @@ description: "How CI branches on repair, refusal, suite, and review JSON results
 # Exit codes & JSON output
 
 `--json` emits one machine-readable result to stdout; human output stays on stderr so CI can
-parse it safely.
+parse it safely. The [JSON output reference](./json-output) documents every field and shows
+payloads captured from real runs.
 
 ## Exit code contract
 
 - `e2e-healer heal <path>` exits `0` when the test is healed and `1` for a refusal.
-- `e2e-healer heal` (suite mode) exits `0` only when every discovered failing test is healed.
-- `e2e-healer review` exits `0` after a completed review; wrappers branch on `has_findings`.
+- `e2e-healer heal` (suite mode) exits `0` only when every discovered failing test is healed and
+  the final full-suite rerun passes. A `--dry-run` suite always exits `1`.
+- `e2e-healer review` exits `0` after a completed review (wrappers branch on `has_findings`) and
+  `1` when the model provider failed (`is_complete: false`).
+- Any command exits `2` for invalid input, a sandbox denial, or an unreadable diff, and emits no
+  JSON.
+- When the test already passes and no `--log` was given, `heal <path>` and `review` exit `0` and
+  emit no JSON. Exit `1` with no JSON means the CLI crashed.
+
+The [JSON output reference](./json-output#when-a-document-is-emitted-and-the-exit-code) has the
+full table of outcomes, documents and exit codes.
 
 ## JSON contract
 
@@ -61,47 +71,11 @@ A run that ends in `reason: "guardrail_violation"` can still have candidates wit
 because the per-line scope gates also raise guardrail violations. Use `ast_lock` to learn *what*
 the lock caught, not to decide *whether* a guardrail violation occurred.
 
-### Example: successful single-file heal
+### Examples
 
-```json
-{
-  "schema_version": "2.1",
-  "kind": "repair",
-  "test_script_path": "tests/login.spec.ts",
-  "is_success": true,
-  "loop_count": 2,
-  "instructions": [],
-  "evidence": {
-    "parsed_error": "Error: locator('#submit') timed out",
-    "failing_selector": "#submit",
-    "dom_diff_context": [],
-    "aria_snapshot": null,
-    "candidates": [],
-    "loop_history": []
-  }
-}
-```
-
-### Example: single-file refusal
-
-```json
-{
-  "schema_version": "2.1",
-  "kind": "refusal",
-  "test_script_path": "tests/login.spec.ts",
-  "reason": "ambiguous_target",
-  "is_success": false,
-  "loop_count": 2,
-  "evidence": {
-    "parsed_error": "Error: locator('#submit') resolved to 2 elements",
-    "failing_selector": "#submit",
-    "dom_diff_context": [],
-    "aria_snapshot": null,
-    "candidates": [],
-    "loop_history": []
-  }
-}
-```
+The [JSON output reference](./json-output#captured-payloads) shows payloads captured from real
+runs: a repair, a refusal for each reason that can be reproduced, a suite with one repaired and
+one refused test, and a review.
 
 ### Example: guardrail refusal with `ast_lock` detail
 
@@ -159,39 +133,5 @@ example keeps the first candidate and the first loop event.
       }
     ]
   }
-}
-```
-
-### Example: suite heal
-The nested `evidence` values below are abbreviated; see the single-file examples above for the
-complete evidence shape.
-
-```json
-{
-  "schema_version": "2.1",
-  "kind": "suite",
-  "total_failed": 2,
-  "healed": 1,
-  "is_success": false,
-  "results": [
-    {
-      "schema_version": "2.1",
-      "kind": "repair",
-      "test_script_path": "tests/login.spec.ts",
-      "is_success": true,
-      "loop_count": 1,
-      "instructions": [],
-      "evidence": {}
-    },
-    {
-      "schema_version": "2.1",
-      "kind": "refusal",
-      "test_script_path": "tests/checkout.spec.ts",
-      "reason": "insufficient_evidence",
-      "is_success": false,
-      "loop_count": 0,
-      "evidence": {}
-    }
-  ]
 }
 ```

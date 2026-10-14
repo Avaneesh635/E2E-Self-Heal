@@ -58,6 +58,7 @@ const sidebars: SidebarsConfig = {
                 "reference/github-action",
                 "reference/configuration",
                 "reference/exit-codes",
+                "reference/json-output",
                 "reference/schema-versioning",
                 "reference/safety-benchmark",
             ],
