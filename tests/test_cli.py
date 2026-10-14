@@ -114,8 +114,8 @@ def test_cli_review_emits_report_and_leaves_file_unmodified(
     runner = CliRunner()
     result = runner.invoke(app, ["review", str(test_file), "--log", str(log_file), "--json"])
     assert result.exit_code == 0
-    json_line = next(line for line in result.stdout.splitlines() if line.strip().startswith("{"))
-    data = json.loads(json_line)
+    # stdout must be exactly one JSON document: CI redirects it straight into a file.
+    data = json.loads(result.stdout)
     assert data["has_findings"] is True
     assert data["findings"][0]["file"] == "components/CTAButton.tsx"
     assert data["findings"][0]["recommended_selector"] == "getByTestId('cta')"
@@ -157,8 +157,8 @@ def test_review_resolves_relative_paths_against_root(
         ],
     )
     assert result.exit_code == 0
-    json_line = next(line for line in result.stdout.splitlines() if line.strip().startswith("{"))
-    data = json.loads(json_line)
+    # stdout must be exactly one JSON document: CI redirects it straight into a file.
+    data = json.loads(result.stdout)
     assert data["kind"] == "review"
     assert data["findings"][0]["file"] == "components/CTAButton.tsx"
 
@@ -193,8 +193,8 @@ def test_heal_resolves_relative_paths_against_root(
         ],
     )
     assert result.exit_code == 0
-    json_line = next(line for line in result.stdout.splitlines() if line.strip().startswith("{"))
-    data = json.loads(json_line)
+    # stdout must be exactly one JSON document: CI redirects it straight into a file.
+    data = json.loads(result.stdout)
     assert data["kind"] == "repair"
     assert data["schema_version"] == SCHEMA_VERSION
     assert data["evidence"]["parsed_error"] == "call log: selector"
@@ -209,7 +209,7 @@ def test_cli_json_output_emits_refusal_bundle(mock_graph_failure: None, tmp_path
     result = CliRunner().invoke(app, [str(test_file), "--log", str(log_file), "--json"])
 
     assert result.exit_code == 1
-    payload = json.loads(next(line for line in result.stdout.splitlines() if line.startswith("{")))
+    payload = json.loads(result.stdout)
     assert payload["kind"] == "refusal"
     assert payload["reason"] == "loop_cap_reached"
     assert payload["loop_count"] == 3
@@ -273,8 +273,8 @@ def test_cli_review_fails_for_an_incomplete_provider_review(monkeypatch, tmp_pat
     result = CliRunner().invoke(app, ["review", str(test_file), "--log", str(log_file), "--json"])
 
     assert result.exit_code == 1
-    json_line = next(line for line in result.stdout.splitlines() if line.strip().startswith("{"))
-    data = json.loads(json_line)
+    # stdout must be exactly one JSON document: CI redirects it straight into a file.
+    data = json.loads(result.stdout)
     assert data["is_complete"] is False
     assert data["error"] == "review provider failed to generate suggestions"
     assert "review incomplete:" in result.stderr
@@ -612,8 +612,8 @@ def test_cli_json_output(mock_graph_success, monkeypatch, tmp_path) -> None:
     runner = CliRunner()
     result = runner.invoke(app, [str(test_file), "--log", str(log_file), "--json"])
     assert result.exit_code == 0
-    json_line = next(line for line in result.stdout.splitlines() if line.strip().startswith("{"))
-    data = json.loads(json_line)
+    # stdout must be exactly one JSON document: CI redirects it straight into a file.
+    data = json.loads(result.stdout)
     assert data["is_success"] is True
     assert data["loop_count"] == 1
     assert len(data["instructions"]) == 1
@@ -636,8 +636,8 @@ def test_cli_suite_mode_emits_suite_kind(monkeypatch: pytest.MonkeyPatch) -> Non
     runner = CliRunner()
     result = runner.invoke(app, ["heal", "--json"])
     assert result.exit_code == 0
-    json_line = next(line for line in result.stdout.splitlines() if line.strip().startswith("{"))
-    data = json.loads(json_line)
+    # stdout must be exactly one JSON document: CI redirects it straight into a file.
+    data = json.loads(result.stdout)
     # Contract: suite mode emits a self-describing suite summary.
     assert data["kind"] == "suite"
     assert data["schema_version"] == SCHEMA_VERSION
