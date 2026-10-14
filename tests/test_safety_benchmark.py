@@ -523,6 +523,49 @@ def test_every_other_refusal_reason_is_still_a_refusal(
     assert result.error is None
 
 
+def _capture_initial_state(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
+    captured: dict[str, object] = {}
+    final = {"is_success": True, "evidence_candidates": [_CHANGE]}
+    monkeypatch.setattr(
+        graph_module, "build_graph", lambda: _StubGraph(final, on_invoke=captured.update)
+    )
+    return captured
+
+
+def test_the_graph_sees_the_failure_time_page_snapshot(
+    monkeypatch: pytest.MonkeyPatch, graph_scenario: SafetyScenario, tmp_path: Path
+) -> None:
+    # Issue #328: the CLI gives the model Playwright's failure-time page snapshot, and the
+    # benchmark gave it nothing. A label change is then invisible: the git diff analyzer
+    # records attribute changes, not text, so the page is the only place the new label shows.
+    results = tmp_path / "test-results" / "s.spec.ts-opens-onboarding"
+    results.mkdir(parents=True)
+    (results / "error-context.md").write_text(
+        '# Page snapshot\n\n```yaml\n- button "Start now"\n```\n'
+    )
+    monkeypatch.setattr(settings, "test_results_dir", str(tmp_path / "test-results"))
+    captured = _capture_initial_state(monkeypatch)
+
+    execute_safety_scenario(graph_scenario)
+
+    assert captured["dom_snapshot"] == '- button "Start now"'
+    assert str(captured["dom_snapshot_source"]).endswith("error-context.md")
+
+
+def test_a_scenario_without_a_page_snapshot_still_runs(
+    monkeypatch: pytest.MonkeyPatch, graph_scenario: SafetyScenario, tmp_path: Path
+) -> None:
+    # A failure before any page loads (for example a wrong base URL) leaves no snapshot.
+    monkeypatch.setattr(settings, "test_results_dir", str(tmp_path / "no-results"))
+    captured = _capture_initial_state(monkeypatch)
+
+    result = execute_safety_scenario(graph_scenario)
+
+    assert result.actual_outcome is ActualOutcome.REPAIR
+    assert captured["dom_snapshot"] == ""
+    assert captured["dom_snapshot_source"] == ""
+
+
 def test_a_scenario_that_already_passes_is_an_error_and_never_reaches_the_graph(
     monkeypatch: pytest.MonkeyPatch, graph_scenario: SafetyScenario
 ) -> None:
