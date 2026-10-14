@@ -247,7 +247,9 @@ def execute_safety_scenario(scenario: SafetyScenario) -> SafetyScenarioResult:
     """Run one already-broken scenario through the repair graph, restoring its test file."""
     # These imports initialize the runtime configuration. Keep metric/report consumers usable
     # without credentials, and only require it when the explicitly opt-in runner is invoked.
+    from app.config import settings
     from app.graph import build_graph
+    from app.preprocess.aria_snapshot import read_failure_snapshot_with_source
     from app.preprocess.diff_ast_analyzer import analyze_diff
     from app.preprocess.error_log_parser import parse_error_log
     from app.runner import run_playwright
@@ -260,6 +262,12 @@ def execute_safety_scenario(scenario: SafetyScenario) -> SafetyScenarioResult:
             raise RuntimeError(
                 "scenario passed before healing; prepare its mutation before benchmarking"
             )
+        # Read the failure-time page snapshot exactly as `e2e-healer heal` does, so the model
+        # sees the same evidence it would in real use. Without it a label change is invisible:
+        # the diff analyzer records attribute changes, not text (#328).
+        dom_snapshot, snapshot_source = read_failure_snapshot_with_source(
+            Path(settings.test_results_dir), scenario.test_path
+        )
         initial_state: AgentState = {
             "test_script_path": str(scenario.test_path),
             "original_code": original,
@@ -269,7 +277,8 @@ def execute_safety_scenario(scenario: SafetyScenario) -> SafetyScenarioResult:
             "dom_diff_context": [
                 item.model_dump() for item in analyze_diff(scenario.diff_path.read_text())
             ],
-            "dom_snapshot": "",
+            "dom_snapshot": dom_snapshot,
+            "dom_snapshot_source": str(snapshot_source) if snapshot_source else "",
             "analysis_report": "",
             "memory_enabled": False,
             "patch_instructions": {},

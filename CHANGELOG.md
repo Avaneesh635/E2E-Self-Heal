@@ -39,6 +39,10 @@ All notable changes to this project are documented here. The format is based on
   repair (#291).
 
 ### Fixed
+- The safety benchmark now gives the repair graph Playwright's failure-time page snapshot, as
+  `e2e-healer heal` does. It passed an empty snapshot, so a label change was invisible to the
+  model (the diff analyzer records attribute changes, not text) and `label-rename` could never be
+  repaired in the benchmark although the CLI repairs it (#328).
 - Shadow replay no longer drops repeated HTTP headers when parsing a HAR or Playwright trace.
   Each repeat used to overwrite the one before, so a response with two `Set-Cookie` headers
   kept only the last. Repeats are now folded the way Playwright represents them: `Set-Cookie`
