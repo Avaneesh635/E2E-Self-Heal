@@ -689,6 +689,18 @@ def safety_benchmark(
         "--enforce-gates",
         help="Exit 1 when a release gate fails. For release checks only, never merge gating.",
     ),
+    repeat: int = typer.Option(
+        1,
+        "--repeat",
+        min=1,
+        max=10,
+        help=(
+            "Run every scenario this many times and report how often each outcome happened. "
+            "Model output varies between runs, so one run can mislead. Costs this many times "
+            "the model calls. Repeats reduce noise; they do not count as extra scenarios for the "
+            "release gates."
+        ),
+    ),
 ) -> None:
     """Run the opt-in repair/refusal safety benchmark and print a stable JSON report.
 
@@ -723,7 +735,7 @@ def safety_benchmark(
         raise typer.Exit(code=2) from exc
     executor = execute_prepared_scenario if apply_patches else execute_safety_scenario
     try:
-        report = run_safety_benchmark(scenarios, executor)
+        report = run_safety_benchmark(scenarios, executor, repeats=repeat)
     except ScenarioRestoreError as exc:
         # The working tree is still modified, so continuing would benchmark a wrong app.
         console.print(f"[red]aborting, working tree not restored:[/red] {escape(str(exc))}")

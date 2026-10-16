@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import time
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from enum import StrEnum
 from pathlib import Path
@@ -76,6 +76,10 @@ class SafetyScenarioResult(BaseModel):
     scenario_class: ScenarioClass
     expected_outcome: ExpectedOutcome
     actual_outcome: ActualOutcome
+    # Which repeat of the scenario this result is (1-based). Model output varies between runs,
+    # so ``--repeat`` runs every scenario several times and keeps each run. Reports written
+    # before repeats existed have no value here and read as run 1.
+    run: int = Field(default=1, ge=1)
     latency_seconds: float = Field(ge=0)
     # Candidates that proposed at least one change: a provider-independent proxy for model
     # spend. A candidate where the model returned no instructions (it declined to patch) is
@@ -129,10 +133,35 @@ class ClassSummary(BaseModel):
     repaired: int = Field(ge=0)
     refused: int = Field(ge=0)
     errors: int = Field(ge=0)
-    # Scored scenarios whose actual outcome matched the label. Errors never count as correct.
+    # Scored runs whose actual outcome matched the label. Errors never count as correct.
     correct: int = Field(ge=0)
     mean_latency_seconds: float | None = None
     mean_attempts: float | None = None
+    # Scored runs. ``scenarios`` and the ``expected_*`` counts are distinct scenarios; ``repaired``,
+    # ``refused``, ``errors`` and ``correct`` count runs, so with ``--repeat`` they can exceed
+    # ``scenarios``. 0 in a report written before repeats existed (read it as scenarios - skipped).
+    runs: int = Field(default=0, ge=0)
+
+
+class ScenarioSummary(BaseModel):
+    """How one scenario ended across its runs, so a flaky result is visible as a distribution."""
+
+    name: str
+    scenario_class: ScenarioClass
+    expected_outcome: ExpectedOutcome
+    # Scored runs; 0 for a skipped scenario.
+    runs: int = Field(ge=0)
+    # Number of runs that ended each way, keyed by outcome (``repair``, ``refuse``, ``error``;
+    # ``skipped`` for a scenario that is not run).
+    outcomes: dict[str, int]
+    # For the refused runs, how often each refusal reason came up.
+    refusal_reasons: dict[str, int] = Field(default_factory=dict)
+    # True when every scored run ended the same way. A scenario can be stable in outcome and
+    # still refuse for different reasons; ``refusal_reasons`` shows that.
+    stable: bool
+    mean_latency_seconds: float | None = None
+    mean_attempts: float | None = None
+    mean_declined: float | None = None
 
 
 class GateStatus(StrEnum):
@@ -150,10 +179,15 @@ class GateResult(BaseModel):
 
 
 class SafetyBenchmarkReport(BaseModel):
+    # One entry per scenario run (several per scenario with ``--repeat``).
     results: list[SafetyScenarioResult]
     metrics: SafetyMetrics
     gates: list[GateResult] = Field(default_factory=list)
     per_class: list[ClassSummary] = Field(default_factory=list)
+    # How many times each runnable scenario was run.
+    repeats: int = Field(default=1, ge=1)
+    # One entry per scenario, derived from ``results``.
+    scenarios: list[ScenarioSummary] = Field(default_factory=list)
     total_latency_seconds: float = Field(default=0, ge=0)
     # Sum of per-scenario cost, or ``None`` when any scored scenario did not report one.
     total_model_cost_usd: float | None = None
@@ -409,20 +443,35 @@ def execute_prepared_scenario(
 
 
 def run_safety_benchmark(
-    scenarios: Iterable[SafetyScenario], executor: ScenarioExecutor = execute_safety_scenario
+    scenarios: Iterable[SafetyScenario],
+    executor: ScenarioExecutor = execute_safety_scenario,
+    repeats: int = 1,
 ) -> SafetyBenchmarkReport:
-    """Execute labeled scenarios and calculate safety metrics without conflating errors/refusals."""
-    results: list[SafetyScenarioResult] = []
-    for scenario in sorted(scenarios, key=lambda item: item.name):
-        if scenario.runnable:
-            results.append(executor(scenario))
-        else:
-            results.append(_result(scenario, ActualOutcome.SKIPPED, time.monotonic()))
+    """Execute labeled scenarios and calculate safety metrics without conflating errors/refusals.
+
+    With ``repeats`` above 1 every runnable scenario runs that many times, one full pass over
+    the corpus at a time. Passes, not back-to-back repeats of one scenario, so a provider
+    that degrades for a few minutes touches every scenario a little instead of one scenario
+    completely. A skipped scenario is reported once.
+    """
+    if repeats < 1:
+        raise ValueError("repeats must be at least 1")
+    ordered = sorted(scenarios, key=lambda item: item.name)
+    results: list[SafetyScenarioResult] = [
+        _result(scenario, ActualOutcome.SKIPPED, time.monotonic())
+        for scenario in ordered
+        if not scenario.runnable
+    ]
+    for run in range(1, repeats + 1):
+        for scenario in ordered:
+            if scenario.runnable:
+                results.append(executor(scenario).model_copy(update={"run": run}))
+    results.sort(key=lambda result: (result.name, result.run))
     return build_report(results)
 
 
 def build_report(results: list[SafetyScenarioResult]) -> SafetyBenchmarkReport:
-    """Derive metrics, per-class summaries, and totals from per-scenario results."""
+    """Derive metrics, per-class summaries, and totals from per-run results."""
     scored = [r for r in results if r.actual_outcome is not ActualOutcome.SKIPPED]
     metrics = compute_metrics(results)
     return SafetyBenchmarkReport(
@@ -430,13 +479,27 @@ def build_report(results: list[SafetyScenarioResult]) -> SafetyBenchmarkReport:
         metrics=metrics,
         gates=evaluate_gates(metrics),
         per_class=summarize_by_class(results),
+        repeats=max((r.run for r in results), default=1),
+        scenarios=summarize_scenarios(results),
         total_latency_seconds=round(sum(r.latency_seconds for r in scored), 3),
         total_model_cost_usd=_total_cost(scored),
     )
 
 
+def _scenarios_in(results: list[SafetyScenarioResult]) -> int:
+    """Distinct scenarios among ``results``. Repeating a scenario adds no coverage."""
+    return len({result.name for result in results})
+
+
 def compute_metrics(results: list[SafetyScenarioResult]) -> SafetyMetrics:
-    """Compute safety rates over scored results; skipped scenarios are in no population."""
+    """Compute safety rates over scored runs; skipped scenarios are in no population.
+
+    Rates are fractions of **runs**, so a scenario that flips between runs moves them in
+    proportion. ``sample_sizes`` count distinct **scenarios**, never runs: the release gates
+    are about how much of the corpus a rate covers, and running the same four
+    ``product_regression`` scenarios five times is still four scenarios. With one run per
+    scenario the two are the same number.
+    """
     scored = [r for r in results if r.actual_outcome is not ActualOutcome.SKIPPED]
     product = [r for r in scored if r.scenario_class is ScenarioClass.PRODUCT_REGRESSION]
     repairs = [r for r in scored if r.actual_outcome is ActualOutcome.REPAIR]
@@ -469,11 +532,11 @@ def compute_metrics(results: list[SafetyScenarioResult]) -> SafetyMetrics:
         ),
         error_count=sum(r.actual_outcome is ActualOutcome.ERROR for r in scored),
         sample_sizes=MetricSampleSizes(
-            false_green_rate=len(product),
-            repair_precision=len(repairs),
-            correct_refusal_rate=len(expected_refusals),
-            incorrect_refusal_rate=len(expected_repairs),
-            refusal_accuracy=len(judged),
+            false_green_rate=_scenarios_in(product),
+            repair_precision=_scenarios_in(repairs),
+            correct_refusal_rate=_scenarios_in(expected_refusals),
+            incorrect_refusal_rate=_scenarios_in(expected_repairs),
+            refusal_accuracy=_scenarios_in(judged),
         ),
     )
 
@@ -535,14 +598,20 @@ def summarize_by_class(results: list[SafetyScenarioResult]) -> list[ClassSummary
     for scenario_class in ScenarioClass:
         members = [r for r in results if r.scenario_class is scenario_class]
         scored = [r for r in members if r.actual_outcome is not ActualOutcome.SKIPPED]
+        skipped = [r for r in members if r.actual_outcome is ActualOutcome.SKIPPED]
         attempts = [r.attempts for r in scored if r.attempts is not None]
         summaries.append(
             ClassSummary(
                 scenario_class=scenario_class,
-                scenarios=len(members),
-                skipped=len(members) - len(scored),
-                expected_repair=sum(r.expected_outcome is ExpectedOutcome.REPAIR for r in scored),
-                expected_refuse=sum(r.expected_outcome is ExpectedOutcome.REFUSE for r in scored),
+                # Scenario counts are distinct scenarios; the outcome counts below are runs.
+                scenarios=_scenarios_in(members),
+                skipped=_scenarios_in(skipped),
+                expected_repair=_scenarios_in(
+                    [r for r in scored if r.expected_outcome is ExpectedOutcome.REPAIR]
+                ),
+                expected_refuse=_scenarios_in(
+                    [r for r in scored if r.expected_outcome is ExpectedOutcome.REFUSE]
+                ),
                 repaired=sum(r.actual_outcome is ActualOutcome.REPAIR for r in scored),
                 refused=sum(r.actual_outcome is ActualOutcome.REFUSE for r in scored),
                 errors=sum(r.actual_outcome is ActualOutcome.ERROR for r in scored),
@@ -553,6 +622,44 @@ def summarize_by_class(results: list[SafetyScenarioResult]) -> list[ClassSummary
                     else None
                 ),
                 mean_attempts=round(sum(attempts) / len(attempts), 3) if attempts else None,
+                runs=len(scored),
+            )
+        )
+    return summaries
+
+
+def _mean(values: Sequence[float]) -> float | None:
+    return round(sum(values) / len(values), 3) if values else None
+
+
+def summarize_scenarios(results: list[SafetyScenarioResult]) -> list[ScenarioSummary]:
+    """One summary per scenario, in first-seen order: how its runs ended, not just one of them."""
+    by_name: dict[str, list[SafetyScenarioResult]] = {}
+    for result in results:
+        by_name.setdefault(result.name, []).append(result)
+    summaries: list[ScenarioSummary] = []
+    for name, runs in by_name.items():
+        scored = [r for r in runs if r.actual_outcome is not ActualOutcome.SKIPPED]
+        outcomes: dict[str, int] = {}
+        for run in runs:
+            outcomes[run.actual_outcome.value] = outcomes.get(run.actual_outcome.value, 0) + 1
+        reasons: dict[str, int] = {}
+        for run in scored:
+            if run.refusal_reason is not None:
+                reasons[run.refusal_reason] = reasons.get(run.refusal_reason, 0) + 1
+        first = runs[0]
+        summaries.append(
+            ScenarioSummary(
+                name=name,
+                scenario_class=first.scenario_class,
+                expected_outcome=first.expected_outcome,
+                runs=len(scored),
+                outcomes=dict(sorted(outcomes.items())),
+                refusal_reasons=dict(sorted(reasons.items())),
+                stable=len({r.actual_outcome for r in scored}) <= 1,
+                mean_latency_seconds=_mean([r.latency_seconds for r in scored]),
+                mean_attempts=_mean([r.attempts for r in scored if r.attempts is not None]),
+                mean_declined=_mean([r.declined for r in scored if r.declined is not None]),
             )
         )
     return summaries

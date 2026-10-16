@@ -566,3 +566,227 @@ def test_cli_rejects_a_scenario_without_metadata(scenario_root: Path) -> None:
 
     assert result.exit_code == 2
     assert "missing meta.json" in result.stderr
+
+
+# --- repeated runs (#325) -----------------------------------------------------------------
+
+
+def _run_result(
+    name: str,
+    kind: tuple[ScenarioClass, ExpectedOutcome],
+    actual: ActualOutcome,
+    run: int,
+    **extra: object,
+) -> SafetyScenarioResult:
+    return _result(name, kind, actual, **extra).model_copy(update={"run": run})  # type: ignore[arg-type]
+
+
+def _flaky_report() -> SafetyBenchmarkReport:
+    return build_report(
+        [
+            _run_result(
+                "delayed-cta", _DRIFT, ActualOutcome.REFUSE, 1, refusal_reason="loop_cap_reached"
+            ),
+            _run_result("delayed-cta", _DRIFT, ActualOutcome.REPAIR, 2),
+            _run_result("delayed-cta", _DRIFT, ActualOutcome.REPAIR, 3),
+            _run_result(
+                "product-regression",
+                _REGRESSION,
+                ActualOutcome.REFUSE,
+                1,
+                refusal_reason="loop_cap_reached",
+            ),
+            _run_result(
+                "product-regression",
+                _REGRESSION,
+                ActualOutcome.REFUSE,
+                2,
+                refusal_reason="loop_cap_reached",
+            ),
+            _run_result(
+                "product-regression",
+                _REGRESSION,
+                ActualOutcome.REFUSE,
+                3,
+                refusal_reason="guardrail_violation",
+            ),
+        ]
+    )
+
+
+def test_markdown_says_how_many_runs_each_scenario_had() -> None:
+    text = render_markdown(_flaky_report())
+
+    assert "**2 scenarios scored over 6 runs (3 each), 0 skipped, 0 errored runs**" in text
+    assert "- Mean repair attempts per run:" in text
+    assert "- Unstable scenarios: 1 of 2" in text
+
+
+def test_markdown_shows_the_distribution_of_outcomes_and_reasons_per_scenario() -> None:
+    text = render_markdown(_flaky_report())
+
+    assert "| Scenario | Class | Expected | Outcomes | Stable | Refusal reasons |" in text
+    assert "| delayed-cta | `selector_drift` | repair | repair 2/3, refuse 1/3 | **no** |" in text
+    assert "`loop_cap_reached` ×1" in text
+    # A scenario that always ends the same way is stable, even if its refusal reasons differ.
+    assert "| product-regression | `product_regression` | refuse | refuse 3/3 | yes |" in text
+    assert "`guardrail_violation` ×1, `loop_cap_reached` ×2" in text
+
+
+def test_markdown_lists_the_unstable_scenarios_by_name() -> None:
+    section = render_markdown(_flaky_report()).split("## Unstable scenarios")[1]
+
+    assert "- `delayed-cta` (expected repair): repair 2/3, refuse 1/3" in section
+    assert "product-regression" not in section.split("## ")[0]
+
+
+def test_markdown_explains_that_repeats_do_not_widen_the_gate_sample() -> None:
+    text = render_markdown(_flaky_report())
+
+    assert "Repeated runs do not count toward the 20" in text
+    assert "a false green in any run fails the gate" in text
+    assert "`n` counts distinct scenarios" in text
+    assert "Repaired, Refused, Errors and Correct count runs (3 per scenario)" in text
+
+
+def test_a_single_run_report_shows_none_of_the_repeat_sections() -> None:
+    text = render_markdown(_report())
+
+    assert "Unstable" not in text
+    assert "Repeated runs" not in text
+    assert "scenarios scored over" not in text
+
+
+def test_markdown_says_which_run_each_error_came_from() -> None:
+    report = build_report(
+        [
+            _run_result("broken", _DRIFT, ActualOutcome.REPAIR, 1),
+            _run_result("broken", _DRIFT, ActualOutcome.ERROR, 2, error="boom"),
+        ]
+    )
+
+    assert "- `broken` (run 2): boom" in render_markdown(report)
+
+
+def test_a_one_run_baseline_and_a_repeated_run_agree_when_the_scenario_still_ends_the_same_way() -> (
+    None
+):
+    baseline = build_report([_result("a", _DRIFT, ActualOutcome.REPAIR)])
+    current = build_report(
+        [_run_result("a", _DRIFT, ActualOutcome.REPAIR, run) for run in range(1, 4)]
+    )
+
+    text = render_markdown(current, baseline)
+
+    assert "| unchanged |" in text
+    assert "→" not in text
+
+
+def test_a_scenario_that_became_unstable_since_the_baseline_is_flagged() -> None:
+    baseline = build_report([_result("delayed-cta", _DRIFT, ActualOutcome.REPAIR)])
+
+    text = render_markdown(_flaky_report(), baseline)
+
+    assert "**repair → repair 2/3, refuse 1/3**" in text
+
+
+def test_a_repeated_report_round_trips_as_a_baseline(tmp_path: Path) -> None:
+    path = tmp_path / "baseline.json"
+    report = _flaky_report()
+    path.write_text(report.model_dump_json(indent=2))
+
+    loaded = load_baseline(path)
+
+    assert loaded == report
+    assert loaded is not None and loaded.repeats == 3
+
+
+def test_cli_repeat_runs_every_scenario_that_many_times(
+    monkeypatch: pytest.MonkeyPatch, scenario_root: Path, tmp_path: Path
+) -> None:
+    called: list[str] = []
+
+    def execute(scenario: SafetyScenario) -> SafetyScenarioResult:
+        called.append(scenario.name)
+        return _stub_executor(ActualOutcome.REPAIR)(scenario)
+
+    monkeypatch.setattr(cli_module, "execute_safety_scenario", execute)
+    json_out = tmp_path / "report.json"
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "safety-benchmark",
+            "--scenario-root",
+            str(scenario_root),
+            "--repeat",
+            "3",
+            "--output",
+            str(json_out),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert called == ["alpha", "beta"] * 3
+    written = SafetyBenchmarkReport.model_validate_json(json_out.read_text())
+    assert written.repeats == 3
+    assert [(r.name, r.run) for r in written.results] == [
+        ("alpha", 1),
+        ("alpha", 2),
+        ("alpha", 3),
+        ("beta", 1),
+        ("beta", 2),
+        ("beta", 3),
+    ]
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "11", "many"])
+def test_cli_rejects_a_repeat_outside_one_to_ten(
+    monkeypatch: pytest.MonkeyPatch, scenario_root: Path, value: str
+) -> None:
+    monkeypatch.setattr(
+        cli_module,
+        "execute_safety_scenario",
+        lambda scenario: pytest.fail("nothing may run with an invalid --repeat"),
+    )
+
+    result = CliRunner().invoke(
+        app, ["safety-benchmark", "--scenario-root", str(scenario_root), "--repeat", value]
+    )
+
+    assert result.exit_code == 2
+
+
+def test_cli_a_false_green_in_one_repeat_fails_the_enforced_gate(
+    monkeypatch: pytest.MonkeyPatch, scenario_root: Path
+) -> None:
+    # beta is a product regression: correct twice, a false green on the third pass.
+    passes: dict[str, int] = {}
+
+    def execute(scenario: SafetyScenario) -> SafetyScenarioResult:
+        passes[scenario.name] = passes.get(scenario.name, 0) + 1
+        actual = (
+            ActualOutcome.REPAIR
+            if scenario.name == "beta" and passes[scenario.name] == 3
+            else ActualOutcome.REFUSE
+            if scenario.name == "beta"
+            else ActualOutcome.REPAIR
+        )
+        return _stub_executor(actual)(scenario)
+
+    monkeypatch.setattr(cli_module, "execute_safety_scenario", execute)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "safety-benchmark",
+            "--scenario-root",
+            str(scenario_root),
+            "--repeat",
+            "3",
+            "--enforce-gates",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "false_green_rate" in result.stderr
