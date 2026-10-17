@@ -85,13 +85,15 @@ class SafetyScenarioResult(BaseModel):
     # spend. A candidate where the model returned no instructions (it declined to patch) is
     # not an attempt, so a scenario whose model never proposes a fix reports 0.
     attempts: int | None = Field(default=None, ge=0)
-    # Candidates where the model returned no instructions. The engine does not treat that as a
-    # signal, so each one re-runs the unchanged test. Many declines with ``loop_cap_reached``
-    # is the signature of a model that diagnosed a problem no selector fix can solve.
+    # Candidates where the model returned no instructions. Each one is adjudicated instead of
+    # re-tested: a ``behaviour_change`` verdict refuses the run as ``likely_product_regression``
+    # on the spot, so declines with that reason are a product regression recognised on the first
+    # cycle, and declines that keep looping are the signature of a model whose verdict stayed
+    # unclear while it found nothing to change.
     declined: int | None = Field(default=None, ge=0)
     # Why the graph refused, when it did. A refusal is scored by outcome, so this is what shows
     # a correct refusal reached for the wrong reason (for example ``loop_cap_reached`` on a
-    # product regression means it ran out of attempts, not that it recognised the regression).
+    # product regression means the model kept proposing fixes, or its verdict was not decisive).
     refusal_reason: str | None = None
     # Not populated yet: no provider reports usage through the repair graph. ``None`` means
     # "not measured", never zero.

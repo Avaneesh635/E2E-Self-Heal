@@ -95,12 +95,13 @@ fails the `error_count` gate. Every other refusal reason still counts as a refus
 
 **A refusal is scored by outcome, not by reason.** The Scenarios table therefore shows the refusal
 reason. A `product_regression` scenario refused with `loop_cap_reached` counts as a correct refusal,
-but `loop_cap_reached` only says the loop ended at its cap. In the checked-in `product-regression`
-scenario the models do diagnose the removed submit handler as a product regression and propose no
-patch, yet the engine has no path from a diagnosis to a refusal reason (`likely_product_regression`
-is defined but never emitted). It re-runs the unchanged test until the cap, then refuses
-generically. Treat a refusal for `guardrail_violation` as stronger evidence than one for
-`loop_cap_reached`, and read the reason together with the attempts.
+but `loop_cap_reached` only says the loop ended at its cap. When the model proposes no change at all,
+the run asks it for a verdict on its own diagnosis: if no locator or wait fix could preserve the
+test's intent, the run refuses as `likely_product_regression` in one cycle instead of re-running a
+byte-identical test to the cap. In the checked-in `product-regression` scenario the models diagnose
+the removed submit handler that way, so a run there ending in `loop_cap_reached` means the verdict
+was not decisive. Treat a refusal for `likely_product_regression` or `guardrail_violation` as
+stronger evidence than one for `loop_cap_reached`, and read the reason together with the attempts.
 
 **By class.** Every mutation class is listed, even with no scenarios, so a gap is visible rather
 than silently missing. A separate **Coverage gaps** section names the classes with nothing to
@@ -110,9 +111,11 @@ score. Any number says nothing about those classes.
 *attempts* (candidates that proposed at least one change; a candidate where the model declined to
 patch is not counted, so a scenario where it never proposes a fix shows `0`), which tracks model
 spend independently of provider. The **Declined** column counts those empty candidates
-separately. Each one still costs a Diagnoser call, a Patch Generator call and a full re-run of the
-unchanged test, so `0` attempts with several declines and `loop_cap_reached` is the signature of a
-model that diagnosed a problem no selector fix can solve while the engine kept looping.
+separately. Each one costs a Diagnoser call, a Patch Generator call and a verdict call instead of a
+re-run of the unchanged test, and a `behaviour_change` verdict ends the run there. So `0` attempts
+with `likely_product_regression` is a product regression caught on the first cycle, and several
+declines ending in `loop_cap_reached` is the signature of a model that found nothing to change
+while its verdict stayed unclear.
 **Dollar cost is not measured:** no provider reports usage through the repair graph yet, so the
 report states "not measured" instead of showing zero. Use latency and attempts to spot a change that
 improves accuracy by spending much more.

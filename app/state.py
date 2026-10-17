@@ -6,7 +6,7 @@ each node reads from it and returns a partial update dict.
 
 from typing import Literal, NotRequired, TypedDict
 
-from app.schemas import RefusalReason
+from app.schemas import DiagnosisVerdict, RefusalReason
 
 
 class PatchApplicationReport(TypedDict):
@@ -105,6 +105,9 @@ class AgentState(TypedDict):
     dom_snapshot: str  # ARIA snapshot of the failing page (from error-context.md)
     dom_snapshot_source: NotRequired[str]  # source error-context.md path for evidence references
     analysis_report: str  # Diagnoser's failure-cause report
+    # Decline Adjudicator's verdict about a candidate that proposed no change. Absent until the
+    # model declines, and absent for the rest of the run when the verdict could not be obtained.
+    diagnosis_verdict: NotRequired[DiagnosisVerdict]
     memory_enabled: NotRequired[bool]  # opt in/out of local healing-history lookup and storage
     detected_framework: NotRequired[str]  # optional framework hint for prompt strategy selection
     patch_instructions: dict  # Patch Generator's fix guide (line, code)

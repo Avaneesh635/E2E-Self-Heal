@@ -58,8 +58,6 @@ DOCUMENTED_MODELS: list[type[BaseModel]] = [
 NOT_CAPTURED = {
     # Needs a live app URL and a candidate selector that matches several elements.
     RefusalReason.AMBIGUOUS_TARGET,
-    # No code path emits it today.
-    RefusalReason.LIKELY_PRODUCT_REGRESSION,
 }
 
 _ADAPTERS: dict[str, TypeAdapter] = {

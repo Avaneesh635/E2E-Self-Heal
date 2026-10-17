@@ -52,6 +52,14 @@ All notable changes to this project are documented here. The format is based on
   repair (#291).
 
 ### Fixed
+- **A declined patch is a signal, not a reason to re-run the test** (#330). When the model
+  proposes no change it now gets one structured verdict on its own diagnosis: `selector_drift`,
+  `behaviour_change` or `unclear`. `behaviour_change` refuses immediately as
+  `likely_product_regression`, a reason that was defined but emitted by nothing, so a product
+  regression is reported for what it is after one cycle instead of three. The other two verdicts
+  keep the full attempt budget, and the verdict is asked at most once per run because a decline
+  leaves every later cycle's prompt unchanged. The verdict is internal, so the `--json` contract
+  changes only in the reason a refusal can carry.
 - The safety benchmark now gives the repair graph Playwright's failure-time page snapshot, as
   `e2e-healer heal` does. It passed an empty snapshot, so a label change was invisible to the
   model (the diff analyzer records attribute changes, not text) and `label-rename` could never be

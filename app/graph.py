@@ -6,6 +6,7 @@ import structlog
 
 from app.config import settings
 from app.evidence import add_loop_event
+from app.nodes.decline_adjudicator import decline_adjudicator
 from app.nodes.diagnoser import diagnoser
 from app.nodes.memory_lookup import memory_lookup
 from app.nodes.patch_generator import patch_generator
@@ -13,11 +14,12 @@ from app.nodes.reviewer import reviewer
 from app.nodes.selector_verifier import selector_verifier
 from app.nodes.shadow_verifier import shadow_verifier
 from app.nodes.test_runner import test_runner
-from app.schemas import RefusalReason
+from app.schemas import DiagnosisVerdict, RefusalReason
 from app.state import AgentState
 
 logger = structlog.get_logger(__name__)
 _REFUSAL_FINALIZER = "refusal_finalizer"
+_DECLINE_ADJUDICATOR = "decline_adjudicator"
 
 
 def route(state: AgentState) -> str:
@@ -70,6 +72,12 @@ def refusal_finalizer(state: AgentState) -> dict:
         reason = RefusalReason.AMBIGUOUS_TARGET
     elif not state["dom_diff_context"]:
         reason = RefusalReason.INSUFFICIENT_EVIDENCE
+    elif state.get("diagnosis_verdict") is DiagnosisVerdict.BEHAVIOUR_CHANGE:
+        # The model declined to patch and, asked directly, judged that no locator or wait fix
+        # preserves the test's intent. Ranked below the checks above because they are
+        # observations while this is a model judgment, and below a missing diff because a run
+        # with no DOM change cannot support a claim about product behaviour.
+        reason = RefusalReason.LIKELY_PRODUCT_REGRESSION
     else:
         reason = RefusalReason.LOOP_CAP_REACHED
 
@@ -82,8 +90,25 @@ def refusal_finalizer(state: AgentState) -> dict:
     }
 
 
+def declined_candidate(state: AgentState) -> bool:
+    """Did the model answer, and answer with no change at all?
+
+    Only a successful provider call counts: a failed one leaves ``patch_instructions`` empty
+    too, and that is an outage to report as ``provider_error``, not a decline to interpret.
+    """
+    if not state.get("patch_provider_report", {}).get("ok", True):
+        return False
+    instructions = state.get("patch_instructions", {})
+    return isinstance(instructions, dict) and instructions.get("instructions") == []
+
+
 def route_after_patch(state: AgentState) -> str:
-    """End on a permanent boundary violation; retry a stale line target before verification."""
+    """End on a permanent boundary violation; retry a stale line target before verification.
+
+    A candidate that proposes no change leaves the test byte-identical, so it is adjudicated
+    before anything is re-verified: re-running the unchanged test cannot answer the question
+    the model just raised.
+    """
     boundary_ok = state.get("boundary_report", {}).get("ok", True)
     application_ok = state.get("patch_application_report", {}).get("ok", True)
     # A boundary violation is permanent — the target path can't change mid-run, so retrying
@@ -94,6 +119,15 @@ def route_after_patch(state: AgentState) -> str:
         if state["loop_count"] >= settings.max_loops:
             return _REFUSAL_FINALIZER
         return "patch_generator"
+    if declined_candidate(state):
+        return _DECLINE_ADJUDICATOR
+    return "shadow_verifier"
+
+
+def route_after_decline(state: AgentState) -> str:
+    """Refuse a judged behaviour change; otherwise verify the unchanged candidate as before."""
+    if state.get("diagnosis_verdict") is DiagnosisVerdict.BEHAVIOUR_CHANGE:
+        return _REFUSAL_FINALIZER
     return "shadow_verifier"
 
 
@@ -118,6 +152,7 @@ def build_graph() -> CompiledStateGraph:
     graph.add_node("memory_lookup", memory_lookup)
     graph.add_node("diagnoser", diagnoser)
     graph.add_node("patch_generator", patch_generator)
+    graph.add_node(_DECLINE_ADJUDICATOR, decline_adjudicator)
     graph.add_node("shadow_verifier", shadow_verifier)
     graph.add_node("selector_verifier", selector_verifier)
     graph.add_node("test_runner", test_runner)
@@ -136,8 +171,14 @@ def build_graph() -> CompiledStateGraph:
         {
             "shadow_verifier": "shadow_verifier",
             "patch_generator": "patch_generator",
+            _DECLINE_ADJUDICATOR: _DECLINE_ADJUDICATOR,
             _REFUSAL_FINALIZER: _REFUSAL_FINALIZER,
         },
+    )
+    graph.add_conditional_edges(
+        _DECLINE_ADJUDICATOR,
+        route_after_decline,
+        {"shadow_verifier": "shadow_verifier", _REFUSAL_FINALIZER: _REFUSAL_FINALIZER},
     )
     graph.add_conditional_edges(
         "shadow_verifier",
