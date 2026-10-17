@@ -25,7 +25,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.config import LLMProvider, settings
 from app.providers.orcarouter import OrcaRouterProvider
-from app.schemas import PatchOutput, ReviewOutput
+from app.schemas import DiagnosisVerdictOutput, PatchOutput, ReviewOutput
 
 # Anthropic and Ollama are optional dependencies: users who don't use them shouldn't have to
 # install langchain-anthropic / langchain-ollama. The guarded imports stay at module top per
@@ -354,3 +354,13 @@ def generate_review(system_prompt: str, user_prompt: str) -> ReviewOutput:
     (never free-form rewrites). Raises on a missing parse so tenacity retries.
     """
     return _get_client().structured(system_prompt, user_prompt, ReviewOutput)
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+def generate_diagnosis_verdict(system_prompt: str, user_prompt: str) -> DiagnosisVerdictOutput:
+    """Call the LLM with an enforced DiagnosisVerdictOutput schema (the decline adjudicator).
+
+    Mirrors ``generate_patch``: a structured call, so an unparseable verdict retries and then
+    raises. The adjudicator treats exhausted retries as "no verdict" rather than as evidence.
+    """
+    return _get_client().structured(system_prompt, user_prompt, DiagnosisVerdictOutput)

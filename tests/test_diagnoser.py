@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from app.nodes.diagnoser import _DIAGNOSIS_UNAVAILABLE, diagnoser
+from app.nodes.diagnoser import DIAGNOSIS_UNAVAILABLE, diagnoser
 from app.preprocess.aria_snapshot import abstract_snapshot
 from app.state import AgentState
 
@@ -65,4 +65,4 @@ def test_diagnoser_degrades_on_provider_error():
     with patch("app.nodes.diagnoser.generate_diagnosis", side_effect=boom):
         result = diagnoser(_state())
 
-    assert result == {"analysis_report": _DIAGNOSIS_UNAVAILABLE}
+    assert result == {"analysis_report": DIAGNOSIS_UNAVAILABLE}

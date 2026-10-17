@@ -411,8 +411,8 @@ def test_a_refusal_records_why_the_graph_refused_and_how_many_attempts_it_took(
 def test_a_candidate_with_no_instructions_is_not_a_repair_attempt(
     monkeypatch: pytest.MonkeyPatch, graph_scenario: SafetyScenario
 ) -> None:
-    # What the checked-in product-regression scenario does: the model diagnoses the failure,
-    # proposes no patch, and the loop re-runs the unchanged test until the cap.
+    # What a run whose decline verdict stayed unclear does: the model diagnoses the failure and
+    # proposes no patch on every attempt, so each cycle has nothing new to test.
     final = {
         "is_success": False,
         "refusal_reason": RefusalReason.LOOP_CAP_REACHED,

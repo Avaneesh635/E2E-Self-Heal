@@ -8,6 +8,7 @@ import repair from "@site/src/data/json-contract/repair.json";
 import refusalLoopCap from "@site/src/data/json-contract/refusal-loop-cap.json";
 import refusalGuardrail from "@site/src/data/json-contract/refusal-guardrail.json";
 import refusalInsufficient from "@site/src/data/json-contract/refusal-insufficient.json";
+import refusalProductRegression from "@site/src/data/json-contract/refusal-product-regression.json";
 import refusalProvider from "@site/src/data/json-contract/refusal-provider.json";
 import refusalBoundary from "@site/src/data/json-contract/refusal-boundary.json";
 import suiteMixed from "@site/src/data/json-contract/suite-mixed.json";
@@ -97,7 +98,7 @@ The workflow declined to change the test. The test file is left as it was.
 | `test_script_path` | string | always | The test that was not changed. Same path rules as in `RepairSummary`. |
 | `reason` | string | always | Why the run ended, from the closed set in [Refusal reasons](#refusal-reasons). It describes how the **final** cycle ended; earlier candidates may have been rejected for other reasons, which `evidence.candidates` records. Reject values you do not recognize. |
 | `is_success` | boolean | always | Always `false`. |
-| `loop_count` | integer | always | Rejected cycles when the refusal was finalized. Equals the loop cap (3 by default) for most refusals; `1` for an architecture boundary refusal; `0` for suite tests the loop never ran on. |
+| `loop_count` | integer | always | Rejected cycles when the refusal was finalized. Equals the loop cap (3 by default) for most refusals; `1` for an architecture boundary refusal, which is refused at the first patch attempt; for a `likely_product_regression` refusal it is the cycle the model declined in, since no test runs after it; `0` for suite tests the loop never ran on. |
 | `evidence` | `EvidenceBundle` | always | What the refusal was based on. |
 
 ### `SuiteSummary`
@@ -211,7 +212,7 @@ One proposed repair and how each check judged it.
 | --- | --- | --- | --- |
 | `loop_count` | integer | always | The cycle in which the candidate was produced. |
 | `source` | string | always | `"llm"` for a model-generated patch, `"memory"` for one reused from local healing history. |
-| `instructions` | array of `PatchInstruction` | always | The proposed edits. **Can be empty**: the model may propose no change, and the candidate is still recorded and tested. |
+| `instructions` | array of `PatchInstruction` | always | The proposed edits. **Can be empty**: the model may propose no change. The candidate is still recorded, and the run then asks the model whether any locator or wait fix could preserve the test's intent, so an empty list can end the run as `likely_product_regression` without a test run. |
 | `memory_score` | number or null | always | Similarity to the healing-history record, between `0` and `1`, for `memory` candidates; `null` for `llm` candidates. |
 | `shadow_score` | number or null | always | Score from shadow-replay verification, or `null` when it did not run. |
 | `selector_counts` | object | always | For each verified selector, how many elements it matched on the live page. Empty when live verification did not run, which is the case unless an app URL is configured (`--app-url`). |
@@ -263,7 +264,13 @@ One stage of one repair cycle.
 
 `reason` is a closed set: a new value is a major schema change. When several causes apply, the
 first in this order wins, judged on the final cycle: boundary, guardrail, provider, ambiguous
-target, insufficient evidence, loop cap.
+target, insufficient evidence, product regression, loop cap.
+
+The product-regression reason needs two things, both judged on the final cycle: the model
+proposed no change at all (a candidate with an empty `instructions` list from a provider call
+that succeeded), and when asked it judged that no locator or wait fix could preserve the test's
+intent. A diff with no DOM change still outranks it, because nothing in the diff would support
+the claim; that stays `insufficient_evidence`.
 
 | `reason` | When it is emitted | Example below |
 | --- | --- | --- |
@@ -273,7 +280,7 @@ target, insufficient evidence, loop cap.
 | `ambiguous_target` | The final candidate's selector matched zero or several elements on the live page. Only possible when an app URL is configured for live selector verification. | no: needs a live app and a non-unique selector |
 | `insufficient_evidence` | The loop ended and the git diff contained no DOM change to work from. Also used for suite tests the loop could not run on (outside the workspace, missing, or first failing in the final suite rerun), with `loop_count: 0`. | yes |
 | `loop_cap_reached` | The loop reached its cap (3 cycles by default) with no more specific cause. | yes |
-| `likely_product_regression` | Part of the closed set but **not emitted by the current code**. A product regression is refused today as one of the reasons above, usually `loop_cap_reached` or `guardrail_violation`. | no: never emitted |
+| `likely_product_regression` | The model proposed no change, and its verdict on its own diagnosis was that the product's behaviour changed: the submit handler was removed, the flow no longer happens, and no locator or wait fix could preserve the test's intent. Refused as soon as it declines, without re-running the unchanged test, so the last candidate has an empty `instructions` list and no `test_runner` stage follows it. | yes |
 
 ## Captured payloads
 
@@ -315,12 +322,31 @@ patch applied (the button's `id` changes from `submit-btn` to `submit`). Exit co
 `product-regression` patch applied (the form's submit handler is removed, so no locator fix can make
 the test pass). Exit code `1`. The first candidate was rejected by a guardrail
 (`line 6 targets an assertion`), but the run ended on a failed test, so the reason is
-`loop_cap_reached`.
+`loop_cap_reached`. Captured before the decline verdict existed; the same scenario can now end as
+`likely_product_regression`, as the next example shows, when the model declines and judges the
+failure a behaviour change.
 
 <details>
 <summary>Captured payload</summary>
 
 <CodeBlock language="json" title="json-contract/refusal-loop-cap.json">{JSON.stringify(refusalLoopCap, null, 2)}</CodeBlock>
+
+</details>
+
+### Refusal: `likely_product_regression`
+
+`e2e-healer heal scenarios/product-regression/spec.ts --json --dry-run --no-memory` with the same
+patch applied, on a run where the model declined on its second attempt. Exit code `1`. The first
+attempt raised the click's timeout, which the test still failed; the second proposed no change at
+all, and the verdict on that diagnosis was a behaviour change, so the run refused there instead of
+running the unchanged test a third time. `loop_count` is `2` because two cycles ended before the
+refusal, and `evidence.loop_history` goes from `patch_generator` with `instruction_count: 0`
+straight to `refusal_finalizer`, with no `test_runner` stage for that cycle.
+
+<details>
+<summary>Captured payload</summary>
+
+<CodeBlock language="json" title="json-contract/refusal-product-regression.json">{JSON.stringify(refusalProductRegression, null, 2)}</CodeBlock>
 
 </details>
 

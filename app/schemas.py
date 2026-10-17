@@ -66,6 +66,31 @@ class PatchOutput(BaseModel):
     instructions: list[PatchInstruction]
 
 
+class DiagnosisVerdict(str, Enum):
+    """What broke the test, as a closed set the decline adjudicator must choose from.
+
+    Only ``BEHAVIOUR_CHANGE`` changes the outcome: it is what turns a refusal into
+    ``RefusalReason.LIKELY_PRODUCT_REGRESSION``. The other two keep the ordinary repair loop,
+    so a wrong verdict of that kind costs a model call, never a wrong label.
+    """
+
+    SELECTOR_DRIFT = "selector_drift"
+    BEHAVIOUR_CHANGE = "behaviour_change"
+    UNCLEAR = "unclear"
+
+
+class DiagnosisVerdictOutput(BaseModel):
+    """Structured Output schema for the adjudication of a declined patch.
+
+    Internal to the repair loop: it is never emitted in the ``--json`` contract, so adding or
+    changing it is not a schema version change. ``rationale`` is required so the model has to
+    commit to a reason before naming a verdict; it is not otherwise consumed.
+    """
+
+    verdict: DiagnosisVerdict
+    rationale: str = Field(min_length=1, description="why this verdict fits the evidence")
+
+
 class RefusalReason(str, Enum):
     """Closed taxonomy for why the repair workflow declined to make a change."""
 

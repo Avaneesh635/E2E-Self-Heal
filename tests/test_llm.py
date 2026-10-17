@@ -14,6 +14,7 @@ from pydantic import SecretStr
 
 from app import llm
 from app.config import settings
+from app.schemas import DiagnosisVerdict
 
 
 def test_get_client_requires_key(monkeypatch):
@@ -467,6 +468,10 @@ class _RecordingClient:
         self.calls.append(("structured", system_prompt, user_prompt, schema))
         if schema is llm.ReviewOutput:
             return llm.ReviewOutput(findings=[])
+        if schema is llm.DiagnosisVerdictOutput:
+            return llm.DiagnosisVerdictOutput(
+                verdict=DiagnosisVerdict.UNCLEAR, rationale="not enough evidence"
+            )
         return llm.PatchOutput(instructions=[])
 
 
@@ -497,6 +502,17 @@ def test_generate_review_delegates_to_structured(monkeypatch):
 
     assert isinstance(out, llm.ReviewOutput)
     assert fake.calls[0][3] is llm.ReviewOutput
+
+
+def test_generate_diagnosis_verdict_delegates_to_structured(monkeypatch):
+    fake = _RecordingClient()
+    monkeypatch.setattr(llm, "_get_client", lambda: fake)
+
+    out = llm.generate_diagnosis_verdict("sys", "usr")
+
+    assert isinstance(out, llm.DiagnosisVerdictOutput)
+    assert fake.calls[0][:3] == ("structured", "sys", "usr")
+    assert fake.calls[0][3] is llm.DiagnosisVerdictOutput
 
 
 def test_generate_patch_surfaces_client_error_for_retry_and_feedback(monkeypatch):
