@@ -803,3 +803,261 @@ def test_a_clean_large_run_passes_every_gate_and_errors_fail_one() -> None:
 
     assert {gate.status for gate in clean.gates} == {GateStatus.PASS}
     assert _gate(errored, "error_count").status is GateStatus.FAIL
+
+
+# --- repeated runs (#325) -----------------------------------------------------------------
+
+
+def _run_of(
+    name: str,
+    scenario_class: ScenarioClass,
+    expected: ExpectedOutcome,
+    actual: ActualOutcome,
+    run: int,
+    *,
+    refusal_reason: str | None = None,
+    attempts: int | None = None,
+    declined: int | None = None,
+    latency: float = 1,
+) -> SafetyScenarioResult:
+    return SafetyScenarioResult(
+        name=name,
+        scenario_class=scenario_class,
+        expected_outcome=expected,
+        actual_outcome=actual,
+        run=run,
+        latency_seconds=latency,
+        attempts=attempts,
+        declined=declined,
+        refusal_reason=refusal_reason,
+    )
+
+
+_PRODUCT = (ScenarioClass.PRODUCT_REGRESSION, ExpectedOutcome.REFUSE)
+_DRIFT_KIND = (ScenarioClass.SELECTOR_DRIFT, ExpectedOutcome.REPAIR)
+
+
+def test_a_repeat_runs_every_scenario_in_full_passes_and_numbers_the_runs() -> None:
+    scenarios = (
+        _scenario("b", ScenarioClass.SELECTOR_DRIFT, ExpectedOutcome.REPAIR),
+        _scenario("a", ScenarioClass.SELECTOR_DRIFT, ExpectedOutcome.REPAIR),
+    )
+    order: list[str] = []
+
+    def execute(scenario: SafetyScenario) -> SafetyScenarioResult:
+        order.append(scenario.name)
+        return _result(
+            scenario.name, scenario.scenario_class, scenario.expected_outcome, ActualOutcome.REPAIR
+        )
+
+    report = run_safety_benchmark(scenarios, execute, repeats=3)
+
+    # One pass over the whole corpus at a time, not one scenario three times in a row: a
+    # provider that degrades for a few minutes then touches every scenario a little.
+    assert order == ["a", "b", "a", "b", "a", "b"]
+    assert [(r.name, r.run) for r in report.results] == [
+        ("a", 1),
+        ("a", 2),
+        ("a", 3),
+        ("b", 1),
+        ("b", 2),
+        ("b", 3),
+    ]
+    assert report.repeats == 3
+
+
+def test_a_skipped_scenario_is_reported_once_however_many_repeats() -> None:
+    scenarios = (
+        _scenario("static", ScenarioClass.SELECTOR_DRIFT, ExpectedOutcome.REPAIR, runnable=False),
+        _scenario("drift", ScenarioClass.SELECTOR_DRIFT, ExpectedOutcome.REPAIR),
+    )
+
+    report = run_safety_benchmark(
+        scenarios,
+        lambda s: _result(s.name, s.scenario_class, s.expected_outcome, ActualOutcome.REPAIR),
+        repeats=4,
+    )
+
+    assert [r.run for r in report.results if r.name == "static"] == [1]
+    assert [r.run for r in report.results if r.name == "drift"] == [1, 2, 3, 4]
+
+
+def test_fewer_than_one_repeat_is_rejected() -> None:
+    with pytest.raises(ValueError, match="at least 1"):
+        run_safety_benchmark([], repeats=0)
+
+
+def test_a_single_run_report_is_unchanged_by_the_repeat_machinery() -> None:
+    report = run_safety_benchmark(
+        (_scenario("drift", ScenarioClass.SELECTOR_DRIFT, ExpectedOutcome.REPAIR),),
+        lambda s: _result(s.name, s.scenario_class, s.expected_outcome, ActualOutcome.REPAIR),
+    )
+
+    assert report.repeats == 1
+    assert [r.run for r in report.results] == [1]
+
+
+def test_repeating_a_scenario_does_not_count_as_more_scenarios_for_the_gates() -> None:
+    # Four product-regression scenarios, five runs each: 20 runs, still 4 scenarios. If runs
+    # counted, a 0% false-green claim would look credible on the same four scenarios.
+    results = [
+        _run_of(f"regression-{i}", *_PRODUCT, ActualOutcome.REFUSE, run)
+        for i in range(4)
+        for run in range(1, 6)
+    ]
+
+    report = build_report(results)
+
+    assert report.metrics.sample_sizes.false_green_rate == 4
+    assert report.metrics.sample_sizes.correct_refusal_rate == 4
+    gates = {gate.name: gate for gate in report.gates}
+    assert gates["false_green_rate"].status is GateStatus.INSUFFICIENT_SAMPLE
+
+
+def test_a_false_green_in_any_single_run_fails_its_gate() -> None:
+    # Four correct refusals and one repair of the same product regression. A majority vote
+    # would call this scenario safe; the gate must not.
+    results = [
+        _run_of("regression", *_PRODUCT, ActualOutcome.REFUSE, run) for run in range(1, 5)
+    ] + [_run_of("regression", *_PRODUCT, ActualOutcome.REPAIR, 5)]
+
+    report = build_report(results)
+
+    assert report.metrics.false_green_rate == 0.2
+    gates = {gate.name: gate for gate in report.gates}
+    assert gates["false_green_rate"].status is GateStatus.FAIL
+
+
+def test_rates_are_fractions_of_runs() -> None:
+    results = [
+        _run_of("drift", *_DRIFT_KIND, ActualOutcome.REPAIR, 1),
+        _run_of("drift", *_DRIFT_KIND, ActualOutcome.REPAIR, 2),
+        _run_of("drift", *_DRIFT_KIND, ActualOutcome.REFUSE, 3),
+    ]
+
+    metrics = build_report(results).metrics
+
+    assert metrics.incorrect_refusal_rate == pytest.approx(1 / 3)
+    assert metrics.repair_precision == 1.0
+    # One scenario behind all three runs.
+    assert metrics.sample_sizes.incorrect_refusal_rate == 1
+
+
+def test_error_count_counts_every_errored_run() -> None:
+    results = [
+        _run_of("drift", *_DRIFT_KIND, ActualOutcome.ERROR, 1),
+        _run_of("drift", *_DRIFT_KIND, ActualOutcome.REPAIR, 2),
+        _run_of("drift", *_DRIFT_KIND, ActualOutcome.ERROR, 3),
+    ]
+
+    report = build_report(results)
+
+    assert report.metrics.error_count == 2
+    gates = {gate.name: gate for gate in report.gates}
+    assert gates["error_count"].status is GateStatus.FAIL
+
+
+def test_per_class_counts_keep_scenarios_distinct_and_outcomes_in_runs() -> None:
+    results = [
+        _run_of("a", *_DRIFT_KIND, ActualOutcome.REPAIR, 1),
+        _run_of("a", *_DRIFT_KIND, ActualOutcome.REPAIR, 2),
+        _run_of("a", *_DRIFT_KIND, ActualOutcome.REFUSE, 3),
+        _run_of("static", *_DRIFT_KIND, ActualOutcome.SKIPPED, 1),
+    ]
+
+    drift = next(
+        s
+        for s in build_report(results).per_class
+        if s.scenario_class is ScenarioClass.SELECTOR_DRIFT
+    )
+
+    assert (drift.scenarios, drift.skipped, drift.expected_repair) == (2, 1, 1)
+    assert (drift.repaired, drift.refused, drift.correct, drift.runs) == (2, 1, 2, 3)
+
+
+def test_the_scenario_summary_shows_how_often_each_outcome_and_reason_happened() -> None:
+    results = [
+        _run_of(
+            "delayed-cta",
+            *_DRIFT_KIND,
+            ActualOutcome.REFUSE,
+            1,
+            refusal_reason="loop_cap_reached",
+            attempts=3,
+            declined=0,
+            latency=20,
+        ),
+        _run_of("delayed-cta", *_DRIFT_KIND, ActualOutcome.REPAIR, 2, attempts=1, declined=0),
+        _run_of(
+            "delayed-cta",
+            *_DRIFT_KIND,
+            ActualOutcome.REFUSE,
+            3,
+            refusal_reason="guardrail_violation",
+            attempts=3,
+            declined=0,
+            latency=10,
+        ),
+    ]
+
+    (summary,) = build_report(results).scenarios
+
+    assert summary.name == "delayed-cta"
+    assert summary.runs == 3
+    assert summary.outcomes == {"refuse": 2, "repair": 1}
+    assert summary.refusal_reasons == {"guardrail_violation": 1, "loop_cap_reached": 1}
+    assert summary.stable is False
+    # Latencies 20, 1 and 10; attempts 3, 1 and 3.
+    assert summary.mean_latency_seconds == pytest.approx(31 / 3, abs=0.001)
+    assert summary.mean_attempts == pytest.approx(7 / 3, abs=0.001)
+    assert summary.mean_declined == 0
+
+
+def test_a_scenario_is_stable_when_every_run_ends_the_same_way() -> None:
+    results = [
+        _run_of(
+            "regression", *_PRODUCT, ActualOutcome.REFUSE, run, refusal_reason="loop_cap_reached"
+        )
+        for run in range(1, 4)
+    ]
+
+    (summary,) = build_report(results).scenarios
+
+    assert summary.stable is True
+    assert summary.outcomes == {"refuse": 3}
+
+
+def test_a_skipped_scenario_summary_has_no_scored_runs() -> None:
+    (summary,) = build_report([_run_of("static", *_DRIFT_KIND, ActualOutcome.SKIPPED, 1)]).scenarios
+
+    assert summary.runs == 0
+    assert summary.outcomes == {"skipped": 1}
+    assert summary.stable is True
+    assert summary.mean_latency_seconds is None
+
+
+def test_a_report_from_before_repeats_existed_reads_as_one_run_per_scenario() -> None:
+    old = SafetyBenchmarkReport.model_validate(
+        {
+            "results": [
+                {
+                    "name": "id-rename",
+                    "scenario_class": "selector_drift",
+                    "expected_outcome": "repair",
+                    "actual_outcome": "repair",
+                    "latency_seconds": 1.5,
+                }
+            ],
+            "metrics": {
+                "false_green_rate": None,
+                "repair_precision": 1.0,
+                "correct_refusal_rate": None,
+                "incorrect_refusal_rate": 0.0,
+                "error_count": 0,
+            },
+        }
+    )
+
+    assert old.repeats == 1
+    assert old.results[0].run == 1
+    assert old.scenarios == []

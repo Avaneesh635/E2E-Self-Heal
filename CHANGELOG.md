@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **`--repeat N` for the safety benchmark** (#325). Model output varies between runs, so one run
+  per scenario can move a rate by chance (`split-submit` was repaired once and refused twice by the
+  same model). `e2e-healer safety-benchmark --repeat 3` runs every scenario three times, in full
+  passes, and the report shows how often each scenario ended each way, which refusal reasons
+  occurred, and which scenarios were unstable. Rates are fractions of runs. The gate sample still
+  counts distinct scenarios, because repeating a scenario adds no coverage, and a false green in any
+  single run fails the false-green gate. The JSON gains `run`, `repeats` and `scenarios`; older
+  reports and baselines still load, and a single-run report is unchanged.
 - **JSON output reference** (#293). A new docs page documents every field of the schema `2.1`
   `--json` contract (`RepairSummary`, `RefusalReport`, `SuiteSummary`, `ReviewReport` and every
   nested object), when a document is emitted and with which exit code, and each `RefusalReason`.
