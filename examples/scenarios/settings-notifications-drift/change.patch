@@ -1,0 +1,13 @@
+diff --git a/examples/demo-app/src/components/settings/SettingsNotifications.tsx b/examples/demo-app/src/components/settings/SettingsNotifications.tsx
+index fd11a9e..d7a211d 100644
+--- a/examples/demo-app/src/components/settings/SettingsNotifications.tsx
++++ b/examples/demo-app/src/components/settings/SettingsNotifications.tsx
+@@ -9,7 +9,7 @@ export function SettingsNotifications() {
+       <label>
+         Email notifications
+         <input
+-          id="notifications-toggle"
++          id="email-notifications"
+           type="checkbox"
+           checked={enabled}
+           onChange={(event) => setEnabled(event.target.checked)}

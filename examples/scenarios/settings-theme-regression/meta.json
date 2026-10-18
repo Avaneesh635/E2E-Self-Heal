@@ -1,0 +1,1 @@
+{"class":"product_regression","expected_outcome":"refuse","failing_selector":"#theme-select","rationale":"The identifier was renamed like its drift twin, but the onChange handler was also removed, so repairing the selector still leaves the indicator at light and the assertion failing."}
