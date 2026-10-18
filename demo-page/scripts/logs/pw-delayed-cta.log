@@ -16,7 +16,7 @@ Running 1 test using 1 worker
       11 |   await expect(page.getByText("Welcome!")).toBeVisible();
       12 | });
       13 |
-        at /Users/dlehddnr0713/Desktop/e2e/examples/scenarios/delayed-cta/spec.ts:10:14
+        at scenarios/delayed-cta/spec.ts:10:14
 
     Error Context: test-results/delayed-cta-spec.ts-clicks-the-CTA-once-it-has-loaded/error-context.md
 

@@ -16,7 +16,7 @@ Running 1 test using 1 worker
       10 |   await expect(page.getByText("Welcome!")).toBeVisible();
       11 | });
       12 |
-        at /Users/dlehddnr0713/Desktop/e2e/examples/scenarios/cta-rename-handler-dropped/spec.ts:9:14
+        at scenarios/cta-rename-handler-dropped/spec.ts:9:14
 
     Error Context: test-results/cta-rename-handler-dropped-spec.ts-clicks-the-CTA/error-context.md
 

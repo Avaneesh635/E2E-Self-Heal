@@ -16,7 +16,7 @@ Running 1 test using 1 worker
       11 |   await expect(page.getByText("Thanks!")).toBeVisible();
       12 | });
       13 |
-        at /Users/dlehddnr0713/Desktop/e2e/examples/scenarios/split-submit/spec.ts:10:14
+        at scenarios/split-submit/spec.ts:10:14
 
     Error Context: test-results/split-submit-spec.ts-submits-the-form/error-context.md
 

@@ -16,7 +16,7 @@ Running 1 test using 1 worker
       10 |   await expect(page.getByText("Thanks!")).toBeVisible();
       11 | });
       12 |
-        at /Users/dlehddnr0713/Desktop/e2e/examples/scenarios/wrapper-added/spec.ts:9:14
+        at scenarios/wrapper-added/spec.ts:9:14
 
     Error Context: test-results/wrapper-added-spec.ts-submits-the-form/error-context.md
 
