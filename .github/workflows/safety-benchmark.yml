@@ -58,7 +58,9 @@ jobs:
     if: needs.check-secret.outputs.has-key == 'true'
     runs-on: ubuntu-latest
     continue-on-error: true
-    timeout-minutes: 30
+    # The corpus is 44 runnable scenarios (#383), each a full repair loop plus browser runs. The
+    # wall clock is dominated by model latency, so size the limit for the corpus, not for one run.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
