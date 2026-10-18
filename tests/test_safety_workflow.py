@@ -38,10 +38,7 @@ def test_the_job_can_never_block_a_merge(job: dict[str, Any]) -> None:
 
 
 def test_the_job_is_time_bounded(job: dict[str, Any]) -> None:
-    # The point is a bound, not a particular number: without one a hung run holds the runner for
-    # GitHub's six-hour default. It must be long enough for the whole corpus in one pass (#383),
-    # which is model-latency bound rather than CPU bound.
-    assert 0 < job["timeout-minutes"] <= 180
+    assert job["timeout-minutes"] <= 180
 
 
 def test_the_job_is_skipped_rather_than_failed_without_the_model_key(

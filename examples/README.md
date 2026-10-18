@@ -19,16 +19,13 @@ examples/
       App.tsx               # hash routing; `/` is the signup page
       components/           # actually-rendered components
         SubmitButton.tsx
-        catalog/            # catalog page widgets
-        checkout/           # checkout page widgets
-        settings/           # settings page widgets
-        account/            # account page widgets
+        catalog/ checkout/ settings/ account/   # widgets for the four routed pages
       pages/                # CatalogPage, CheckoutPage, SettingsPage, AccountPage
   scenarios/
     id-rename/              # one scenario = component + breaking change + failing spec
       spec.ts              # the test for this scenario
       change.patch         # the real component change that breaks it
-      README.md            # reproduce + heal steps (the pre-#383 scenarios)
+      README.md            # reproduce + heal steps
   vite.config.ts           # serves demo-app on :4173 (E2E_DEMO_PORT overrides)
   playwright.config.ts      # webServer = `pnpm build && pnpm preview`
   package.json
@@ -88,13 +85,12 @@ to **refuse** (see the
 
 ### The four paired pages
 
-[#383](https://github.com/Lee-Dongwook/E2E-Self-Heal/issues/383) added four routed pages and,
-for each, four `<page>-<behaviour>-drift` / `-regression` **pairs**. Both twins ship the same
-`spec.ts` and the same failing selector: the drift patch renames the selector and should be
-repaired, and the regression patch renames it *and* removes the handler behind it, so the run
-should end in a refusal. That pairing is what lets the benchmark measure whether the engine can
-tell the two apart rather than how hard the corpus is. Every one of these scenarios is class
-`selector_drift` (repair) or `product_regression` (refuse).
+Four routed pages carry four `<page>-<behaviour>-drift` / `-regression` **pairs** each. Both
+twins ship the same `spec.ts` and the same failing selector: the drift patch renames the selector
+and should be repaired, and the regression patch renames it *and* removes the handler behind it,
+so the run should end in a refusal. That pairing is what lets the benchmark measure whether the
+engine can tell the two apart rather than how hard the corpus is. Every one of these scenarios is
+class `selector_drift` (repair) or `product_regression` (refuse).
 
 | Page | Route | Scenario pairs |
 | --- | --- | --- |
@@ -108,8 +104,9 @@ in the safety benchmark to be enforced rather than reported as `insufficient_sam
 
 ## Heal a scenario
 
-The pre-#383 scenarios each have a README documenting the full reproduce-and-heal flow; the paired
-page scenarios carry only `spec.ts`, `change.patch` and `meta.json`. In short, from `examples/`:
+Only the original scenarios carry a README documenting the full reproduce-and-heal flow; the
+paired page scenarios hold just `spec.ts`, `change.patch` and `meta.json`. In short, from
+`examples/`:
 
 ```bash
 git apply scenarios/id-rename/change.patch                     # break the app for real

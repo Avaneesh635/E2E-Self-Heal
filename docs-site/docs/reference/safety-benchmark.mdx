@@ -217,9 +217,6 @@ and the same failing selector, so a model that gets one right and the other wron
 discrimination rather than on how easy the corpus is. `tests/test_safety_benchmark.py` fails if a
 drift scenario loses its twin, or if the corpus drops below 20 `product_regression` scenarios.
 
-Adding a scenario is the only way to move a rate from `insufficient_sample` to enforced, and
-`--repeat` cannot substitute for it: repeats reduce noise, they do not add coverage.
-
 The four pages the paired scenarios run against, as rendered by `vite preview`:
 
 ![The catalog page](/img/scenarios/catalog.png)
@@ -256,16 +253,12 @@ time (exit code `2`) instead of silently dropping the scenario. The token benchm
 (for example the prompt-context fixture used by the token benchmark). It is listed as `skipped` and
 excluded from every rate.
 
-Add scenarios in pairs. Name a repairable selector rename `<page>-<behaviour>-drift` and the
-look-alike regression `<page>-<behaviour>-regression`, give both the same `failing_selector` and
-the same spec text, and make the regression's patch rename the selector *and* remove the handler
-behind it. A regression without a drift twin measures whether the corpus is hard, not whether the
-engine can tell the two apart. Two more rules come from that pairing: the spec must not contain a
-comment (the model reads the spec, and a comment saying "this is a regression" hands it the label),
-and the spec should pass on the unpatched app, so the patch is what breaks it. `classname-rename` is
-the one exception: the demo app ships with its rename already applied, because the Playwright
-reporter uses that patch as its `diffFile` fixture. A scenario patch must therefore either apply to
-the current app or already be applied to it, which is what
+Add scenarios in pairs, as described under [The corpus](#the-corpus). Two further rules: the spec
+must not contain a comment (the model reads the spec, and a comment saying "this is a regression"
+hands it the label), and the spec should pass on the unpatched app, so the patch is what breaks it.
+`classname-rename` is the one exception to the second rule: the demo app ships with its rename
+already applied, because the Playwright reporter uses that patch as its `diffFile` fixture. A patch
+must therefore either apply to the current app or already be applied to it, which is what
 `test_every_runnable_checked_in_scenario_matches_the_demo_app_in_some_state` enforces.
 
 ## In CI

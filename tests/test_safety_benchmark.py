@@ -179,7 +179,7 @@ def test_every_runnable_checked_in_scenario_matches_the_demo_app_in_some_state()
         )
 
 
-# --- corpus size against the release gates (#383) ---------------------------------------
+# --- corpus size against the release gates ----------------------------------------------
 
 
 def _ideal_results(
@@ -203,8 +203,8 @@ def _ideal_results(
 
 
 def test_the_checked_in_corpus_is_large_enough_to_enforce_every_rate_gate() -> None:
-    # The point of #383: a corpus that cannot enforce the gates makes them decorative. This
-    # fails as soon as a scenario is removed, so the corpus cannot quietly shrink.
+    # A corpus that cannot enforce the gates makes them decorative. This fails as soon as a
+    # scenario is removed, so the corpus cannot quietly shrink.
     scenarios = discover_safety_scenarios(Path("examples/scenarios"))
 
     report = build_report(_ideal_results(scenarios))
@@ -247,8 +247,7 @@ def test_the_corpus_holds_at_least_twenty_product_regressions() -> None:
 
 def test_every_drift_scenario_has_a_regression_twin_that_looks_identical_to_the_model() -> None:
     # The gates measure discrimination only if each regression has a drift look-alike: same
-    # spec text, same selector, repaired in one case and refused in the other. Scenarios
-    # added from #383 on follow the `<stem>-drift` / `<stem>-regression` convention.
+    # spec text, same selector, repaired in one case and refused in the other.
     by_name = {
         scenario.name: scenario
         for scenario in discover_safety_scenarios(Path("examples/scenarios"))
