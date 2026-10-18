@@ -7,7 +7,7 @@ view of the page, captured with no test modification and no trace parsing.
 """
 
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import structlog
 
@@ -19,6 +19,26 @@ logger = structlog.get_logger(__name__)
 DEFAULT_MAX_SNAPSHOT_CHARS = 2500
 
 _SNAPSHOT_RE = re.compile(r"#\s*Page snapshot\s*```\s*ya?ml\s*\n(.*?)\n```", re.DOTALL)
+
+_LOCATION_RE = re.compile(r"^-\s*Location:\s*(?P<path>.+?)(?::\d+:\d+)?\s*$", re.MULTILINE)
+_NAME_RE = re.compile(r"^-\s*Name:\s*(?P<path>[^>\r\n]+?)(?:\s*>>.*)?$", re.MULTILINE)
+
+
+def _location_matches_test_path(location: str, test_path: Path) -> bool:
+    """Return whether a Playwright location identifies ``test_path``."""
+    location_parts = tuple(
+        part
+        for part in PurePosixPath(location.strip().replace("\\", "/")).parts
+        if part not in {"/", "."}
+    )
+    test_parts = tuple(
+        part for part in PurePosixPath(test_path.as_posix()).parts if part not in {"/", "."}
+    )
+    if not location_parts or not test_parts:
+        return False
+    if len(location_parts) < len(test_parts):
+        return test_parts[-len(location_parts) :] == location_parts
+    return location_parts[-len(test_parts) :] == test_parts
 
 
 def abstract_snapshot(snapshot: str, max_chars: int = DEFAULT_MAX_SNAPSHOT_CHARS) -> str:
@@ -46,7 +66,8 @@ def _find_matching_contexts(
 
     Returns (matching_paths, diagnostic_message).
     When test_path is None, returns all contexts (legacy behavior).
-    When test_path is provided, filters to directories containing the test file stem.
+    When test_path is provided, uses Playwright's recorded test location when
+    available, falling back to the result-directory name for older artifacts.
     """
     contexts: list[Path] = []
     for path in results_dir.rglob("*error-context*.md"):
@@ -61,18 +82,37 @@ def _find_matching_contexts(
         # Legacy: return all contexts, sorted by mtime
         return sorted(contexts, key=lambda p: p.stat().st_mtime, reverse=True), None
 
-    # Filter by test identity: match directories containing the test file stem
-    test_stem = test_path.stem  # e.g., "spec" from "scenarios/id-rename/spec.ts"
-    test_name = test_path.name  # e.g., "spec.ts"
+    # Playwright records the untruncated test path in the context body. Prefer
+    # this identity over the result-directory name, which may be truncated.
+    contexts_with_locations: list[tuple[Path, str]] = []
+    for path in contexts:
+        try:
+            content = path.read_text()
+        except (FileNotFoundError, OSError) as exc:
+            logger.warning("failure_snapshot_identity_read_failed", path=str(path), error=str(exc))
+            continue
+        location_match = _LOCATION_RE.search(content) or _NAME_RE.search(content)
+        if location_match:
+            contexts_with_locations.append((path, location_match.group("path")))
 
-    matching = [p for p in contexts if test_stem in p.parent.name or test_name in str(p.parent)]
+    if contexts_with_locations:
+        matching = [
+            path
+            for path, location in contexts_with_locations
+            if _location_matches_test_path(location, test_path)
+        ]
+    else:
+        # Older Playwright artifacts carry no Test info: match on the directory name.
+        test_stem = test_path.stem  # e.g., "spec" from "scenarios/id-rename/spec.ts"
+        test_name = test_path.name  # e.g., "spec.ts"
+        matching = [p for p in contexts if test_stem in p.parent.name or test_name in str(p.parent)]
 
     if not matching:
         # No match found — could be a new test, wrong results dir, or concurrent run
         logger.warning(
             "failure_snapshot_no_match",
             test_path=str(test_path),
-            test_stem=test_stem,
+            test_stem=test_path.stem,
             available_contexts=len(contexts),
         )
         return [], f"No error-context.md found for test '{test_path}'"
@@ -94,9 +134,10 @@ def _find_matching_contexts(
 def read_failure_snapshot(results_dir: Path, test_path: Path | None = None) -> str:
     """Return the ARIA page snapshot for the specified test, or '' if unavailable.
 
-    When ``test_path`` is provided, filters error-context.md files to those matching
-    the test identity (by file stem). When None, falls back to legacy behavior
-    (newest file by mtime across all results).
+    When ``test_path`` is provided, filters error-context.md files by Playwright's
+    recorded test location, falling back to the result-directory name for older
+    artifacts. When None, falls back to legacy behavior (newest file by mtime
+    across all results).
 
     Returns '' when no results dir, no matching snapshot, or file read fails (TOCTOU-safe),
     so callers degrade gracefully.
