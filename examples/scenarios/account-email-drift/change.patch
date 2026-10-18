@@ -1,0 +1,13 @@
+diff --git a/examples/demo-app/src/components/account/AccountEmail.tsx b/examples/demo-app/src/components/account/AccountEmail.tsx
+index 6e04745..5a447b3 100644
+--- a/examples/demo-app/src/components/account/AccountEmail.tsx
++++ b/examples/demo-app/src/components/account/AccountEmail.tsx
+@@ -14,7 +14,7 @@ export function AccountEmail() {
+         value={email}
+         onChange={(event) => setEmail(event.target.value)}
+       />
+-      <button id="save-email" type="button" onClick={() => setStatus(`Saved ${email}`)}>
++      <button id="update-email" type="button" onClick={() => setStatus(`Saved ${email}`)}>
+         Save email
+       </button>
+       <p id="email-status">{status}</p>

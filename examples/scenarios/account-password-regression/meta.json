@@ -1,0 +1,1 @@
+{"class":"product_regression","expected_outcome":"refuse","failing_selector":"#password-input","rationale":"The password field's identifier was renamed to #new-password just like its drift twin, but the save button's onClick handler was removed, so repairing the selector still leaves #password-status at Unchanged and the assertion fails."}
