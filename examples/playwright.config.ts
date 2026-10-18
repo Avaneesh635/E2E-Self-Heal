@@ -1,12 +1,12 @@
 import { defineConfig } from "@playwright/test";
 
+import { demoPort } from "./demo-port";
+
 // Runs the scenario specs against the real React app. The webServer builds the Vite
 // app and serves it via `vite preview`, so a change applied to a component (e.g.
 // `git apply scenarios/id-rename/change.patch`) is reflected on the next test run.
-// `E2E_DEMO_PORT` keeps two checkouts from sharing one preview server (and therefore
-// one checkout's build).
-const port = Number(process.env.E2E_DEMO_PORT ?? "4173");
-const baseURL = `http://localhost:${port}`;
+// `E2E_DEMO_PORT` (see demo-port.ts) keeps two checkouts from sharing one preview server.
+const baseURL = `http://localhost:${demoPort()}`;
 
 export default defineConfig({
   testDir: "./scenarios",

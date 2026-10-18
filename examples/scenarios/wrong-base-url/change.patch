@@ -1,5 +1,5 @@
 diff --git a/examples/playwright.config.ts b/examples/playwright.config.ts
-index 500dc88..e8cc0b7 100644
+index 54b4e30..689d66e 100644
 --- a/examples/playwright.config.ts
 +++ b/examples/playwright.config.ts
 @@ -14,7 +14,7 @@ export default defineConfig({
@@ -7,7 +7,7 @@ index 500dc88..e8cc0b7 100644
    expect: { timeout: 3_000 },
    use: {
 -    baseURL,
-+    baseURL: "http://localhost:4174",
++    baseURL: "http://localhost:47",
      actionTimeout: 3_000,
    },
    webServer: {
