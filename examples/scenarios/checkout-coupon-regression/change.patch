@@ -1,13 +1,22 @@
 diff --git a/examples/demo-app/src/components/checkout/CheckoutCoupon.tsx b/examples/demo-app/src/components/checkout/CheckoutCoupon.tsx
-index 2c39c52..b143734 100644
+index 2c39c52..eae8bbc 100644
 --- a/examples/demo-app/src/components/checkout/CheckoutCoupon.tsx
 +++ b/examples/demo-app/src/components/checkout/CheckoutCoupon.tsx
+@@ -7,7 +7,7 @@ export function CheckoutCoupon() {
+   const [discount, setDiscount] = useState(0);
+ 
+   function applyCoupon() {
+-    setDiscount(code.trim().toUpperCase() === "SAVE5" ? COUPON_DISCOUNT : 0);
++    setDiscount(code.trim().toUpperCase() === "save5" ? COUPON_DISCOUNT : 0);
+   }
+ 
+   return (
 @@ -22,7 +22,7 @@ export function CheckoutCoupon() {
            onChange={(event) => setCode(event.target.value)}
          />
        </label>
 -      <button id="apply-coupon" type="button" onClick={applyCoupon}>
-+      <button id="redeem-coupon" type="button">
++      <button data-testid="apply-coupon-button" type="button" onClick={applyCoupon}>
          Apply
        </button>
        <p>

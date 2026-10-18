@@ -1,5 +1,5 @@
 diff --git a/examples/demo-app/src/components/checkout/CheckoutCoupon.tsx b/examples/demo-app/src/components/checkout/CheckoutCoupon.tsx
-index 2c39c52..b714fe8 100644
+index 2c39c52..7d18013 100644
 --- a/examples/demo-app/src/components/checkout/CheckoutCoupon.tsx
 +++ b/examples/demo-app/src/components/checkout/CheckoutCoupon.tsx
 @@ -22,7 +22,7 @@ export function CheckoutCoupon() {
@@ -7,7 +7,7 @@ index 2c39c52..b714fe8 100644
          />
        </label>
 -      <button id="apply-coupon" type="button" onClick={applyCoupon}>
-+      <button id="redeem-coupon" type="button" onClick={applyCoupon}>
++      <button data-testid="apply-coupon-button" type="button" onClick={applyCoupon}>
          Apply
        </button>
        <p>

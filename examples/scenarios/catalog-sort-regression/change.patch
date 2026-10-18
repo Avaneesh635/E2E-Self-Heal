@@ -1,13 +1,19 @@
 diff --git a/examples/demo-app/src/components/catalog/CatalogSort.tsx b/examples/demo-app/src/components/catalog/CatalogSort.tsx
-index ff84786..68d3824 100644
+index ff84786..1091fba 100644
 --- a/examples/demo-app/src/components/catalog/CatalogSort.tsx
 +++ b/examples/demo-app/src/components/catalog/CatalogSort.tsx
-@@ -19,7 +19,7 @@ export function CatalogSort() {
+@@ -14,12 +14,12 @@ const ROWS: Row[] = [
+ export function CatalogSort() {
+   const [rows, setRows] = useState(ROWS);
+ 
+-  const byPrice = [...rows].sort((left, right) => left.price - right.price);
++  const byPrice = [...rows].sort((left, right) => right.price - left.price);
+ 
    return (
      <section aria-labelledby="catalog-sort-heading">
        <h2 id="catalog-sort-heading">Sort the catalog</h2>
 -      <button type="button" className="catalog-sort" onClick={() => setRows(byPrice)}>
-+      <button type="button" className="catalog-sort-toggle">
++      <button type="button" data-testid="sort-by-price" onClick={() => setRows(byPrice)}>
          Sort by price
        </button>
        <ul id="catalog-rows">

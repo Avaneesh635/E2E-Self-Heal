@@ -1,13 +1,15 @@
 diff --git a/examples/demo-app/src/components/account/AccountEmail.tsx b/examples/demo-app/src/components/account/AccountEmail.tsx
-index 6e04745..9361ac7 100644
+index 6e04745..7a55709 100644
 --- a/examples/demo-app/src/components/account/AccountEmail.tsx
 +++ b/examples/demo-app/src/components/account/AccountEmail.tsx
-@@ -14,7 +14,7 @@ export function AccountEmail() {
+@@ -12,9 +12,8 @@ export function AccountEmail() {
+         aria-label="Email address"
+         type="email"
          value={email}
-         onChange={(event) => setEmail(event.target.value)}
+-        onChange={(event) => setEmail(event.target.value)}
        />
 -      <button id="save-email" type="button" onClick={() => setStatus(`Saved ${email}`)}>
-+      <button id="update-email" type="button">
++      <button id="update-email" type="button" onClick={() => setStatus(`Saved ${email}`)}>
          Save email
        </button>
        <p id="email-status">{status}</p>

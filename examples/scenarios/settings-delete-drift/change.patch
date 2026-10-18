@@ -1,5 +1,5 @@
 diff --git a/examples/demo-app/src/components/settings/SettingsDeleteAccount.tsx b/examples/demo-app/src/components/settings/SettingsDeleteAccount.tsx
-index a1b8e84..eac7cc4 100644
+index a1b8e84..9a0c400 100644
 --- a/examples/demo-app/src/components/settings/SettingsDeleteAccount.tsx
 +++ b/examples/demo-app/src/components/settings/SettingsDeleteAccount.tsx
 @@ -7,7 +7,7 @@ export function SettingsDeleteAccount() {
@@ -7,7 +7,7 @@ index a1b8e84..eac7cc4 100644
        <h2 id="delete-account-heading">Delete account</h2>
        <p>This removes the account and everything in it.</p>
 -      <button id="delete-account" type="button" onClick={() => setConfirming(true)}>
-+      <button id="remove-account" type="button" onClick={() => setConfirming(true)}>
++      <button data-testid="delete-account-button" type="button" onClick={() => setConfirming(true)}>
          Delete account
        </button>
        {confirming && (

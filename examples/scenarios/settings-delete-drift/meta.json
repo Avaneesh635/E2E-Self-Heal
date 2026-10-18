@@ -1,1 +1,1 @@
-{"class":"selector_drift","expected_outcome":"repair","failing_selector":"#delete-account","rationale":"Only the button identifier changed; the onClick handler that reveals the confirmation panel is intact."}
+{"class":"selector_drift","expected_outcome":"repair","failing_selector":"#delete-account","rationale":"The button identifier changed from an id to data-testid; the onClick handler that reveals the confirmation panel is intact."}

@@ -1,13 +1,17 @@
 diff --git a/examples/demo-app/src/components/catalog/CatalogRowDetail.tsx b/examples/demo-app/src/components/catalog/CatalogRowDetail.tsx
-index 4dd39a5..d7e82f7 100644
+index 4dd39a5..b25157c 100644
 --- a/examples/demo-app/src/components/catalog/CatalogRowDetail.tsx
 +++ b/examples/demo-app/src/components/catalog/CatalogRowDetail.tsx
-@@ -6,7 +6,7 @@ export function CatalogRowDetail() {
+@@ -6,10 +6,10 @@ export function CatalogRowDetail() {
    return (
      <section aria-labelledby="catalog-detail-heading">
        <h2 id="catalog-detail-heading">Product detail</h2>
 -      <button type="button" className="catalog-detail" onClick={() => setOpen(true)}>
-+      <button type="button" className="catalog-details-toggle">
++      <button type="button" className="catalog-details-toggle" onClick={() => setOpen(true)}>
          Details
        </button>
-       {open && <p id="catalog-detail">Desk Lamp: in stock</p>}
+-      {open && <p id="catalog-detail">Desk Lamp: in stock</p>}
++      {!open && <p id="catalog-detail">Desk Lamp: in stock</p>}
+     </section>
+   );
+ }

@@ -1,1 +1,1 @@
-{"class":"selector_drift","expected_outcome":"repair","failing_selector":"#notifications-toggle","rationale":"Only the checkbox identifier changed; the onChange handler and the status text are intact."}
+{"class":"selector_drift","expected_outcome":"repair","failing_selector":"#notifications-toggle","rationale":"The checkbox identifier changed from an id to a name; the onChange handler and the status text are intact."}

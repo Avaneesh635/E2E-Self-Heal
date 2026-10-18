@@ -1,8 +1,15 @@
 diff --git a/examples/demo-app/src/components/catalog/CatalogSearch.tsx b/examples/demo-app/src/components/catalog/CatalogSearch.tsx
-index d3c8a0a..9b09027 100644
+index d3c8a0a..462b62e 100644
 --- a/examples/demo-app/src/components/catalog/CatalogSearch.tsx
 +++ b/examples/demo-app/src/components/catalog/CatalogSearch.tsx
-@@ -12,13 +12,12 @@ export function CatalogSearch() {
+@@ -6,15 +6,15 @@ export function CatalogSearch() {
+   const [query, setQuery] = useState("");
+ 
+   const results = PRODUCTS.filter((product) =>
+-    product.toLowerCase().includes(query.trim().toLowerCase()),
++    product.startsWith(query.trim()),
+   );
+ 
    return (
      <section aria-labelledby="catalog-search-heading">
        <h2 id="catalog-search-heading">Find a product</h2>
@@ -14,7 +21,3 @@ index d3c8a0a..9b09027 100644
          type="search"
          placeholder="Search products"
          defaultValue=""
--        onChange={(event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)}
-       />
-       <ul id="catalog-results">
-         {results.map((product) => (

@@ -1,8 +1,17 @@
 diff --git a/examples/demo-app/src/components/checkout/CheckoutQuantity.tsx b/examples/demo-app/src/components/checkout/CheckoutQuantity.tsx
-index 9e0432e..e1972fb 100644
+index 9e0432e..58d5433 100644
 --- a/examples/demo-app/src/components/checkout/CheckoutQuantity.tsx
 +++ b/examples/demo-app/src/components/checkout/CheckoutQuantity.tsx
-@@ -12,11 +12,10 @@ export function CheckoutQuantity() {
+@@ -4,7 +4,7 @@ const UNIT_PRICE = 10;
+ 
+ export function CheckoutQuantity() {
+   const [quantity, setQuantity] = useState(1);
+-  const subtotal = quantity * UNIT_PRICE;
++  const subtotal = quantity + UNIT_PRICE;
+ 
+   return (
+     <section aria-labelledby="quantity-heading">
+@@ -12,7 +12,7 @@ export function CheckoutQuantity() {
        <label>
          Quantity
          <input
@@ -11,7 +20,3 @@ index 9e0432e..e1972fb 100644
            type="number"
            min="1"
            value={quantity}
--          onChange={(event) => setQuantity(Number(event.target.value))}
-         />
-       </label>
-       <p>
