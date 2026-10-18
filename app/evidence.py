@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from app.healing_history import extract_failing_selector
+from app.provenance import provider_provenance
 from app.sandbox import workspace_root
 from app.schemas import (
     CandidateEvidence,
@@ -170,6 +171,7 @@ def build_evidence_bundle(state: AgentState, *, initial_error_log: str) -> Evide
         ),
         candidates=candidates,
         loop_history=loop_history,
+        provenance=provider_provenance(state),
     )
 
 

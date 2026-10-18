@@ -1,5 +1,5 @@
 {
-  "schema_version": "2.1",
+  "schema_version": "2.2",
   "kind": "review",
   "test_script_path": "scenarios/id-rename/spec.ts",
   "findings": [

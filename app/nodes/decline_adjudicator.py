@@ -2,6 +2,7 @@
 
 import structlog
 
+from app.evidence_boundary import prepare_evidence, redaction_state_update
 from app.llm import generate_diagnosis_verdict
 from app.nodes.diagnoser import DIAGNOSIS_UNAVAILABLE, build_diagnosis_prompt
 from app.prompts.decline_adjudicator import SYSTEM_PROMPT, build_user_prompt
@@ -30,14 +31,20 @@ def decline_adjudicator(state: AgentState) -> dict:
     if state["analysis_report"] == DIAGNOSIS_UNAVAILABLE:
         logger.info("decline_adjudication_skipped", reason="diagnosis_unavailable")
         return {}
-    user_prompt = build_user_prompt(state["analysis_report"], build_diagnosis_prompt(state))
+    prepared = prepare_evidence(state)
+    user_prompt = build_user_prompt(
+        prepared.analysis_report, build_diagnosis_prompt(prepared, state["current_code"])
+    )
     try:
         output = generate_diagnosis_verdict(SYSTEM_PROMPT, user_prompt)
     except Exception:
         logger.exception("decline_adjudication_failed")
-        return {}
+        return redaction_state_update(state, prepared)
     logger.info("decline_adjudicated", verdict=output.verdict.value)
-    update: dict = {"diagnosis_verdict": output.verdict}
+    update: dict = {
+        "diagnosis_verdict": output.verdict,
+        **redaction_state_update(state, prepared),
+    }
     if output.verdict is DiagnosisVerdict.BEHAVIOUR_CHANGE:
         update["loop_count"] = state["loop_count"] + 1
     return update

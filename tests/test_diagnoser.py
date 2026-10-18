@@ -65,4 +65,8 @@ def test_diagnoser_degrades_on_provider_error():
     with patch("app.nodes.diagnoser.generate_diagnosis", side_effect=boom):
         result = diagnoser(_state())
 
-    assert result == {"analysis_report": DIAGNOSIS_UNAVAILABLE}
+    assert result["analysis_report"] == DIAGNOSIS_UNAVAILABLE
+    # The evidence was prepared for the provider call even though it failed, so the counters
+    # are still reported rather than dropped.
+    assert result["redaction_count"] == 0
+    assert result["redaction_applied"] is False

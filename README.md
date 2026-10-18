@@ -323,6 +323,25 @@ All providers read the generic `E2E_HEALER_LLM_MODEL` / `E2E_HEALER_LLM_MAX_TOKE
 (tenacity) and then falls back to the Patch Generator feedback loop, so a flaky JSON
 response never crashes the run.
 
+### Keeping evidence on your machine
+
+Where the evidence goes is configuration, never a code change. Any OpenAI-compatible server —
+Ollama, vLLM, llama.cpp, an internal gateway — can replace a hosted provider:
+
+```bash
+E2E_HEALER_LLM_PROVIDER=openai
+E2E_HEALER_LLM_BASE_URL=http://127.0.0.1:8000/v1   # or a private address on your LAN
+E2E_HEALER_LLM_MODEL=your-served-model
+E2E_HEALER_LLM_API_KEY=placeholder-key            # many local servers require a value but ignore it
+```
+
+Every `--json` result whose repair loop ran reports `evidence.provenance` (`provider`, `model`,
+redacted `endpoint`, `mode` = `local` or `remote`, and the redaction counters), so local versus
+remote is readable from the output rather than assumed. What is sent, what is redacted, and what
+deliberately is not are documented in
+[docs-site/docs/safety/data-boundary.mdx](docs-site/docs/safety/data-boundary.mdx); the full
+variable list is in [docs-site/docs/reference/configuration.mdx](docs-site/docs/reference/configuration.mdx).
+
 ### Using OpenAI
 
 Set the provider to `openai` and supply a key — either the generic `E2E_HEALER_LLM_API_KEY`
@@ -425,6 +444,8 @@ PY
 | `E2E_HEALER_LLM_BASE_URL`      | —                                     | OpenAI-compatible endpoint (empty = SDK default)                                 |
 | `E2E_HEALER_LLM_MODEL`         | —                                     | Structured-Outputs-capable model                                                 |
 | `E2E_HEALER_LLM_MAX_TOKENS`    | `4096`                                | Completion token cap (headroom for reasoning)                                    |
+| `E2E_HEALER_SENSITIVE_ENV_VARS` | —                                   | Variable names whose values are redacted from prompts, JSON, and logs             |
+| `E2E_HEALER_SENSITIVE_VALUES`  | —                                   | Literal values to redact (min 4 chars, masked, comma-separated)                   |
 | `E2E_HEALER_NVIDIA_API_KEY`    | —                                     | NVIDIA NIM API key (legacy; maps to `LLM_API_KEY`)                               |
 | `E2E_HEALER_NVIDIA_BASE_URL`   | `https://integrate.api.nvidia.com/v1` | OpenAI-compatible endpoint (legacy)                                              |
 | `E2E_HEALER_NVIDIA_MODEL`      | `openai/gpt-oss-120b`                 | Structured-Outputs-capable model (legacy)                                        |

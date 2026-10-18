@@ -84,8 +84,12 @@ def test_a_provider_failure_records_no_verdict(monkeypatch: pytest.MonkeyPatch) 
 
     monkeypatch.setattr(adjudicator_node, "generate_diagnosis_verdict", boom)
 
-    # No update at all: the run keeps the path it takes today instead of claiming a regression.
-    assert decline_adjudicator(_state()) == {}
+    result = decline_adjudicator(_state())
+
+    # No verdict: the run keeps the path it takes today instead of claiming a regression.
+    assert "diagnosis_verdict" not in result
+    assert "loop_count" not in result
+    assert result["redaction_count"] == 0
 
 
 def test_a_degraded_diagnosis_is_not_adjudicated(prompts) -> None:

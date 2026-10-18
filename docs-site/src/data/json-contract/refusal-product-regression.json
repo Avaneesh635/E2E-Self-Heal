@@ -1,5 +1,5 @@
 {
-  "schema_version": "2.1",
+  "schema_version": "2.2",
   "kind": "refusal",
   "test_script_path": "scenarios/product-regression/spec.ts",
   "reason": "likely_product_regression",
@@ -34,7 +34,7 @@
             "line": 5,
             "original": "  await page.click(\"#submit-btn\");",
             "replacement": "  await page.click(\"#submit-btn\", { timeout: 10000 });",
-            "reason": "The form's onSubmit handler was removed, so the React confirmation message may rely on a different trigger or take longer to render. Raising the timeout on the click gives React more time to process and render the 'Thanks!' message in case of async rendering or hydration delays. This is a wait-condition optimization since the locator itself is not broken \u2014 the root cause is that 'Thanks!' never appears due to the missing handler, which is a DOM/app issue; we can only tune the wait side within our scope.",
+            "reason": "The form's onSubmit handler was removed, so the React confirmation message may rely on a different trigger or take longer to render. Raising the timeout on the click gives React more time to process and render the 'Thanks!' message in case of async rendering or hydration delays. This is a wait-condition optimization since the locator itself is not broken — the root cause is that 'Thanks!' never appears due to the missing handler, which is a DOM/app issue; we can only tune the wait side within our scope.",
             "selector": ""
           }
         ],
@@ -137,6 +137,14 @@
           "reason": "likely_product_regression"
         }
       }
-    ]
+    ],
+    "provenance": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6",
+      "endpoint": "https://api.anthropic.com",
+      "mode": "remote",
+      "redaction_applied": false,
+      "redaction_count": 0
+    }
   }
 }

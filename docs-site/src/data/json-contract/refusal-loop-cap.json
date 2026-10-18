@@ -1,5 +1,5 @@
 {
-  "schema_version": "2.1",
+  "schema_version": "2.2",
   "kind": "refusal",
   "test_script_path": "scenarios/product-regression/spec.ts",
   "reason": "loop_cap_reached",
@@ -216,6 +216,14 @@
           "reason": "loop_cap_reached"
         }
       }
-    ]
+    ],
+    "provenance": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6",
+      "endpoint": "https://api.anthropic.com",
+      "mode": "remote",
+      "redaction_applied": false,
+      "redaction_count": 0
+    }
   }
 }

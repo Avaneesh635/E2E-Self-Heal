@@ -36,6 +36,7 @@ const sidebars: SidebarsConfig = {
             label: "Safety & Guardrails",
             items: [
                 "safety/scope-guardrail",
+                "safety/data-boundary",
                 "safety/sandbox-modes",
                 "safety/human-in-the-loop",
             ],
