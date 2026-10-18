@@ -1,0 +1,20 @@
+diff --git a/examples/demo-app/src/components/account/AccountPassword.tsx b/examples/demo-app/src/components/account/AccountPassword.tsx
+index ee7a59f..77e1b72 100644
+--- a/examples/demo-app/src/components/account/AccountPassword.tsx
++++ b/examples/demo-app/src/components/account/AccountPassword.tsx
+@@ -8,13 +8,13 @@ export function AccountPassword() {
+     <section aria-labelledby="account-password-heading">
+       <h2 id="account-password-heading">Password</h2>
+       <input
+-        id="password-input"
++        id="new-password"
+         aria-label="New password"
+         type="password"
+         value={password}
+         onChange={(event) => setPassword(event.target.value)}
+       />
+-      <button id="save-password" type="button" onClick={() => setStatus("Password updated")}>
++      <button id="save-password" type="button">
+         Save password
+       </button>
+       <p id="password-status">{status}</p>

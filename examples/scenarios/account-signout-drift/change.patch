@@ -1,0 +1,13 @@
+diff --git a/examples/demo-app/src/components/account/AccountSignOut.tsx b/examples/demo-app/src/components/account/AccountSignOut.tsx
+index c5be062..7b7d338 100644
+--- a/examples/demo-app/src/components/account/AccountSignOut.tsx
++++ b/examples/demo-app/src/components/account/AccountSignOut.tsx
+@@ -7,7 +7,7 @@ export function AccountSignOut() {
+     <section aria-labelledby="account-signout-heading">
+       <h2 id="account-signout-heading">Session</h2>
+       <p id="signed-out">{status}</p>
+-      <button id="sign-out" type="button" onClick={() => setStatus("Signed out")}>
++      <button id="log-out" type="button" onClick={() => setStatus("Signed out")}>
+         Sign out
+       </button>
+     </section>
