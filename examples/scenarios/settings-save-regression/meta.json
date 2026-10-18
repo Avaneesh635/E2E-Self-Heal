@@ -1,0 +1,1 @@
+{"class":"product_regression","expected_outcome":"refuse","failing_selector":"#save-settings","rationale":"The button id changed from save-settings to save-preferences like its drift twin, but the onClick handler was removed, so repairing the selector still leaves the status at Unsaved and the assertion failing."}

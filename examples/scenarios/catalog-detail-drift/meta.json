@@ -1,0 +1,1 @@
+{"class":"selector_drift","expected_outcome":"repair","failing_selector":".catalog-detail","rationale":"The details button's class changed from catalog-detail to catalog-details-toggle while the reveal behavior is intact, so the locator can be repaired."}

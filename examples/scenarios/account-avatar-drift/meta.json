@@ -1,0 +1,1 @@
+{"class":"selector_drift","expected_outcome":"repair","failing_selector":"#avatar-input","rationale":"Only the file input's identifier changed to #avatar-file while its change handler and the file name output stayed intact, so repairing the locator makes the test pass."}

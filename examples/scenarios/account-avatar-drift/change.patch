@@ -1,0 +1,13 @@
+diff --git a/examples/demo-app/src/components/account/AccountAvatar.tsx b/examples/demo-app/src/components/account/AccountAvatar.tsx
+index 408b8af..f575a20 100644
+--- a/examples/demo-app/src/components/account/AccountAvatar.tsx
++++ b/examples/demo-app/src/components/account/AccountAvatar.tsx
+@@ -7,7 +7,7 @@ export function AccountAvatar() {
+     <section aria-labelledby="account-avatar-heading">
+       <h2 id="account-avatar-heading">Avatar</h2>
+       <input
+-        id="avatar-input"
++        id="avatar-file"
+         aria-label="Avatar image"
+         type="file"
+         onChange={(event) => setFileName(event.target.files?.[0]?.name ?? "No file")}

@@ -58,7 +58,9 @@ jobs:
     if: needs.check-secret.outputs.has-key == 'true'
     runs-on: ubuntu-latest
     continue-on-error: true
-    timeout-minutes: 30
+    # 43 runnable scenarios, each a full repair loop plus browser runs, so the wall clock is
+    # dominated by model latency rather than CPU.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 

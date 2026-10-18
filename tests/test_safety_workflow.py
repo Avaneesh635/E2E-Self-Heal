@@ -38,7 +38,7 @@ def test_the_job_can_never_block_a_merge(job: dict[str, Any]) -> None:
 
 
 def test_the_job_is_time_bounded(job: dict[str, Any]) -> None:
-    assert job["timeout-minutes"] <= 60
+    assert job["timeout-minutes"] <= 120
 
 
 def test_the_job_is_skipped_rather_than_failed_without_the_model_key(

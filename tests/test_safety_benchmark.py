@@ -179,6 +179,64 @@ def test_every_runnable_checked_in_scenario_matches_the_demo_app_in_some_state()
         )
 
 
+# --- corpus size against the release gates ----------------------------------------------
+
+
+def _ideal_results(
+    scenarios: tuple[SafetyScenario, ...],
+) -> list[SafetyScenarioResult]:
+    """Results for a run in which every scenario ended as its label says, with no errors."""
+    return [
+        SafetyScenarioResult(
+            name=scenario.name,
+            scenario_class=scenario.scenario_class,
+            expected_outcome=scenario.expected_outcome,
+            actual_outcome=(
+                ActualOutcome(scenario.expected_outcome.value)
+                if scenario.runnable
+                else ActualOutcome.SKIPPED
+            ),
+            latency_seconds=0,
+        )
+        for scenario in scenarios
+    ]
+
+
+def test_the_checked_in_corpus_is_large_enough_to_enforce_every_rate_gate() -> None:
+    # A corpus that cannot enforce the gates makes them decorative. This fails as soon as a
+    # scenario is removed, so the corpus cannot quietly shrink.
+    scenarios = discover_safety_scenarios(Path("examples/scenarios"))
+
+    report = build_report(_ideal_results(scenarios))
+
+    assert {gate.status for gate in report.gates} == {GateStatus.PASS}, [
+        (gate.name, gate.status, gate.sample_size) for gate in report.gates
+    ]
+    assert {gate.scenarios_needed for gate in report.gates} == {0}
+
+
+def test_every_drift_scenario_has_a_regression_twin_that_looks_identical_to_the_model() -> None:
+    # The gates measure discrimination only if each regression has a drift look-alike: same
+    # spec text, same selector, repaired in one case and refused in the other.
+    by_name = {
+        scenario.name: scenario
+        for scenario in discover_safety_scenarios(Path("examples/scenarios"))
+    }
+    drifts = [scenario for name, scenario in by_name.items() if name.endswith("-drift")]
+
+    assert drifts
+    for drift in drifts:
+        twin = f"{drift.name.removesuffix('-drift')}-regression"
+        assert twin in by_name, f"{drift.name} has no {twin}"
+        regression = by_name[twin]
+        assert drift.scenario_class is ScenarioClass.SELECTOR_DRIFT, drift.name
+        assert drift.expected_outcome is ExpectedOutcome.REPAIR, drift.name
+        assert regression.scenario_class is ScenarioClass.PRODUCT_REGRESSION, drift.name
+        assert regression.expected_outcome is ExpectedOutcome.REFUSE, drift.name
+        assert regression.failing_selector == drift.failing_selector, drift.name
+        assert regression.test_path.read_text() == drift.test_path.read_text(), drift.name
+
+
 def _scenario_at(test_path: Path, *, runnable: bool = True) -> SafetyScenario:
     return SafetyScenario.model_validate(
         {
@@ -767,8 +825,8 @@ def test_rate_gates_are_not_enforced_below_the_minimum_sample() -> None:
 
 
 def test_a_gate_says_how_many_more_scenarios_it_needs_before_it_is_enforced() -> None:
-    # Four product regressions and five expected repairs: the two thinnest populations in the
-    # checked-in corpus, which is why every rate gate reports ``insufficient_sample``.
+    # Four product regressions and five expected repairs, as in the corpus before it was grown:
+    # too thin for any rate gate, so each reports how far it is from the minimum.
     report = _metrics_with(
         refused=(ScenarioClass.PRODUCT_REGRESSION, ExpectedOutcome.REFUSE, ActualOutcome.REFUSE, 4),
         fixed=(ScenarioClass.SELECTOR_DRIFT, ExpectedOutcome.REPAIR, ActualOutcome.REPAIR, 5),

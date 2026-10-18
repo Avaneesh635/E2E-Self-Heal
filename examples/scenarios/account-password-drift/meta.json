@@ -1,0 +1,1 @@
+{"class":"selector_drift","expected_outcome":"repair","failing_selector":"#password-input","rationale":"Only the password field's id was replaced with name=\"new-password\" while its change handler and the save button stayed intact, so repairing the locator to [name=\"new-password\"] makes the test pass."}

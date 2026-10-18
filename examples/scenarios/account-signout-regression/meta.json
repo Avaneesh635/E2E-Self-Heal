@@ -1,0 +1,1 @@
+{"class":"product_regression","expected_outcome":"refuse","failing_selector":"#sign-out","rationale":"The sign out button's identifier was renamed to #log-out just like its drift twin, but its onClick handler was removed, so repairing the selector still leaves #signed-out at Signed in and the assertion fails."}

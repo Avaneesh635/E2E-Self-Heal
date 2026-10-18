@@ -1,0 +1,17 @@
+diff --git a/examples/demo-app/src/components/catalog/CatalogPager.tsx b/examples/demo-app/src/components/catalog/CatalogPager.tsx
+index 0dab0c6..8c100d5 100644
+--- a/examples/demo-app/src/components/catalog/CatalogPager.tsx
++++ b/examples/demo-app/src/components/catalog/CatalogPager.tsx
+@@ -6,10 +6,10 @@ export function CatalogPager() {
+   return (
+     <section aria-labelledby="catalog-pager-heading">
+       <h2 id="catalog-pager-heading">Browse the catalog</h2>
+-      <button type="button" id="catalog-next" onClick={() => setPageNumber(2)}>
++      <button type="button" id="catalog-next-page" onClick={() => setPageNumber(2)}>
+         Next page
+       </button>
+-      <p id="catalog-page">Page {pageNumber} of 2</p>
++      <p id="catalog-page">Page 1 of 2</p>
+     </section>
+   );
+ }

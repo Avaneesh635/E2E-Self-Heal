@@ -17,7 +17,7 @@ Running 2 tests using 2 workers
       12 |   await expect(page.getByText("Thanks!")).toBeVisible();
       13 | });
       14 |
-        at /Users/dlehddnr0713/Desktop/e2e/examples/scenarios/id-rename/spec.ts:11:14
+        at scenarios/id-rename/spec.ts:11:14
 
     Error Context: test-results/id-rename-spec.ts-submits-the-form/error-context.md
 
@@ -36,7 +36,7 @@ Running 2 tests using 2 workers
       11 |   await expect(page.getByText("Thanks!")).toBeVisible();
       12 | });
       13 |
-        at /Users/dlehddnr0713/Desktop/e2e/examples/scenarios/id-rename-submit-dropped/spec.ts:10:14
+        at scenarios/id-rename-submit-dropped/spec.ts:10:14
 
     Error Context: test-results/id-rename-submit-dropped-spec.ts-submits-the-form/error-context.md
 

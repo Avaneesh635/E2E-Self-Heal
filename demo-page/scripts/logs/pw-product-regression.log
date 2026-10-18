@@ -22,7 +22,7 @@ Running 1 test using 1 worker
          |                                           ^
       13 | });
       14 |
-        at /Users/dlehddnr0713/Desktop/e2e/examples/scenarios/product-regression/spec.ts:12:43
+        at scenarios/product-regression/spec.ts:12:43
 
     Error Context: test-results/product-regression-spec.ts-submits-the-form/error-context.md
 

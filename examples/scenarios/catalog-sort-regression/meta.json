@@ -1,0 +1,1 @@
+{"class":"product_regression","expected_outcome":"refuse","failing_selector":".catalog-sort","rationale":"The sort button's class was replaced like its drift twin, but the price comparator was reversed, so repairing the selector still leaves the most expensive row first and the assertion failing."}

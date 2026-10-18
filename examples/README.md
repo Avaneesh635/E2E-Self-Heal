@@ -16,15 +16,17 @@ examples/
     index.html
     src/
       main.tsx
-      App.tsx
+      App.tsx               # hash routing; `/` is the signup page
       components/           # actually-rendered components
         SubmitButton.tsx
+        catalog/ checkout/ settings/ account/   # widgets for the four routed pages
+      pages/                # CatalogPage, CheckoutPage, SettingsPage, AccountPage
   scenarios/
     id-rename/              # one scenario = component + breaking change + failing spec
       spec.ts              # the test for this scenario
       change.patch         # the real component change that breaks it
       README.md            # reproduce + heal steps
-  vite.config.ts           # serves demo-app on :4173 (dev and preview)
+  vite.config.ts           # serves demo-app on :4173 (E2E_DEMO_PORT overrides)
   playwright.config.ts      # webServer = `pnpm build && pnpm preview`
   package.json
 ```
@@ -81,9 +83,32 @@ to **refuse** (see the
 > The legacy static-HTML [`classname-scenario/`](classname-scenario/) predates this demo
 > app and is pending migration onto it.
 
+### The four paired pages
+
+Four routed pages carry four `<page>-<behaviour>-drift` / `-regression` **pairs** each. Both
+twins ship the same `spec.ts` and the same failing selector: the drift patch renames the selector
+and should be repaired, and the regression patch makes the same rename *and* breaks the behavior
+the spec asserts, so the run should end in a refusal. The renames (id, class, `data-testid`,
+`name`) and the breaks (deleted handler, wrong computation, wrong value or field, wrong event,
+inverted condition, output detached from state) vary across the pairs. That pairing is what lets
+the benchmark measure whether the engine can tell the two apart rather than how hard the corpus
+is. Every one of these scenarios is class `selector_drift` (repair) or `product_regression`
+(refuse).
+
+| Page | Route | Scenario pairs |
+| --- | --- | --- |
+| [catalog](scenarios/catalog-search-drift/) | `#/catalog` | `catalog-search`, `catalog-sort`, `catalog-pagination`, `catalog-detail` |
+| [checkout](scenarios/checkout-quantity-drift/) | `#/checkout` | `checkout-quantity`, `checkout-coupon`, `checkout-place-order`, `checkout-remove-item` |
+| [settings](scenarios/settings-save-drift/) | `#/settings` | `settings-notifications`, `settings-save`, `settings-delete`, `settings-theme` |
+| [account](scenarios/account-email-drift/) | `#/account` | `account-email`, `account-password`, `account-avatar`, `account-signout` |
+
+The corpus is therefore 44 scenarios, 43 of them runnable, which is enough for every rate gate
+in the safety benchmark to be enforced rather than reported as `insufficient_sample`.
+
 ## Heal a scenario
 
-Each scenario's README documents the full reproduce-and-heal flow. In short, from
+Only the original scenarios carry a README documenting the full reproduce-and-heal flow; the
+paired page scenarios hold just `spec.ts`, `change.patch` and `meta.json`. In short, from
 `examples/`:
 
 ```bash

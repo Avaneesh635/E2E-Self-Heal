@@ -159,8 +159,8 @@ uv run e2e-healer safety-benchmark --scenario-root scenarios --apply-patches --r
 
 ### What repeating does not do for the gates
 
-Repeating a scenario reduces noise, but it does not add coverage. Running the same four
-`product_regression` scenarios five times is still four scenarios, so the gates keep counting
+Repeating a scenario reduces noise, but it does not add coverage. Running the same twenty
+`product_regression` scenarios five times is still twenty scenarios, so the gates keep counting
 **distinct scenarios** toward their minimum sample of 20, and `--repeat` cannot make a thin corpus
 look credible. The rule in the other direction is strict: **a false green in any single run fails
 the `false_green_rate` gate**, so a scenario that is refused four times and repaired once is not
@@ -192,10 +192,51 @@ a **Release gates** table:
   Before tagging a release, run the benchmark with `--enforce-gates` (see
   [Releasing](https://github.com/Lee-Dongwook/E2E-Self-Heal/blob/main/docs/RELEASING.md)). Do not
   release on exit code `1`.
-- **The corpus is the limit.** Thresholds are only as strong as the scenarios behind them. The
-  `product_regression` and `ambiguous` scenarios are paired with drift scenarios that look the same
-  from the diff (`id-rename` and `id-rename-submit-dropped`, `classname-rename` and
+- **The corpus is the limit.** Thresholds are only as strong as the scenarios behind them. Most
+  `product_regression` scenarios are paired with a drift scenario that looks the same from the diff
+  (`id-rename` and `id-rename-submit-dropped`, `classname-rename` and
   `cta-rename-handler-dropped`), so the gates measure discrimination, not the absence of hard cases.
+
+### The corpus
+
+The checked-in corpus is 44 scenarios: 43 runnable and one static fixture (`jsx-context`, listed as
+`skipped` and in no rate). Every rate gate is therefore enforceable on a full run, and the corpus
+cannot shrink without a gate going back to `insufficient_sample`:
+
+| Population | Scenarios scored | Used by |
+| --- | --- | --- |
+| `product_regression` | 20 | `false_green_rate` gate |
+| labeled `refuse` | 22 | `correct_refusal_rate` (reported, not a gate) |
+| labeled `repair` | 21 (22 minus `jsx-context`) | `incorrect_refusal_rate` gate |
+| judged (expected refuse, or actually refused) | 22 or more | `refusal_accuracy` gate |
+
+Sixteen of the regressions come in **pairs** on four demo-app pages: `<page>-<behaviour>-drift`
+renames a selector and should be repaired, and `<page>-<behaviour>-regression` makes the same
+rename and also breaks the behavior the spec asserts, so it should be refused. Both twins ship the
+identical spec and the same failing selector, so a model that gets one right and the other wrong
+is measured on discrimination rather than on how easy the corpus is.
+
+The pairs vary both halves so the twenty regressions are not one mutation repeated:
+
+- **Renames:** an id or class renamed, an id or class replaced by a `data-testid`, or an id
+  replaced by a `name` attribute.
+- **Breaks:** a deleted event handler (on the renamed element or on a sibling), a wrong
+  computation (subtotal, sort order, search predicate, coupon check), a handler that writes the
+  wrong value or reads the wrong field, a handler bound to the wrong event, a broken guard, an
+  inverted condition or label, and output that no longer reads state. Several of these sit outside
+  the JSX the diff analyzer abstracts, so the model sees only the rename.
+
+Distinct is still not independent: the pairs share four small pages and one author, so read a
+0% false-green rate as "no false green on these twenty", not as a population estimate.
+`tests/test_safety_benchmark.py` fails if a drift scenario has no regression twin, or if the
+checked-in corpus can no longer enforce every rate gate.
+
+The four pages the paired scenarios run against, as rendered by `vite preview`:
+
+![The catalog page](/img/scenarios/catalog.png)
+![The checkout page](/img/scenarios/checkout.png)
+![The settings page](/img/scenarios/settings.png)
+![The account page](/img/scenarios/account.png)
 
 ## Labeling a scenario
 
@@ -226,12 +267,23 @@ time (exit code `2`) instead of silently dropping the scenario. The token benchm
 (for example the prompt-context fixture used by the token benchmark). It is listed as `skipped` and
 excluded from every rate.
 
+Add scenarios in pairs, as described under [The corpus](#the-corpus). Two further rules: the spec
+must not contain a comment (the model reads the spec, and a comment saying "this is a regression"
+hands it the label), and the spec should pass on the unpatched app, so the patch is what breaks it.
+`classname-rename` is the one exception to the second rule: the demo app ships with its rename
+already applied, because the Playwright reporter uses that patch as its `diffFile` fixture. A patch
+must therefore either apply to the current app or already be applied to it, which is what
+`test_every_runnable_checked_in_scenario_matches_the_demo_app_in_some_state` enforces.
+
 ## In CI
 
 `.github/workflows/safety-benchmark.yml` runs the benchmark and publishes the Markdown report as
 the run's step summary and the JSON and Markdown files as the `safety-report` artifact.
 
-- **Never blocks.** The job is `continue-on-error`, time-limited, and has read-only permissions.
+- **Never blocks.** The job is `continue-on-error`, time-limited (120 minutes, since 43 runnable
+  scenarios are model-latency bound), and has read-only permissions. There is no partial-corpus
+  mode for pull requests: a subset would hide a regression, and a run over fewer scenarios already
+  reports its own `n` and `insufficient_sample` rows.
 - **Skipped without a key.** It runs only when `E2E_HEALER_NVIDIA_API_KEY` is available, so pull
   requests from forks, which cannot read secrets, skip it instead of failing. It uses the
   `pull_request` trigger, never `pull_request_target`, so a fork's code never runs with the key.

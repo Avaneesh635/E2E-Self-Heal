@@ -1,0 +1,13 @@
+diff --git a/examples/demo-app/src/components/account/AccountPassword.tsx b/examples/demo-app/src/components/account/AccountPassword.tsx
+index ee7a59f..7898713 100644
+--- a/examples/demo-app/src/components/account/AccountPassword.tsx
++++ b/examples/demo-app/src/components/account/AccountPassword.tsx
+@@ -8,7 +8,7 @@ export function AccountPassword() {
+     <section aria-labelledby="account-password-heading">
+       <h2 id="account-password-heading">Password</h2>
+       <input
+-        id="password-input"
++        name="new-password"
+         aria-label="New password"
+         type="password"
+         value={password}

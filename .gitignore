@@ -18,6 +18,7 @@ wheels/
 .ruff_cache/
 .pytest_cache/
 .pyright/
+.coverage
 
 # Playwright / test-run artifacts
 node_modules/

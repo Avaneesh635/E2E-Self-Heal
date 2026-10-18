@@ -1,0 +1,1 @@
+{"class":"product_regression","expected_outcome":"refuse","failing_selector":"#delete-account","rationale":"The button identifier changed from an id to data-testid like its drift twin, but the handler moved from onClick to onDoubleClick, so repairing the selector still leaves the confirmation panel absent and the assertion failing."}

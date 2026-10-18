@@ -1,0 +1,1 @@
+{"class":"product_regression","expected_outcome":"refuse","failing_selector":"#quantity","rationale":"The identifier was renamed as in its drift twin, but the subtotal now adds the quantity to the unit price instead of multiplying them, so repairing the selector still produces $13.00 for 3 and leaves the assertion failing."}

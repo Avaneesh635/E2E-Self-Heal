@@ -16,7 +16,7 @@ Running 1 test using 1 worker
       10 |   await expect(page.getByText("Welcome!")).toBeVisible();
       11 | });
       12 |
-        at /Users/dlehddnr0713/Desktop/e2e/examples/scenarios/label-rename/spec.ts:9:59
+        at scenarios/label-rename/spec.ts:9:59
 
     Error Context: test-results/label-rename-spec.ts-opens-onboarding-from-the-CTA/error-context.md
 

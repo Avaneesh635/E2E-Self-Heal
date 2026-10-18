@@ -68,10 +68,14 @@ def scenario(directory: Path) -> dict:
 
 
 def main() -> None:
+    # The page presents only scenarios whose failure was captured into ``scripts/logs/``; the
+    # corpus also holds scenarios that exist for the safety benchmark and have no log here.
     runnable = [
         d
         for d in sorted(SCENARIOS.iterdir())
-        if d.is_dir() and json.loads((d / "meta.json").read_text()).get("runnable", True)
+        if d.is_dir()
+        and json.loads((d / "meta.json").read_text()).get("runnable", True)
+        and (LOGS / f"pw-{d.name}.log").is_file()
     ]
     scenarios = {d.name: scenario(d) for d in runnable}
     OUT.write_text(json.dumps(scenarios, ensure_ascii=False, indent=2) + "\n")

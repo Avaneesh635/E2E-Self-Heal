@@ -1,16 +1,16 @@
 diff --git a/examples/demo-app/src/App.tsx b/examples/demo-app/src/App.tsx
-index 0efb854..2fd6145 100644
+index d947959..1902f9c 100644
 --- a/examples/demo-app/src/App.tsx
 +++ b/examples/demo-app/src/App.tsx
 @@ -1,4 +1,4 @@
--import { useState, type FormEvent } from "react";
-+import { useState } from "react";
+-import { useEffect, useState, type FormEvent } from "react";
++import { useEffect, useState } from "react";
  
  import { SubmitButton } from "./components/SubmitButton";
  import { CTAButton } from "./components/CTAButton";
-@@ -7,15 +7,10 @@ export function App() {
-   const [submitted, setSubmitted] = useState(false);
-   const [started, setStarted] = useState(false);
+@@ -31,11 +31,6 @@ export function App() {
+     return () => window.removeEventListener("hashchange", onHashChange);
+   }, []);
  
 -  function handleSubmit(event: FormEvent<HTMLFormElement>) {
 -    event.preventDefault();
@@ -19,9 +19,13 @@ index 0efb854..2fd6145 100644
 -
    return (
      <main>
-       <h1>Sign up</h1>
--      <form onSubmit={handleSubmit}>
-+      <form>
-         <label>
-           Name
-           <input name="name" defaultValue="Ada" />
+       <nav>
+@@ -46,7 +41,7 @@ export function App() {
+       {route === "home" && (
+         <>
+           <h1>Sign up</h1>
+-          <form onSubmit={handleSubmit}>
++          <form>
+             <label>
+               Name
+               <input name="name" defaultValue="Ada" />

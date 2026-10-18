@@ -1,0 +1,1 @@
+{"class":"product_regression","expected_outcome":"refuse","failing_selector":"#theme-select","rationale":"The select id changed from theme-select to theme-picker like its drift twin, but the onChange handler reads the select id instead of its value, so repairing the selector still leaves the indicator incorrect and the assertion failing."}
