@@ -2,10 +2,13 @@
 
 from typing import Literal
 
-from pydantic import AliasChoices, Field, model_validator
+from pydantic import AliasChoices, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LLMProvider = Literal["nvidia", "openai", "anthropic", "ollama", "deepseek", "orcarouter"]
+# Mirrors app.shadow.redaction.MIN_CONFIGURED_SECRET_LENGTH; duplicated here so configuration
+# validation does not have to import the redaction module (which imports these settings).
+MIN_SENSITIVE_VALUE_LENGTH = 4
 
 
 class Settings(BaseSettings):
@@ -56,6 +59,17 @@ class Settings(BaseSettings):
         default="https://api.orcarouter.ai/v1",
         validation_alias=AliasChoices("ORCAROUTER_BASE_URL", "E2E_HEALER_ORCAROUTER_BASE_URL"),
         description="OrcaRouter OpenAI-compatible endpoint",
+    )
+    # Redaction boundary: values named here are replaced in prompts, structured logs, and the
+    # evidence bundle, on top of the built-in credential patterns. Environment variables are
+    # resolved by name at redaction time so their values never live in a settings object.
+    sensitive_env_vars: str = Field(
+        default="",
+        description="comma-separated environment variable names whose values must be redacted",
+    )
+    sensitive_values: SecretStr = Field(
+        default=SecretStr(""),
+        description="comma-separated literal values to redact (masked in repr)",
     )
     max_loops: int = Field(
         default=3,
@@ -148,6 +162,31 @@ class Settings(BaseSettings):
                 self.llm_api_key = self.orcarouter_api_key
             if "llm_base_url" not in explicit:
                 self.llm_base_url = self.orcarouter_base_url
+        return self
+
+    @model_validator(mode="after")
+    def _validate_sensitive_values(self) -> "Settings":
+        """Reject sensitive-value configuration that would silently redact nothing.
+
+        A mistyped variable name and a two-character literal both look like working
+        configuration but replace nothing, so fail at load instead of shipping evidence that
+        the user believes is redacted.
+        """
+        for name in self.sensitive_env_vars.split(","):
+            variable = name.strip()
+            if variable and not variable.isidentifier():
+                raise ValueError(
+                    f"sensitive_env_vars entry {variable!r} is not a valid environment "
+                    "variable name (set E2E_HEALER_SENSITIVE_ENV_VARS)"
+                )
+        for value in self.sensitive_values.get_secret_value().split(","):
+            literal = value.strip()
+            if literal and len(literal) < MIN_SENSITIVE_VALUE_LENGTH:
+                raise ValueError(
+                    "sensitive_values entries must be at least "
+                    f"{MIN_SENSITIVE_VALUE_LENGTH} characters long "
+                    "(set E2E_HEALER_SENSITIVE_VALUES)"
+                )
         return self
 
     @model_validator(mode="after")

@@ -99,20 +99,29 @@ def test_refusal_report_rejects_unknown_reason() -> None:
 
 
 @pytest.mark.parametrize("make", [_repair, _suite, _review])
-@pytest.mark.parametrize("bad_version", ["1.0", "2.0"])
+@pytest.mark.parametrize("bad_version", ["1.0", "2.0", "2.1"])
 def test_unsupported_schema_version_is_rejected(
     make: Callable[..., _AnySummary], bad_version: str
 ) -> None:
     # The contract pins the emitted version, so a model can never serialize a stale or
-    # unsupported schema_version (e.g. a hard-coded "2.0" after the 2.1 minor bump).
+    # unsupported schema_version (e.g. a hard-coded "2.1" after the 2.2 minor bump).
     with pytest.raises(ValidationError, match="schema_version"):
         make(schema_version=bad_version)
 
 
-def test_ast_lock_detail_is_a_minor_addition_to_the_2_major() -> None:
+def test_optional_detail_objects_are_minor_additions_to_the_2_major() -> None:
     # Policy: an optional detail object is a compatible minor change, so the major stays 2.
-    assert SCHEMA_VERSION == "2.1"
+    assert SCHEMA_VERSION == "2.2"
     assert SCHEMA_VERSION.split(".")[0] == "2"
+
+
+def test_evidence_bundle_without_provenance_still_validates() -> None:
+    # Additive-change guarantee: evidence emitted before 2.2 has no provenance key, and a
+    # consumer must read that as absence rather than as an error, because nothing was sent.
+    bundle = EvidenceBundle.model_validate({"parsed_error": "boom"})
+
+    assert bundle.provenance is None
+    assert json.loads(bundle.model_dump_json())["provenance"] is None
 
 
 def test_refusal_json_carries_structured_ast_lock_detail() -> None:

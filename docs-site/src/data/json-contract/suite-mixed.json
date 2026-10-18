@@ -1,12 +1,12 @@
 {
-  "schema_version": "2.1",
+  "schema_version": "2.2",
   "kind": "suite",
   "total_failed": 2,
   "healed": 1,
   "is_success": false,
   "results": [
     {
-      "schema_version": "2.1",
+      "schema_version": "2.2",
       "kind": "repair",
       "test_script_path": "/path/to/E2E-Self-Heal/examples/scenarios/docs-capture/cta.spec.ts",
       "is_success": true,
@@ -138,11 +138,19 @@
               "reason": null
             }
           }
-        ]
+        ],
+        "provenance": {
+          "provider": "anthropic",
+          "model": "claude-sonnet-4-6",
+          "endpoint": "https://api.anthropic.com",
+          "mode": "remote",
+          "redaction_applied": false,
+          "redaction_count": 0
+        }
       }
     },
     {
-      "schema_version": "2.1",
+      "schema_version": "2.2",
       "kind": "refusal",
       "test_script_path": "/path/to/E2E-Self-Heal/examples/scenarios/docs-capture/submit.spec.ts",
       "reason": "loop_cap_reached",
@@ -371,7 +379,15 @@
               "reason": "loop_cap_reached"
             }
           }
-        ]
+        ],
+        "provenance": {
+          "provider": "anthropic",
+          "model": "claude-sonnet-4-6",
+          "endpoint": "https://api.anthropic.com",
+          "mode": "remote",
+          "redaction_applied": false,
+          "redaction_count": 0
+        }
       }
     }
   ]

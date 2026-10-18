@@ -97,6 +97,19 @@ All notable changes to this project are documented here. The format is based on
   `fill`, `waitForSelector`, ...) as an editable selector, matching the existing scope gate.
   Values, keys, options, and non-`page` receivers stay locked (#286).
 
+### Security
+- **One redaction boundary for every prompt and every log line** (#377). The Diagnoser, Patch
+  Generator, Reviewer and decline verdict now build their prompts from the same prepared evidence,
+  so the failure log, DOM diff, ARIA snapshot and model-reported analysis are redacted once instead
+  of per call site; the failure line number is still taken from the raw log, so redaction cannot
+  shift where a fix is applied. Built-in credential patterns are joined by two new settings:
+  `E2E_HEALER_SENSITIVE_ENV_VARS` (variable **names**, resolved at redaction time so their values
+  never enter the settings object) and `E2E_HEALER_SENSITIVE_VALUES` (literals, held as masked
+  secrets). A mistyped name or a literal shorter than four characters fails at load rather than
+  redacting nothing. Structured-log events pass through the same redaction before rendering,
+  including exception text. Test source is deliberately **not** redacted — name a hard-coded
+  credential in `SENSITIVE_VALUES` to keep it out of a prompt.
+
 ## [0.5.0] - 2026-09-22
 
 ### Added

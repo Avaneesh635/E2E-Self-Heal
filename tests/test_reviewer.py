@@ -47,10 +47,12 @@ def test_reviewer_marks_report_incomplete_on_llm_failure(monkeypatch):
 
     result = reviewer(BASE_STATE)
 
-    assert result == {
-        "review_report": {
-            "findings": [],
-            "is_complete": False,
-            "error": "review provider failed to generate suggestions",
-        }
+    assert result["review_report"] == {
+        "findings": [],
+        "is_complete": False,
+        "error": "review provider failed to generate suggestions",
     }
+    # The evidence was prepared for the provider call even though it failed, so the run still
+    # reports that nothing needed redacting.
+    assert result["redaction_count"] == 0
+    assert result["redaction_applied"] is False

@@ -4,8 +4,12 @@ from collections.abc import Iterator
 
 import pytest
 import structlog
+from pydantic import SecretStr
 
+import app.config as config_module
 from app.logging import configure_logging
+
+SECRET = "sk-live-8c7b6a5f4e3d"
 
 
 @pytest.fixture
@@ -48,3 +52,79 @@ def test_a_cached_logger_follows_sys_stderr_after_it_is_replaced(
     logger.info("second_event")
 
     assert "second_event" in second.getvalue()
+
+
+# --- redaction boundary (#377) ------------------------------------------------------------
+
+
+def _configure_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Name a secret through configuration, as a user would."""
+    monkeypatch.setenv("E2E_TEST_PROVIDER_KEY", SECRET)
+    monkeypatch.setattr(config_module.settings, "sensitive_env_vars", "E2E_TEST_PROVIDER_KEY")
+    monkeypatch.setattr(config_module.settings, "sensitive_values", SecretStr(""))
+
+
+def test_a_configured_secret_in_a_log_value_is_redacted(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    restore_structlog_config: None,
+) -> None:
+    # Logs are the other exit for the evidence that reaches a prompt: a provider failure or a
+    # patch rejection quotes the text being repaired.
+    _configure_secret(monkeypatch)
+    configure_logging("INFO")
+
+    structlog.get_logger("redaction_probe").warning(
+        "provider_failed", error=f"request rejected for key {SECRET}"
+    )
+
+    rendered = capsys.readouterr().err
+    assert SECRET not in rendered
+    assert "[REDACTED]" in rendered
+    assert "provider_failed" in rendered
+
+
+def test_a_configured_secret_in_a_traceback_is_redacted(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    restore_structlog_config: None,
+) -> None:
+    # The processor runs after format_exc_info, so exception text is covered too.
+    _configure_secret(monkeypatch)
+    configure_logging("INFO")
+
+    try:
+        raise RuntimeError(f"upstream rejected {SECRET}")
+    except RuntimeError:
+        structlog.get_logger("redaction_probe").exception("call_failed")
+
+    rendered = capsys.readouterr().err
+    assert SECRET not in rendered
+    assert "RuntimeError" in rendered
+
+
+def test_builtin_credential_patterns_are_redacted_without_configuration(
+    capsys: pytest.CaptureFixture[str], restore_structlog_config: None
+) -> None:
+    configure_logging("INFO")
+
+    structlog.get_logger("redaction_probe").info(
+        "patch_rejected", detail="authorization: bearer plain-token-value"
+    )
+
+    rendered = capsys.readouterr().err
+    assert "plain-token-value" not in rendered
+    assert "[REDACTED]" in rendered
+
+
+def test_ordinary_log_values_are_left_alone(
+    capsys: pytest.CaptureFixture[str], restore_structlog_config: None
+) -> None:
+    configure_logging("INFO")
+
+    structlog.get_logger("redaction_probe").info("diagnoser_finished", loop_count=2)
+
+    rendered = capsys.readouterr().err
+    assert "diagnoser_finished" in rendered
+    assert "loop_count" in rendered
+    assert "[REDACTED]" not in rendered

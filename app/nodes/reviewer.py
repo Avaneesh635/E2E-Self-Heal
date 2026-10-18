@@ -4,6 +4,7 @@ import json
 
 import structlog
 
+from app.evidence_boundary import prepare_evidence, redaction_state_update
 from app.llm import generate_review
 from app.prompts.reviewer import SYSTEM_PROMPT
 from app.state import AgentState
@@ -18,10 +19,13 @@ def reviewer(state: AgentState) -> dict:
     the review instead of mistaking a provider outage for a completed review with no findings.
     """
     logger.info("reviewer_started")
+    # Diagnostics and DOM changes cross the evidence boundary; the test source does not, because
+    # a suggested locator has to match the code the user actually has.
+    prepared = prepare_evidence(state)
     user_prompt = (
-        f"Failure diagnosis:\n{state['analysis_report']}\n\n"
+        f"Failure diagnosis:\n{prepared.analysis_report}\n\n"
         f"DOM changes (from git diff, with new-file lines):\n"
-        f"{json.dumps(state['dom_diff_context'], indent=2)}\n\n"
+        f"{json.dumps(prepared.dom_diff_context, indent=2)}\n\n"
         f"Current test code:\n{state['current_code']}"
     )
     try:
@@ -33,8 +37,12 @@ def reviewer(state: AgentState) -> dict:
                 "findings": [],
                 "is_complete": False,
                 "error": "review provider failed to generate suggestions",
-            }
+            },
+            **redaction_state_update(state, prepared),
         }
 
     logger.info("reviewer_finished", finding_count=len(output.findings))
-    return {"review_report": output.model_dump()}
+    return {
+        "review_report": output.model_dump(),
+        **redaction_state_update(state, prepared),
+    }
