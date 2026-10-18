@@ -8,6 +8,7 @@ import app.cli as cli_module
 from app.cli import app
 from app.config import settings
 from app.safety_benchmark import (
+    GATE_MIN_SAMPLE,
     ActualOutcome,
     ExpectedOutcome,
     SafetyBenchmarkReport,
@@ -17,7 +18,7 @@ from app.safety_benchmark import (
     ScenarioRestoreError,
     build_report,
 )
-from app.safety_report import load_baseline, render_markdown
+from app.safety_report import load_baseline, render_markdown, shortfall_summary
 
 _DRIFT = (ScenarioClass.SELECTOR_DRIFT, ExpectedOutcome.REPAIR)
 _REGRESSION = (ScenarioClass.PRODUCT_REGRESSION, ExpectedOutcome.REFUSE)
@@ -63,6 +64,45 @@ def test_markdown_shows_metrics_with_their_sample_sizes() -> None:
     assert "| False-green rate (product regressions repaired) | 0.0% | 1 |" in text
     assert "| Correct-refusal rate (expected refusals refused) | 100.0% | 1 |" in text
     assert "**2 scored, 0 skipped, 0 errors**" in text
+
+
+def test_markdown_states_the_shortfall_next_to_each_gate() -> None:
+    # "insufficient_sample" alone leaves the reader to subtract the minimum by hand.
+    text = render_markdown(_report())
+
+    assert "| Gate | Threshold | Value | Scenarios (n) | Needs | Status |" in text
+    assert "| `false_green_rate` | = 0% | 0.0% | 1 | +19 scenarios | insufficient_sample |" in text
+    # error_count has no sample minimum, so nothing is needed for it.
+    assert "| `error_count` | = 0 | 0 | 2 | — | pass |" in text
+
+
+def test_the_shortfall_line_names_the_thinnest_gate_first() -> None:
+    report = build_report(
+        [_result(f"regression-{i}", _REGRESSION, ActualOutcome.REFUSE) for i in range(4)]
+        + [_result(f"drift-{i}", _DRIFT, ActualOutcome.REPAIR) for i in range(7)]
+    )
+
+    line = shortfall_summary(report.gates)
+
+    assert line is not None
+    assert line.startswith("release gates not yet enforced")
+    # Largest shortfall first, so the corpus work that unlocks the most gates leads.
+    assert line.split(": ", 1)[1] == (
+        "false_green_rate needs 16 more, refusal_accuracy needs 16 more, "
+        "incorrect_refusal_rate needs 13 more"
+    )
+
+
+def test_the_shortfall_line_is_silent_once_every_gate_can_be_enforced() -> None:
+    report = build_report(
+        [
+            _result(f"regression-{i}", _REGRESSION, ActualOutcome.REFUSE)
+            for i in range(GATE_MIN_SAMPLE)
+        ]
+        + [_result(f"drift-{i}", _DRIFT, ActualOutcome.REPAIR) for i in range(GATE_MIN_SAMPLE)]
+    )
+
+    assert shortfall_summary(report.gates) is None
 
 
 def test_markdown_lists_every_class_and_names_the_coverage_gaps() -> None:
@@ -277,6 +317,22 @@ def test_a_baseline_from_before_the_summaries_existed_still_loads(tmp_path: Path
     assert [r.name for r in baseline.results] == ["id-rename"]
     text = render_markdown(_report(), baseline)
     assert "Baseline: 1 scenarios" in text
+
+
+def test_a_baseline_written_before_the_shortfall_existed_reads_it_as_zero(
+    tmp_path: Path,
+) -> None:
+    # The field is derived, so an older committed baseline must not fail to load without it.
+    path = tmp_path / "old.json"
+    payload = json.loads(_report().model_dump_json())
+    for gate in payload["gates"]:
+        gate.pop("scenarios_needed")
+    path.write_text(json.dumps(payload))
+
+    loaded = load_baseline(path)
+
+    assert loaded is not None
+    assert {gate.scenarios_needed for gate in loaded.gates} == {0}
 
 
 def test_an_invalid_baseline_is_an_error_not_silently_ignored(tmp_path: Path) -> None:
@@ -543,7 +599,10 @@ def test_cli_enforce_gates_exits_one_on_a_false_green(
     assert informational.exit_code == 0
     assert enforced.exit_code == 1
     assert "false_green_rate" in enforced.stderr
-    assert "| `false_green_rate` | = 0% | 100.0% | 1 | **FAIL** |" in md_out.read_text()
+    assert (
+        "| `false_green_rate` | = 0% | 100.0% | 1 | +19 scenarios | **FAIL** |"
+        in md_out.read_text()
+    )
 
 
 def test_cli_enforce_gates_does_not_fail_on_an_insufficient_sample(
@@ -557,6 +616,21 @@ def test_cli_enforce_gates_does_not_fail_on_an_insufficient_sample(
     )
 
     assert result.exit_code == 0
+
+
+def test_cli_says_how_short_the_unenforced_gates_are(
+    monkeypatch: pytest.MonkeyPatch, scenario_root: Path
+) -> None:
+    # The terminal only shows the JSON report, where a gate that cannot be enforced looks like
+    # a run that passed; the shortfall is the part a reader needs on stderr.
+    monkeypatch.setattr(cli_module, "execute_safety_scenario", _stub_executor(ActualOutcome.REPAIR))
+
+    result = CliRunner().invoke(app, ["safety-benchmark", "--scenario-root", str(scenario_root)])
+
+    assert result.exit_code == 0
+    message = " ".join(result.stderr.split())
+    assert "release gates not yet enforced" in message
+    assert f"false_green_rate needs {GATE_MIN_SAMPLE - 1} more" in message
 
 
 def test_cli_rejects_a_scenario_without_metadata(scenario_root: Path) -> None:

@@ -178,6 +178,10 @@ class GateResult(BaseModel):
     value: float | None
     sample_size: int = Field(ge=0)
     status: GateStatus
+    # How many more distinct scenarios this rate needs before it can be enforced. 0 when the
+    # sample is already large enough, and for ``error_count``, which has no sample minimum.
+    # Defaulted so a report written before this field existed still loads as a baseline.
+    scenarios_needed: int = Field(default=0, ge=0)
 
 
 class SafetyBenchmarkReport(BaseModel):
@@ -555,7 +559,14 @@ def evaluate_gates(metrics: SafetyMetrics) -> list[GateResult]:
         else:
             status = GateStatus.PASS if passed(value) else GateStatus.FAIL
         return GateResult(
-            name=name, threshold=threshold, value=value, sample_size=size, status=status
+            name=name,
+            threshold=threshold,
+            value=value,
+            sample_size=size,
+            status=status,
+            # The corpus never shrinks the gap for free: this is how much more work the
+            # issue tracker entry needs before the gate stops being decorative.
+            scenarios_needed=max(0, GATE_MIN_SAMPLE - size),
         )
 
     false_green = rate_gate(

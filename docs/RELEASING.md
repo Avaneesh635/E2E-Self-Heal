@@ -60,7 +60,9 @@ pip install --index-url https://test.pypi.org/simple/ \
    Then run the safety benchmark with `--enforce-gates` (the
    [local command](../docs-site/docs/reference/safety-benchmark.mdx#run-it-locally) plus that
    flag). Exit code `1` means a release gate failed: do not release. `insufficient_sample` rows do
-   not block; they mean the corpus is still too small for that rate to be enforced.
+   not block; they mean the corpus is still too small for that rate to be enforced, and each such
+   row's **Needs** column (also `scenarios_needed` in the JSON, and the last line on stderr) says
+   how many more distinct scenarios it is missing.
 2. Bump `version` in `pyproject.toml`; move the `## [Unreleased]` section in
    [`CHANGELOG.md`](../CHANGELOG.md) to the new version with today's date.
 3. Commit, then tag: `git tag -a vX.Y.Z -m "..."` and `git push origin main --follow-tags`.

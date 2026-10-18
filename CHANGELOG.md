@@ -7,16 +7,13 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
-- **Local-first provider and evidence-redaction boundary** (#377). Where repair evidence goes is now
-  configuration, never a code change: point `E2E_HEALER_LLM_BASE_URL` at an Ollama or any
-  OpenAI-compatible server on `localhost` or a private address and the evidence stays inside the
-  network. Every `--json` result whose repair loop ran carries `evidence.provenance` — `provider`,
-  `model`, `endpoint` (redacted), `mode` (`local` when the endpoint is loopback or a
-  private/link-local address, derived from the address without a DNS lookup), and
-  `redaction_applied` / `redaction_count` — so the decision is readable from the output. Schema `2.2`
-  is a compatible minor bump; a consumer written against `2.1` keeps working. New docs:
-  [Configuration](docs-site/docs/reference/configuration.mdx) and
-  [Data boundary & redaction](docs-site/docs/safety/data-boundary.mdx).
+- **The safety benchmark now states each gate's shortfall** (#383). Every rate gate reported
+  `insufficient_sample` and nothing said how far a population was from the 20 distinct scenarios
+  it needs, so a gate that could never be enforced read like one that passed. `GateResult` gains
+  `scenarios_needed` (defaulted, so older reports and baselines still load), the **Release gates**
+  table gains a **Needs** column, and a run prints one line on stderr naming the gates that are
+  still unenforced with the largest shortfall first. `error_count` is always `0`, since it has no
+  sample minimum.
 - **`--repeat N` for the safety benchmark** (#325). Model output varies between runs, so one run
   per scenario can move a rate by chance (`split-submit` was repaired once and refused twice by the
   same model). `e2e-healer safety-benchmark --repeat 3` runs every scenario three times, in full

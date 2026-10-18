@@ -182,6 +182,12 @@ a **Release gates** table:
   one scenario is worth 5 points, which is the smallest step a 95% threshold can tell apart.
   The 20 counts distinct scenarios; [repeated runs](#repeating-runs) of the same scenarios do not
   add to it.
+- **Every gate says how short it is.** The table's **Needs** column gives the number of distinct
+  scenarios the corpus is still missing, and so does `scenarios_needed` in the JSON. The same
+  thing is printed on stderr, for example `release gates not yet enforced (each needs 20 distinct
+  scenarios): false_green_rate needs 16 more`, so a gate that cannot be enforced yet never looks
+  like one that passed. It is `0` once the rate is enforced, and always `0` for `error_count`,
+  which has no sample minimum.
 - **Gates block a release, never a merge.** Pull request and `main` runs stay informational.
   Before tagging a release, run the benchmark with `--enforce-gates` (see
   [Releasing](https://github.com/Lee-Dongwook/E2E-Self-Heal/blob/main/docs/RELEASING.md)). Do not
