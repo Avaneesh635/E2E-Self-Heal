@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **The safety corpus is large enough to enforce the release gates** (#383). The corpus grew from
+  12 scenarios to 44 (43 runnable), so every rate gate now has its 20 distinct scenarios and is
+  enforced on a full run instead of reported as `insufficient_sample`. Four routed demo-app pages
+  (`#/catalog`, `#/checkout`, `#/settings`, `#/account`) carry four drift/regression pairs each:
+  the drift patch is a pure selector rename that should be repaired, and the regression patch is
+  the same rename with the handler behind it removed, which should be refused. Both twins ship the
+  identical spec and the same failing selector, so the gates measure discrimination rather than how
+  easy the corpus is. New tests fail if the corpus drops below 20 `product_regression` scenarios,
+  if a drift scenario loses its twin, or if a checked-in patch stops applying. The hash-routed
+  `App.tsx` keeps `/` on the signup page, and the demo port moved to `E2E_DEMO_PORT` so worktrees
+  can run the suite concurrently; the CI timeout is 120 minutes for the larger corpus.
 - **The safety benchmark now states each gate's shortfall** (#383). Every rate gate reported
   `insufficient_sample` and nothing said how far a population was from the 20 distinct scenarios
   it needs, so a gate that could never be enforced read like one that passed. `GateResult` gains

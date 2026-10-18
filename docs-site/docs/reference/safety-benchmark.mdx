@@ -199,7 +199,7 @@ a **Release gates** table:
 
 ### The corpus
 
-The checked-in corpus is 45 scenarios: 44 runnable and one static fixture (`jsx-context`, listed as
+The checked-in corpus is 44 scenarios: 43 runnable and one static fixture (`jsx-context`, listed as
 `skipped` and in no rate). Every rate gate is therefore enforceable on a full run, and the corpus
 cannot shrink without a gate going back to `insufficient_sample`:
 
@@ -255,14 +255,18 @@ the same spec text, and make the regression's patch rename the selector *and* re
 behind it. A regression without a drift twin measures whether the corpus is hard, not whether the
 engine can tell the two apart. Two more rules come from that pairing: the spec must not contain a
 comment (the model reads the spec, and a comment saying "this is a regression" hands it the label),
-and the spec must pass on the unpatched app, so the patch is what breaks it.
+and the spec should pass on the unpatched app, so the patch is what breaks it. `classname-rename` is
+the one exception: the demo app ships with its rename already applied, because the Playwright
+reporter uses that patch as its `diffFile` fixture. A scenario patch must therefore either apply to
+the current app or already be applied to it, which is what
+`test_every_runnable_checked_in_scenario_matches_the_demo_app_in_some_state` enforces.
 
 ## In CI
 
 `.github/workflows/safety-benchmark.yml` runs the benchmark and publishes the Markdown report as
 the run's step summary and the JSON and Markdown files as the `safety-report` artifact.
 
-- **Never blocks.** The job is `continue-on-error`, time-limited (120 minutes, since 44 runnable
+- **Never blocks.** The job is `continue-on-error`, time-limited (120 minutes, since 43 runnable
   scenarios are model-latency bound), and has read-only permissions. There is no partial-corpus
   mode for pull requests: a subset would hide a regression, and a run over fewer scenarios already
   reports its own `n` and `insufficient_sample` rows.
