@@ -1,0 +1,13 @@
+diff --git a/examples/demo-app/src/components/checkout/CheckoutQuantity.tsx b/examples/demo-app/src/components/checkout/CheckoutQuantity.tsx
+index 9e0432e..499bfdc 100644
+--- a/examples/demo-app/src/components/checkout/CheckoutQuantity.tsx
++++ b/examples/demo-app/src/components/checkout/CheckoutQuantity.tsx
+@@ -12,7 +12,7 @@ export function CheckoutQuantity() {
+       <label>
+         Quantity
+         <input
+-          id="quantity"
++          id="item-quantity"
+           type="number"
+           min="1"
+           value={quantity}

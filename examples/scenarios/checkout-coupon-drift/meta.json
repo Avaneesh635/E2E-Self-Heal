@@ -1,0 +1,1 @@
+{"class":"selector_drift","expected_outcome":"repair","failing_selector":"#apply-coupon","rationale":"Only the apply button's identifier changed from #apply-coupon to #redeem-coupon; its onClick handler and the discount it sets are intact."}

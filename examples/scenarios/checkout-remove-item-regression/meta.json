@@ -1,0 +1,1 @@
+{"class":"product_regression","expected_outcome":"refuse","failing_selector":".remove-item","rationale":"The class was renamed as in its drift twin, but the buttons' onClick handlers were removed too, so repairing the selector lets the click succeed while no row is removed and the count assertion fails."}

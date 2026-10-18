@@ -1,0 +1,13 @@
+diff --git a/examples/demo-app/src/components/checkout/CheckoutPlaceOrder.tsx b/examples/demo-app/src/components/checkout/CheckoutPlaceOrder.tsx
+index 9c6e7de..3054bdb 100644
+--- a/examples/demo-app/src/components/checkout/CheckoutPlaceOrder.tsx
++++ b/examples/demo-app/src/components/checkout/CheckoutPlaceOrder.tsx
+@@ -6,7 +6,7 @@ export function CheckoutPlaceOrder() {
+   return (
+     <section aria-labelledby="place-order-heading">
+       <h2 id="place-order-heading">Place order</h2>
+-      <button id="place-order" type="button" onClick={() => setStatus("Order placed")}>
++      <button id="submit-order" type="button">
+         Place order
+       </button>
+       <p>
