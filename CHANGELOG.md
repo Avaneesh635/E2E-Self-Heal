@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **The safety benchmark now states each gate's shortfall** (#383). Every rate gate reported
+  `insufficient_sample` and nothing said how far a population was from the 20 distinct scenarios
+  it needs, so a gate that could never be enforced read like one that passed. `GateResult` gains
+  `scenarios_needed` (defaulted, so older reports and baselines still load), the **Release gates**
+  table gains a **Needs** column, and a run prints one line on stderr naming the gates that are
+  still unenforced with the largest shortfall first. `error_count` is always `0`, since it has no
+  sample minimum.
 - **`--repeat N` for the safety benchmark** (#325). Model output varies between runs, so one run
   per scenario can move a rate by chance (`split-submit` was repaired once and refused twice by the
   same model). `e2e-healer safety-benchmark --repeat 3` runs every scenario three times, in full

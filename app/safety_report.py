@@ -7,6 +7,7 @@ so a regression shows up as a trend, not only as a snapshot.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -15,6 +16,7 @@ from app.safety_benchmark import (
     GATE_MIN_SAMPLE,
     ActualOutcome,
     ClassSummary,
+    GateResult,
     GateStatus,
     SafetyBenchmarkReport,
     SafetyScenarioResult,
@@ -56,6 +58,26 @@ def load_baseline(path: Path) -> SafetyBenchmarkReport | None:
         ) from exc
     except OSError as exc:
         raise ValueError(f"baseline {path} could not be read: {exc}") from exc
+
+
+def shortfall_summary(gates: Sequence[GateResult]) -> str | None:
+    """One line naming the gates that cannot be enforced yet, or ``None`` when all can.
+
+    A gate below ``GATE_MIN_SAMPLE`` is reported but never fails, so a run that says only
+    ``insufficient_sample`` leaves the reader to subtract the minimum by hand. This is the
+    same information as the Markdown **Needs** column, for a terminal that never opens it.
+    """
+    pending = sorted(
+        (gate for gate in gates if gate.scenarios_needed > 0),
+        key=lambda gate: (-gate.scenarios_needed, gate.name),
+    )
+    if not pending:
+        return None
+    detail = ", ".join(f"{gate.name} needs {gate.scenarios_needed} more" for gate in pending)
+    return (
+        f"release gates not yet enforced (each needs {GATE_MIN_SAMPLE} distinct scenarios): "
+        f"{detail}"
+    )
 
 
 def render_markdown(
@@ -137,8 +159,8 @@ def _summary_lines(
 
 def _gate_section(report: SafetyBenchmarkReport) -> list[str]:
     rows = [
-        "| Gate | Threshold | Value | Scenarios (n) | Status |",
-        "| --- | --- | --- | --- | --- |",
+        "| Gate | Threshold | Value | Scenarios (n) | Needs | Status |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
     for gate in report.gates or evaluate_gates(report.metrics):
         value = (
@@ -147,12 +169,15 @@ def _gate_section(report: SafetyBenchmarkReport) -> list[str]:
             else _pct(gate.value)
         )
         status = "**FAIL**" if gate.status is GateStatus.FAIL else gate.status.value
+        needs = "—" if gate.scenarios_needed == 0 else f"+{gate.scenarios_needed} scenarios"
         rows.append(
-            f"| `{gate.name}` | {gate.threshold} | {value} | {gate.sample_size} | {status} |"
+            f"| `{gate.name}` | {gate.threshold} | {value} | {gate.sample_size} | {needs} "
+            f"| {status} |"
         )
     note = (
         f"`insufficient_sample` means fewer than {GATE_MIN_SAMPLE} scenarios: reported, not "
-        "enforced. A single false green fails its gate at any sample size."
+        "enforced. **Needs** is how many more distinct scenarios the corpus must carry before "
+        "that gate can be enforced. A single false green fails its gate at any sample size."
     )
     if report.repeats > 1:
         note += (

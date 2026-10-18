@@ -766,6 +766,54 @@ def test_rate_gates_are_not_enforced_below_the_minimum_sample() -> None:
     assert _gate(report, "false_green_rate").status is GateStatus.INSUFFICIENT_SAMPLE
 
 
+def test_a_gate_says_how_many_more_scenarios_it_needs_before_it_is_enforced() -> None:
+    # Four product regressions and five expected repairs: the two thinnest populations in the
+    # checked-in corpus, which is why every rate gate reports ``insufficient_sample``.
+    report = _metrics_with(
+        refused=(ScenarioClass.PRODUCT_REGRESSION, ExpectedOutcome.REFUSE, ActualOutcome.REFUSE, 4),
+        fixed=(ScenarioClass.SELECTOR_DRIFT, ExpectedOutcome.REPAIR, ActualOutcome.REPAIR, 5),
+    )
+
+    assert _gate(report, "false_green_rate").scenarios_needed == GATE_MIN_SAMPLE - 4
+    # The product regressions are the whole refusal-accuracy population here.
+    assert _gate(report, "refusal_accuracy").scenarios_needed == GATE_MIN_SAMPLE - 4
+    assert _gate(report, "incorrect_refusal_rate").scenarios_needed == GATE_MIN_SAMPLE - 5
+    # error_count has no sample minimum, so it is never short.
+    assert _gate(report, "error_count").scenarios_needed == 0
+
+
+def test_a_gate_that_reaches_the_minimum_sample_needs_nothing_more() -> None:
+    n = GATE_MIN_SAMPLE
+    report = _metrics_with(
+        refused=(
+            ScenarioClass.PRODUCT_REGRESSION,
+            ExpectedOutcome.REFUSE,
+            ActualOutcome.REFUSE,
+            n,
+        ),
+        fixed=(ScenarioClass.SELECTOR_DRIFT, ExpectedOutcome.REPAIR, ActualOutcome.REPAIR, n),
+    )
+
+    assert {gate.scenarios_needed for gate in report.gates} == {0}
+
+
+def test_a_false_green_reports_its_shortfall_and_still_fails() -> None:
+    # The shortfall explains why a rate cannot be enforced yet; it never excuses a failure.
+    report = _metrics_with(
+        healed=(
+            ScenarioClass.PRODUCT_REGRESSION,
+            ExpectedOutcome.REFUSE,
+            ActualOutcome.REPAIR,
+            1,
+        ),
+    )
+
+    gate = _gate(report, "false_green_rate")
+
+    assert gate.status is GateStatus.FAIL
+    assert gate.scenarios_needed == GATE_MIN_SAMPLE - 1
+
+
 def test_a_single_false_green_fails_its_gate_at_any_sample_size() -> None:
     report = _metrics_with(
         healed=(
@@ -912,6 +960,8 @@ def test_repeating_a_scenario_does_not_count_as_more_scenarios_for_the_gates() -
     assert report.metrics.sample_sizes.correct_refusal_rate == 4
     gates = {gate.name: gate for gate in report.gates}
     assert gates["false_green_rate"].status is GateStatus.INSUFFICIENT_SAMPLE
+    # 20 runs over 4 scenarios is 4 scenarios: the shortfall does not shrink either.
+    assert gates["false_green_rate"].scenarios_needed == GATE_MIN_SAMPLE - 4
 
 
 def test_a_false_green_in_any_single_run_fails_its_gate() -> None:

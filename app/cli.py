@@ -37,7 +37,7 @@ from app.safety_benchmark import (
     execute_safety_scenario,
     run_safety_benchmark,
 )
-from app.safety_report import load_baseline, render_markdown
+from app.safety_report import load_baseline, render_markdown, shortfall_summary
 from app.sandbox import (
     SandboxViolation,
     assert_auto_discovered_target,
@@ -746,6 +746,11 @@ def safety_benchmark(
     if markdown is not None:
         _write_report_file(markdown, render_markdown(report, previous))
     typer.echo(json_report)
+    # A gate below its minimum sample is reported and never enforced, so say by how much it
+    # is short: otherwise the terminal only ever shows a run that looked like it passed.
+    shortfall = shortfall_summary(report.gates)
+    if shortfall is not None:
+        console.print(f"[yellow]{escape(shortfall)}[/yellow]")
     failed = [gate.name for gate in report.gates if gate.status is GateStatus.FAIL]
     if enforce_gates and failed:
         console.print(f"[red]release gates failed:[/red] {escape(', '.join(failed))}")
