@@ -16,7 +16,7 @@ Running 1 test using 1 worker
       5 |   await page.click("#submit-btn");
       6 |   await expect(page.getByText("Thanks!")).toBeVisible();
       7 | });
-        at /home/kamlesh/Repos/E2E-Self-Heal-383/examples/scenarios/wrong-base-url/spec.ts:4:14
+        at scenarios/wrong-base-url/spec.ts:4:14
 
     Error Context: test-results/wrong-base-url-spec.ts-submits-the-form/error-context.md
 
