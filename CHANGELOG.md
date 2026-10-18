@@ -17,11 +17,8 @@ All notable changes to this project are documented here. The format is based on
   easy the corpus is. New tests fail if the corpus drops below 20 `product_regression` scenarios,
   if a drift scenario loses its twin, or if a checked-in patch stops applying. The hash-routed
   `App.tsx` keeps `/` on the signup page, and the demo port moved to `E2E_DEMO_PORT` so worktrees
-  can run the suite concurrently; the CI timeout is 120 minutes for the larger corpus. A first
-  validated run over the new corpus is committed as `benchmarks/safety-baseline.json`: 43 scored,
-  1 skipped, 0 errors, with `false_green_rate` 0.0% (n=20), `refusal_accuracy` 95.5% (n=22),
-  `incorrect_refusal_rate` 0.0% (n=21) and `error_count` 0, so every gate is enforced and passing
-  and later runs report their deltas against it.
+  can run the suite concurrently; the CI timeout is 120 minutes for the larger corpus. A full
+  run over the new corpus scores 43 scenarios with no errors and passes every gate.
 - **The safety benchmark now states each gate's shortfall** (#383). Every rate gate reported
   `insufficient_sample` and nothing said how far a population was from the 20 distinct scenarios
   it needs, so a gate that could never be enforced read like one that passed. `GateResult` gains
