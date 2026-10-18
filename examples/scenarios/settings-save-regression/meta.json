@@ -1,0 +1,1 @@
+{"class":"product_regression","expected_outcome":"refuse","failing_selector":"#save-settings","rationale":"The identifier was renamed like its drift twin, but the onClick handler was also removed, so repairing the selector still leaves the status at Unsaved and the assertion failing."}

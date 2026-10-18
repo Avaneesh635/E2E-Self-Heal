@@ -1,0 +1,13 @@
+diff --git a/examples/demo-app/src/components/settings/SettingsSave.tsx b/examples/demo-app/src/components/settings/SettingsSave.tsx
+index 6ece5c7..44a0a7a 100644
+--- a/examples/demo-app/src/components/settings/SettingsSave.tsx
++++ b/examples/demo-app/src/components/settings/SettingsSave.tsx
+@@ -6,7 +6,7 @@ export function SettingsSave() {
+   return (
+     <section aria-labelledby="save-heading">
+       <h2 id="save-heading">Save changes</h2>
+-      <button id="save-settings" type="button" onClick={() => setStatus("Saved")}>
++      <button id="save-preferences" type="button" onClick={() => setStatus("Saved")}>
+         Save settings
+       </button>
+       <p id="save-status">{status}</p>

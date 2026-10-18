@@ -1,0 +1,13 @@
+diff --git a/examples/demo-app/src/components/settings/SettingsTheme.tsx b/examples/demo-app/src/components/settings/SettingsTheme.tsx
+index 23156cd..a98f210 100644
+--- a/examples/demo-app/src/components/settings/SettingsTheme.tsx
++++ b/examples/demo-app/src/components/settings/SettingsTheme.tsx
+@@ -8,7 +8,7 @@ export function SettingsTheme() {
+       <h2 id="theme-heading">Theme</h2>
+       <label>
+         Theme
+-        <select id="theme-select" value={theme} onChange={(event) => setTheme(event.target.value)}>
++        <select id="theme-picker" value={theme}>
+           <option value="light">light</option>
+           <option value="dark">dark</option>
+         </select>
