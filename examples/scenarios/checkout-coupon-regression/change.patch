@@ -1,0 +1,13 @@
+diff --git a/examples/demo-app/src/components/checkout/CheckoutCoupon.tsx b/examples/demo-app/src/components/checkout/CheckoutCoupon.tsx
+index 2c39c52..b143734 100644
+--- a/examples/demo-app/src/components/checkout/CheckoutCoupon.tsx
++++ b/examples/demo-app/src/components/checkout/CheckoutCoupon.tsx
+@@ -22,7 +22,7 @@ export function CheckoutCoupon() {
+           onChange={(event) => setCode(event.target.value)}
+         />
+       </label>
+-      <button id="apply-coupon" type="button" onClick={applyCoupon}>
++      <button id="redeem-coupon" type="button">
+         Apply
+       </button>
+       <p>

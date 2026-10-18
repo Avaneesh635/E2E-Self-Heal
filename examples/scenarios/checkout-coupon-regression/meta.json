@@ -1,0 +1,1 @@
+{"class":"product_regression","expected_outcome":"refuse","failing_selector":"#apply-coupon","rationale":"The identifier was renamed as in its drift twin, but the button's onClick handler was removed too, so repairing the selector lets the click succeed while the discount stays -$0.00 and the assertion fails."}

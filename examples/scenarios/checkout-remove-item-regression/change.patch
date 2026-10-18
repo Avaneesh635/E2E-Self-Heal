@@ -1,0 +1,13 @@
+diff --git a/examples/demo-app/src/components/checkout/CheckoutRemoveItem.tsx b/examples/demo-app/src/components/checkout/CheckoutRemoveItem.tsx
+index b64a2c1..158d6f1 100644
+--- a/examples/demo-app/src/components/checkout/CheckoutRemoveItem.tsx
++++ b/examples/demo-app/src/components/checkout/CheckoutRemoveItem.tsx
+@@ -18,7 +18,7 @@ export function CheckoutRemoveItem() {
+         {items.map((item) => (
+           <li key={item}>
+             {item}
+-            <button className="remove-item" type="button" onClick={() => removeItem(item)}>
++            <button className="cart-remove" type="button">
+               Remove
+             </button>
+           </li>

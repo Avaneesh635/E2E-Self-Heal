@@ -1,0 +1,17 @@
+diff --git a/examples/demo-app/src/components/checkout/CheckoutQuantity.tsx b/examples/demo-app/src/components/checkout/CheckoutQuantity.tsx
+index 9e0432e..e1972fb 100644
+--- a/examples/demo-app/src/components/checkout/CheckoutQuantity.tsx
++++ b/examples/demo-app/src/components/checkout/CheckoutQuantity.tsx
+@@ -12,11 +12,10 @@ export function CheckoutQuantity() {
+       <label>
+         Quantity
+         <input
+-          id="quantity"
++          id="item-quantity"
+           type="number"
+           min="1"
+           value={quantity}
+-          onChange={(event) => setQuantity(Number(event.target.value))}
+         />
+       </label>
+       <p>

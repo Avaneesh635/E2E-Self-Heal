@@ -1,0 +1,1 @@
+{"class":"selector_drift","expected_outcome":"repair","failing_selector":".remove-item","rationale":"Only the remove buttons' class changed from .remove-item to .cart-remove; their onClick handlers and the cart rows they delete are intact."}

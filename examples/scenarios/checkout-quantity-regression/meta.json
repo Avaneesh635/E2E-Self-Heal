@@ -1,0 +1,1 @@
+{"class":"product_regression","expected_outcome":"refuse","failing_selector":"#quantity","rationale":"The identifier was renamed as in its drift twin, but the input's onChange handler was removed too, so repairing the selector still leaves the subtotal at $10.00 and the assertion failing."}
