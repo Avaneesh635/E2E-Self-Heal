@@ -279,7 +279,9 @@ the run's step summary and the JSON and Markdown files as the `safety-report` ar
 
 ### Setting a baseline
 
-The comparison reads `benchmarks/safety-baseline.json`. Until that file exists the report simply
-has no deltas. To set or update it, take the JSON from a trusted run (the workflow artifact, or a
-local run with `--output benchmarks/safety-baseline.json`), review it, and commit it. Latency is
-part of the file, so expect it to change a little on every refresh.
+The comparison reads `benchmarks/safety-baseline.json`, which now holds the first run over the
+44-scenario corpus: all four rate gates enforced and passing, 43 scored and one skipped. A run
+without `--baseline`, or before that file existed, simply has no deltas. To update it, take the JSON
+from a trusted run (the workflow artifact, or a local run with
+`--output benchmarks/safety-baseline.json`), review it, and commit it. Latency is part of the file,
+so expect it to change a little on every refresh.

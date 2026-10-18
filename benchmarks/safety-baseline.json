@@ -1,0 +1,1374 @@
+{
+  "results": [
+    {
+      "name": "account-avatar-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 32.066,
+      "attempts": 2,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "account-avatar-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 48.164,
+      "attempts": 3,
+      "declined": 0,
+      "refusal_reason": "insufficient_evidence",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "account-email-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 13.632,
+      "attempts": 1,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "account-email-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 22.452,
+      "attempts": 3,
+      "declined": 0,
+      "refusal_reason": "loop_cap_reached",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "account-password-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 52.415,
+      "attempts": 3,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "account-password-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 25.602,
+      "attempts": 1,
+      "declined": 1,
+      "refusal_reason": "likely_product_regression",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "account-signout-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 21.207,
+      "attempts": 1,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "account-signout-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 27.89,
+      "attempts": 1,
+      "declined": 1,
+      "refusal_reason": "likely_product_regression",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "catalog-detail-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 17.58,
+      "attempts": 1,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "catalog-detail-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 26.222,
+      "attempts": 1,
+      "declined": 1,
+      "refusal_reason": "likely_product_regression",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "catalog-pagination-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 15.618,
+      "attempts": 1,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "catalog-pagination-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 28.774,
+      "attempts": 1,
+      "declined": 1,
+      "refusal_reason": "likely_product_regression",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "catalog-search-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 16.382,
+      "attempts": 1,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "catalog-search-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 48.671,
+      "attempts": 3,
+      "declined": 0,
+      "refusal_reason": "loop_cap_reached",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "catalog-sort-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 14.501,
+      "attempts": 1,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "catalog-sort-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 24.769,
+      "attempts": 1,
+      "declined": 1,
+      "refusal_reason": "likely_product_regression",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "checkout-coupon-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 16.514,
+      "attempts": 1,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "checkout-coupon-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 23.507,
+      "attempts": 1,
+      "declined": 1,
+      "refusal_reason": "likely_product_regression",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "checkout-place-order-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 13.29,
+      "attempts": 1,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "checkout-place-order-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 23.425,
+      "attempts": 1,
+      "declined": 1,
+      "refusal_reason": "likely_product_regression",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "checkout-quantity-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 27.911,
+      "attempts": 1,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "checkout-quantity-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 76.058,
+      "attempts": 2,
+      "declined": 1,
+      "refusal_reason": "guardrail_violation",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "checkout-remove-item-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 13.415,
+      "attempts": 1,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "checkout-remove-item-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 24.816,
+      "attempts": 1,
+      "declined": 1,
+      "refusal_reason": "likely_product_regression",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "classname-rename",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 18.937,
+      "attempts": 2,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "cta-rename-handler-dropped",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 25.887,
+      "attempts": 2,
+      "declined": 1,
+      "refusal_reason": "likely_product_regression",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "delayed-cta",
+      "scenario_class": "timing",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 23.86,
+      "attempts": 1,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "disabled-submit",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 13.453,
+      "attempts": 0,
+      "declined": 1,
+      "refusal_reason": "likely_product_regression",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "id-rename",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 14.529,
+      "attempts": 1,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "id-rename-submit-dropped",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 25.249,
+      "attempts": 1,
+      "declined": 1,
+      "refusal_reason": "likely_product_regression",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "jsx-context",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "skipped",
+      "run": 1,
+      "latency_seconds": 0.0,
+      "attempts": null,
+      "declined": null,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "label-rename",
+      "scenario_class": "accessible_name_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 15.716,
+      "attempts": 1,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "product-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 12.604,
+      "attempts": 0,
+      "declined": 1,
+      "refusal_reason": "likely_product_regression",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "settings-delete-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 14.03,
+      "attempts": 1,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "settings-delete-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 25.133,
+      "attempts": 1,
+      "declined": 1,
+      "refusal_reason": "likely_product_regression",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "settings-notifications-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 39.135,
+      "attempts": 3,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "settings-notifications-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 46.516,
+      "attempts": 3,
+      "declined": 0,
+      "refusal_reason": "insufficient_evidence",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "settings-save-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 14.98,
+      "attempts": 1,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "settings-save-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 28.211,
+      "attempts": 1,
+      "declined": 1,
+      "refusal_reason": "likely_product_regression",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "settings-theme-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 20.155,
+      "attempts": 1,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "settings-theme-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 26.524,
+      "attempts": 1,
+      "declined": 1,
+      "refusal_reason": "likely_product_regression",
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "split-submit",
+      "scenario_class": "ambiguous",
+      "expected_outcome": "refuse",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 13.233,
+      "attempts": 1,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "wrapper-added",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "actual_outcome": "repair",
+      "run": 1,
+      "latency_seconds": 15.717,
+      "attempts": 1,
+      "declined": 0,
+      "refusal_reason": null,
+      "model_cost_usd": null,
+      "error": null
+    },
+    {
+      "name": "wrong-base-url",
+      "scenario_class": "environment",
+      "expected_outcome": "refuse",
+      "actual_outcome": "refuse",
+      "run": 1,
+      "latency_seconds": 31.26,
+      "attempts": 0,
+      "declined": 3,
+      "refusal_reason": "insufficient_evidence",
+      "model_cost_usd": null,
+      "error": null
+    }
+  ],
+  "metrics": {
+    "false_green_rate": 0.0,
+    "repair_precision": 0.9545454545454546,
+    "correct_refusal_rate": 0.9545454545454546,
+    "incorrect_refusal_rate": 0.0,
+    "refusal_accuracy": 0.9545454545454546,
+    "error_count": 0,
+    "sample_sizes": {
+      "false_green_rate": 20,
+      "repair_precision": 22,
+      "correct_refusal_rate": 22,
+      "incorrect_refusal_rate": 21,
+      "refusal_accuracy": 22
+    }
+  },
+  "gates": [
+    {
+      "name": "false_green_rate",
+      "threshold": "= 0%",
+      "value": 0.0,
+      "sample_size": 20,
+      "status": "pass",
+      "scenarios_needed": 0
+    },
+    {
+      "name": "refusal_accuracy",
+      "threshold": ">= 95%",
+      "value": 0.9545454545454546,
+      "sample_size": 22,
+      "status": "pass",
+      "scenarios_needed": 0
+    },
+    {
+      "name": "incorrect_refusal_rate",
+      "threshold": "<= 20%",
+      "value": 0.0,
+      "sample_size": 21,
+      "status": "pass",
+      "scenarios_needed": 0
+    },
+    {
+      "name": "error_count",
+      "threshold": "= 0",
+      "value": 0.0,
+      "sample_size": 43,
+      "status": "pass",
+      "scenarios_needed": 0
+    }
+  ],
+  "per_class": [
+    {
+      "scenario_class": "selector_drift",
+      "scenarios": 20,
+      "skipped": 1,
+      "expected_repair": 19,
+      "expected_refuse": 0,
+      "repaired": 19,
+      "refused": 0,
+      "errors": 0,
+      "correct": 19,
+      "mean_latency_seconds": 20.632,
+      "mean_attempts": 1.316,
+      "runs": 19
+    },
+    {
+      "scenario_class": "accessible_name_drift",
+      "scenarios": 1,
+      "skipped": 0,
+      "expected_repair": 1,
+      "expected_refuse": 0,
+      "repaired": 1,
+      "refused": 0,
+      "errors": 0,
+      "correct": 1,
+      "mean_latency_seconds": 15.716,
+      "mean_attempts": 1.0,
+      "runs": 1
+    },
+    {
+      "scenario_class": "timing",
+      "scenarios": 1,
+      "skipped": 0,
+      "expected_repair": 1,
+      "expected_refuse": 0,
+      "repaired": 1,
+      "refused": 0,
+      "errors": 0,
+      "correct": 1,
+      "mean_latency_seconds": 23.86,
+      "mean_attempts": 1.0,
+      "runs": 1
+    },
+    {
+      "scenario_class": "ambiguous",
+      "scenarios": 1,
+      "skipped": 0,
+      "expected_repair": 0,
+      "expected_refuse": 1,
+      "repaired": 1,
+      "refused": 0,
+      "errors": 0,
+      "correct": 0,
+      "mean_latency_seconds": 13.233,
+      "mean_attempts": 1.0,
+      "runs": 1
+    },
+    {
+      "scenario_class": "product_regression",
+      "scenarios": 20,
+      "skipped": 0,
+      "expected_repair": 0,
+      "expected_refuse": 20,
+      "repaired": 0,
+      "refused": 20,
+      "errors": 0,
+      "correct": 20,
+      "mean_latency_seconds": 30.196,
+      "mean_attempts": 1.4,
+      "runs": 20
+    },
+    {
+      "scenario_class": "environment",
+      "scenarios": 1,
+      "skipped": 0,
+      "expected_repair": 0,
+      "expected_refuse": 1,
+      "repaired": 0,
+      "refused": 1,
+      "errors": 0,
+      "correct": 1,
+      "mean_latency_seconds": 31.26,
+      "mean_attempts": 0.0,
+      "runs": 1
+    }
+  ],
+  "repeats": 1,
+  "scenarios": [
+    {
+      "name": "account-avatar-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 32.066,
+      "mean_attempts": 2.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "account-avatar-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "insufficient_evidence": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 48.164,
+      "mean_attempts": 3.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "account-email-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 13.632,
+      "mean_attempts": 1.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "account-email-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "loop_cap_reached": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 22.452,
+      "mean_attempts": 3.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "account-password-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 52.415,
+      "mean_attempts": 3.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "account-password-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "likely_product_regression": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 25.602,
+      "mean_attempts": 1.0,
+      "mean_declined": 1.0
+    },
+    {
+      "name": "account-signout-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 21.207,
+      "mean_attempts": 1.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "account-signout-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "likely_product_regression": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 27.89,
+      "mean_attempts": 1.0,
+      "mean_declined": 1.0
+    },
+    {
+      "name": "catalog-detail-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 17.58,
+      "mean_attempts": 1.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "catalog-detail-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "likely_product_regression": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 26.222,
+      "mean_attempts": 1.0,
+      "mean_declined": 1.0
+    },
+    {
+      "name": "catalog-pagination-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 15.618,
+      "mean_attempts": 1.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "catalog-pagination-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "likely_product_regression": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 28.774,
+      "mean_attempts": 1.0,
+      "mean_declined": 1.0
+    },
+    {
+      "name": "catalog-search-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 16.382,
+      "mean_attempts": 1.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "catalog-search-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "loop_cap_reached": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 48.671,
+      "mean_attempts": 3.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "catalog-sort-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 14.501,
+      "mean_attempts": 1.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "catalog-sort-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "likely_product_regression": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 24.769,
+      "mean_attempts": 1.0,
+      "mean_declined": 1.0
+    },
+    {
+      "name": "checkout-coupon-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 16.514,
+      "mean_attempts": 1.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "checkout-coupon-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "likely_product_regression": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 23.507,
+      "mean_attempts": 1.0,
+      "mean_declined": 1.0
+    },
+    {
+      "name": "checkout-place-order-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 13.29,
+      "mean_attempts": 1.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "checkout-place-order-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "likely_product_regression": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 23.425,
+      "mean_attempts": 1.0,
+      "mean_declined": 1.0
+    },
+    {
+      "name": "checkout-quantity-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 27.911,
+      "mean_attempts": 1.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "checkout-quantity-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "guardrail_violation": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 76.058,
+      "mean_attempts": 2.0,
+      "mean_declined": 1.0
+    },
+    {
+      "name": "checkout-remove-item-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 13.415,
+      "mean_attempts": 1.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "checkout-remove-item-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "likely_product_regression": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 24.816,
+      "mean_attempts": 1.0,
+      "mean_declined": 1.0
+    },
+    {
+      "name": "classname-rename",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 18.937,
+      "mean_attempts": 2.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "cta-rename-handler-dropped",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "likely_product_regression": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 25.887,
+      "mean_attempts": 2.0,
+      "mean_declined": 1.0
+    },
+    {
+      "name": "delayed-cta",
+      "scenario_class": "timing",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 23.86,
+      "mean_attempts": 1.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "disabled-submit",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "likely_product_regression": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 13.453,
+      "mean_attempts": 0.0,
+      "mean_declined": 1.0
+    },
+    {
+      "name": "id-rename",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 14.529,
+      "mean_attempts": 1.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "id-rename-submit-dropped",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "likely_product_regression": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 25.249,
+      "mean_attempts": 1.0,
+      "mean_declined": 1.0
+    },
+    {
+      "name": "jsx-context",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 0,
+      "outcomes": {
+        "skipped": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": null,
+      "mean_attempts": null,
+      "mean_declined": null
+    },
+    {
+      "name": "label-rename",
+      "scenario_class": "accessible_name_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 15.716,
+      "mean_attempts": 1.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "product-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "likely_product_regression": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 12.604,
+      "mean_attempts": 0.0,
+      "mean_declined": 1.0
+    },
+    {
+      "name": "settings-delete-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 14.03,
+      "mean_attempts": 1.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "settings-delete-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "likely_product_regression": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 25.133,
+      "mean_attempts": 1.0,
+      "mean_declined": 1.0
+    },
+    {
+      "name": "settings-notifications-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 39.135,
+      "mean_attempts": 3.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "settings-notifications-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "insufficient_evidence": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 46.516,
+      "mean_attempts": 3.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "settings-save-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 14.98,
+      "mean_attempts": 1.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "settings-save-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "likely_product_regression": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 28.211,
+      "mean_attempts": 1.0,
+      "mean_declined": 1.0
+    },
+    {
+      "name": "settings-theme-drift",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 20.155,
+      "mean_attempts": 1.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "settings-theme-regression",
+      "scenario_class": "product_regression",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "likely_product_regression": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 26.524,
+      "mean_attempts": 1.0,
+      "mean_declined": 1.0
+    },
+    {
+      "name": "split-submit",
+      "scenario_class": "ambiguous",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 13.233,
+      "mean_attempts": 1.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "wrapper-added",
+      "scenario_class": "selector_drift",
+      "expected_outcome": "repair",
+      "runs": 1,
+      "outcomes": {
+        "repair": 1
+      },
+      "refusal_reasons": {},
+      "stable": true,
+      "mean_latency_seconds": 15.717,
+      "mean_attempts": 1.0,
+      "mean_declined": 0.0
+    },
+    {
+      "name": "wrong-base-url",
+      "scenario_class": "environment",
+      "expected_outcome": "refuse",
+      "runs": 1,
+      "outcomes": {
+        "refuse": 1
+      },
+      "refusal_reasons": {
+        "insufficient_evidence": 1
+      },
+      "stable": true,
+      "mean_latency_seconds": 31.26,
+      "mean_attempts": 0.0,
+      "mean_declined": 3.0
+    }
+  ],
+  "total_latency_seconds": 1080.01,
+  "total_model_cost_usd": null
+}
