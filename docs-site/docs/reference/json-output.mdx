@@ -1,6 +1,6 @@
 ---
 title: "JSON output reference"
-description: "Every field of the machine-readable --json contract (schema 2.1), when each document is emitted, and payloads captured from real runs."
+description: "Every field of the machine-readable --json contract (schema 2.2), when each document is emitted, and payloads captured from real runs."
 ---
 
 import CodeBlock from "@theme/CodeBlock";
@@ -18,7 +18,7 @@ import review from "@site/src/data/json-contract/review.json";
 # JSON output reference
 
 `e2e-healer heal --json` and `e2e-healer review --json` write one machine-readable document to
-stdout. This page documents every field of that contract at schema version `2.1`, says when a
+stdout. This page documents every field of that contract at schema version `2.2`, says when a
 document is emitted at all, and shows payloads **captured from real runs** rather than written by
 hand. For the exit codes alone see [Exit codes & JSON output](./exit-codes); for how the contract
 may change see the [schema versioning policy](./schema-versioning).
@@ -79,7 +79,7 @@ have `is_success: false` (see `is_success` below), so always check it rather tha
 
 | Field | Type | Present | Meaning and what to do with it |
 | --- | --- | --- | --- |
-| `schema_version` | string | always | Contract version, currently `"2.1"`. Check the major before reading anything else. |
+| `schema_version` | string | always | Contract version, currently `"2.2"`. Check the major before reading anything else. |
 | `kind` | string | always | `"repair"`. |
 | `test_script_path` | string | always | The test that was repaired. In single-file mode this is the path as given on the command line; in suite mode it is an absolute path for tests the repair loop ran on. Do not assume it is relative to the repository. |
 | `is_success` | boolean | always | `true` when the repair was accepted. In suite mode it becomes `false` if the test still failed in the final full-suite rerun (its last candidate is then marked `rejection: "final_suite_failed"`). |
@@ -93,7 +93,7 @@ The workflow declined to change the test. The test file is left as it was.
 
 | Field | Type | Present | Meaning and what to do with it |
 | --- | --- | --- | --- |
-| `schema_version` | string | always | Contract version, currently `"2.1"`. |
+| `schema_version` | string | always | Contract version, currently `"2.2"`. |
 | `kind` | string | always | `"refusal"`. |
 | `test_script_path` | string | always | The test that was not changed. Same path rules as in `RepairSummary`. |
 | `reason` | string | always | Why the run ended, from the closed set in [Refusal reasons](#refusal-reasons). It describes how the **final** cycle ended; earlier candidates may have been rejected for other reasons, which `evidence.candidates` records. Reject values you do not recognize. |
@@ -107,7 +107,7 @@ The result of healing every failing test in a suite.
 
 | Field | Type | Present | Meaning and what to do with it |
 | --- | --- | --- | --- |
-| `schema_version` | string | always | Contract version, currently `"2.1"`. Entries in `results` carry the same version. |
+| `schema_version` | string | always | Contract version, currently `"2.2"`. Entries in `results` carry the same version. |
 | `kind` | string | always | `"suite"`. |
 | `total_failed` | integer | always | Number of failing test **files**, which equals the length of `results`. |
 | `healed` | integer | always | Number of entries in `results` that are a `RepairSummary` with `is_success: true`. A test that failed in the suite but passed when rerun on its own is counted here, with no edit made. |
@@ -120,7 +120,7 @@ Review mode suggests source-level fixes and never edits the test.
 
 | Field | Type | Present | Meaning and what to do with it |
 | --- | --- | --- | --- |
-| `schema_version` | string | always | Contract version, currently `"2.1"`. |
+| `schema_version` | string | always | Contract version, currently `"2.2"`. |
 | `kind` | string | always | `"review"`. |
 | `test_script_path` | string | always | The test that was reviewed, as given on the command line. |
 | `findings` | array of `ReviewFinding` | always | Source-level suggestions; empty when there are none or the review did not complete. |
@@ -159,7 +159,9 @@ break these rules; that is often why it was rejected.
 ### `EvidenceBundle`
 
 Redacted, reviewable evidence behind a repair or a refusal. Sensitive values and URL query values
-are redacted before they are written.
+are redacted before they are written, and the evidence that was sent to a model went through the
+same redaction first (see [the data boundary](../safety/data-boundary) for exactly what leaves the
+machine).
 
 | Field | Type | Present | Meaning and what to do with it |
 | --- | --- | --- | --- |
@@ -169,6 +171,21 @@ are redacted before they are written.
 | `aria_snapshot` | `SnapshotReference` or null | always | A reference to the failure-time ARIA snapshot, or `null` when Playwright did not leave one for this test. |
 | `candidates` | array of `CandidateEvidence` | always | Every repair candidate, in the order it was produced. Empty when no candidate was produced, for example after a provider failure. |
 | `loop_history` | array of `LoopEvidence` | always | Every stage of every cycle, in order. |
+| `provenance` | `ProviderProvenance` or null | always | Where this run sent evidence, and whether anything was redacted first. `null` when the repair loop never ran, for example a suite test that was outside the workspace or that passed when rerun alone, because then nothing was sent to a provider. |
+
+### `ProviderProvenance`
+
+A non-sensitive record of the trip the evidence made. It contains no prompt text, no model output
+and no credential, so it is safe to log or to archive with the result.
+
+| Field | Type | Present | Meaning and what to do with it |
+| --- | --- | --- | --- |
+| `provider` | string | always | The configured backend, for example `"anthropic"`, `"openai"`, `"ollama"` or `"deepseek"`. An **open** set: ignore values you do not recognize. |
+| `model` | string | always | The model name the backend was asked to run. |
+| `endpoint` | string | always | The endpoint the client actually used, with URL credentials and sensitive query values removed. Empty configuration means the provider default, so this can differ from what you set. |
+| `mode` | string | always | `"local"` when the endpoint host is loopback or a private/link-local address, otherwise `"remote"`. Derived from the address, without a DNS lookup, so a hostname that resolves to a private address is still reported as `remote`. |
+| `redaction_applied` | boolean | always | `true` when the evidence boundary replaced at least one value in a prompt. `false` means the built-in credential patterns and your configured values found nothing. |
+| `redaction_count` | integer | always | How many values were replaced across every prompt this run built. Counts only replacements that changed the text, and a URL that is passed through unchanged is not counted. Zero when nothing matched. |
 
 ### `EvidenceDomDiff`
 
@@ -302,7 +319,9 @@ uv run e2e-healer ...
 unchanged without changing the JSON. Model output varies between runs, so the same command can end
 differently; that variation is how the different refusal reasons below were captured. The only edit
 made to any payload is in the suite example, where the absolute workspace path is replaced with
-`/path/to/E2E-Self-Heal`.
+`/path/to/E2E-Self-Heal`. Each payload's `provenance` block records the provider from the capture
+commands above; none of those runs had redaction configured or triggered, so `redaction_applied`
+is `false` with a count of `0`.
 
 ### Repair
 

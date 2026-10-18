@@ -3,8 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from app.evidence import add_candidate, add_loop_event, build_evidence_bundle
-from app.schemas import AstLockRejection, EvidenceDomDiff, PatchInstruction
+import app.config as config_module
+from app.evidence import (
+    add_candidate,
+    add_loop_event,
+    build_evidence_bundle,
+    build_unavailable_evidence,
+)
+from app.schemas import AstLockRejection, EvidenceDomDiff, PatchInstruction, ProviderProvenance
 from app.state import AgentState
 from app.verify.ast_lock import AstLockVerdict
 
@@ -74,9 +80,11 @@ def test_evidence_bundle_redacts_sensitive_values_and_references_snapshot(
     assert "secret" not in bundle.candidates[0].rejection
     assert bundle.aria_snapshot is not None
     assert bundle.aria_snapshot.source_path == "test-results/login/error-context.md"
+    # URL redaction keeps the marker percent-encoded, so a URL reads the same in a prompt, a
+    # log line, and a persisted Shadow snapshot.
     assert (
         bundle.aria_snapshot.sha256
-        == hashlib.sha256(b"page: https://example.test/?token=[REDACTED]").hexdigest()
+        == hashlib.sha256(b"page: https://example.test/?token=%5BREDACTED%5D").hexdigest()
     )
 
 
@@ -163,3 +171,50 @@ def test_candidate_and_loop_history_preserve_attempt_order() -> None:
         (1, "llm"),
     ]
     assert bundle.loop_history[0].stage == "patch_generator"
+
+
+# --- provider provenance (#377) -----------------------------------------------------------
+
+
+def test_evidence_bundle_reports_where_the_evidence_went(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(config_module.settings, "llm_provider", "anthropic")
+    monkeypatch.setattr(config_module.settings, "llm_model", "claude-sonnet-4-6")
+
+    bundle = build_evidence_bundle(_state(), initial_error_log="Error: locator('#login') timed out")
+
+    assert bundle.provenance == ProviderProvenance(
+        provider="anthropic",
+        model="claude-sonnet-4-6",
+        endpoint="https://api.anthropic.com",
+        mode="remote",
+        redaction_applied=False,
+        redaction_count=0,
+    )
+
+
+def test_evidence_bundle_carries_the_boundary_redaction_count(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(config_module.settings, "llm_provider", "ollama")
+    monkeypatch.setattr(config_module.settings, "llm_model", "llama3.2")
+    monkeypatch.setattr(config_module.settings, "llm_base_url", "http://localhost:11434")
+
+    bundle = build_evidence_bundle(
+        _state(redaction_count=2, redaction_applied=True),
+        initial_error_log="Error: locator('#login') timed out",
+    )
+
+    assert bundle.provenance is not None
+    assert bundle.provenance.mode == "local"
+    assert bundle.provenance.endpoint == "http://localhost:11434"
+    assert bundle.provenance.redaction_count == 2
+    assert bundle.provenance.redaction_applied is True
+
+
+def test_unavailable_evidence_has_no_provenance() -> None:
+    # The graph never ran, so nothing was sent anywhere and there is nothing to report.
+    bundle = build_unavailable_evidence("Error: suite target missing", [])
+
+    assert bundle.provenance is None

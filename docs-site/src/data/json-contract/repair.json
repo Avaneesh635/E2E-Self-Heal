@@ -1,5 +1,5 @@
 {
-  "schema_version": "2.1",
+  "schema_version": "2.2",
   "kind": "repair",
   "test_script_path": "scenarios/id-rename/spec.ts",
   "is_success": true,
@@ -121,6 +121,14 @@
           "reason": null
         }
       }
-    ]
+    ],
+    "provenance": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6",
+      "endpoint": "https://api.anthropic.com",
+      "mode": "remote",
+      "redaction_applied": false,
+      "redaction_count": 0
+    }
   }
 }

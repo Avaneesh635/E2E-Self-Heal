@@ -1,0 +1,123 @@
+---
+title: "Data boundary & redaction"
+description: "What repair evidence leaves the machine, what is redacted before it does, what is deliberately not, and how to check the decision in the output."
+---
+
+# Data boundary & redaction
+
+The healer reads your failing test, your logs, and the source diff, and asks a model to repair the
+test. That makes the model provider part of your data boundary: whatever is in the prompt has left
+the machine. This page describes that boundary precisely, so the decision is configuration you can
+see rather than an assumption.
+
+## What is sent to the provider
+
+Four places in the graph build a prompt, and all four read their evidence through the same
+boundary:
+
+| Prompt | Built from |
+| --- | --- |
+| Diagnosis | failure log, DOM diff context, ARIA snapshot, test source |
+| Patch generation | the same evidence plus the current candidate's feedback |
+| Review mode | the failure log, the DOM diff, and the changed test source |
+| Decline verdict | the diagnosis, when the model proposed no change |
+
+Test **source** is included because a selector cannot be repaired without it. Everything textual
+in those prompts — the Playwright log, the ARIA snapshot, DOM attribute values, the model's own
+diagnosis text — is redacted first, and the failure line number is taken from the original log so
+redaction can never shift where the fix is applied.
+
+## What is redacted
+
+Two layers, applied to every prompt, every `--json` evidence field, and every structured log line:
+
+**Built-in credential patterns**, always on:
+
+- `Authorization: Bearer|Basic|Token <value>` headers.
+- `password=`, `token=`, `api_key=`, `secret=`, `credential=`-style pairs.
+- URL userinfo (`https://user:password@host`) and the whole URL fragment.
+- URL query values whose key is sensitive (`token`, `access_token`, `api_key`, `password`,
+  `secret`, `session`, `cookie`, `credential`, …). Non-sensitive query values such as `page=2` are
+  preserved, so a URL still says what it was.
+- Sensitive JSON keys in structured evidence (`password`, `token`, `session`, …).
+
+The same primitives redact the Shadow runtime's persisted snapshots, so a redacted URL reads the
+same way in a prompt, a log line, and a saved snapshot.
+
+**Values you configure**, for what the patterns cannot know:
+
+```bash
+E2E_HEALER_SENSITIVE_ENV_VARS=STAGING_PASSWORD,INTERNAL_API_TOKEN
+E2E_HEALER_SENSITIVE_VALUES=your-test-tenant-identifier
+```
+
+Environment variables are resolved **by name at redaction time**, so their values are never copied
+into a settings object or a log. Literal values are held as masked secrets. Both are validated at
+load: a name that is not a valid environment variable, or a literal shorter than four characters,
+fails loudly instead of silently redacting nothing. Longer values are replaced first, so a secret
+that contains another configured secret is removed whole.
+
+Everything replaced becomes `[REDACTED]`.
+
+## What is not redacted, and why
+
+- **The test source.** The model must see the locator it is repairing, and a free-text secret in a
+  test file is indistinguishable from ordinary code. If a test hard-codes a credential, name it in
+  `E2E_HEALER_SENSITIVE_VALUES` — that is the supported way to keep it out of the prompt.
+- **Values you did not name.** There is no entropy or shape heuristic: the boundary replaces known
+  patterns and configured values, never guesses. A secret in an unusual format passes through
+  unless you configure it.
+- **Names of environment variables.** Only the values are replaced; a variable name is not secret
+  and is often needed to make the log readable.
+- **Hostnames and paths.** A private endpoint host is reported as it is (with credentials and
+  sensitive query values removed), because the point of `provenance` is to say where evidence went.
+
+## Where the evidence went: `provenance`
+
+Every `--json` result whose repair loop ran carries an `evidence.provenance` block:
+
+```json
+{
+  "provider": "ollama",
+  "model": "llama3.1",
+  "endpoint": "http://localhost:11434",
+  "mode": "local",
+  "redaction_applied": false,
+  "redaction_count": 0
+}
+```
+
+- `mode` is `local` when the endpoint host is loopback or a private/link-local address, otherwise
+  `remote`. It is derived from the address alone, with **no DNS lookup**, so a hostname that
+  happens to resolve to a private address is reported `remote` — the conservative answer.
+- `endpoint` is the endpoint the client actually used, not the raw configuration: an empty
+  `E2E_HEALER_LLM_BASE_URL` reports the provider default.
+- `redaction_applied` and `redaction_count` say whether the boundary replaced anything while
+  building prompts. `false` with a count of `0` means nothing matched — it is not a claim that the
+  evidence was harmless.
+
+The block is `null` when the repair loop never ran (for example a suite test that passed when
+rerun on its own), because then nothing was sent to a provider.
+
+## Logs
+
+The structured-log pipeline runs every event through the same redaction before rendering, including
+exception text. Logs go to stderr and the JSON document to stdout, so redirecting the result never
+captures a log line.
+
+## Keeping evidence on your machine
+
+The boundary limits what is sent, but it cannot make a remote provider local. To keep the evidence
+inside your network, select an endpoint that is inside it — Ollama, or any OpenAI-compatible server
+on `localhost` or a private address. The provider and endpoint are configuration, and no code
+change is involved; see
+[choosing where the evidence goes](../reference/configuration#choosing-where-the-evidence-goes).
+
+## Verifying the boundary
+
+- Read `evidence.provenance` in any `--json` result: `mode` says local or remote, and the counters
+  say whether redaction ran.
+- Run the healer with `E2E_HEALER_LOG_LEVEL=DEBUG` and confirm no configured value appears in
+  stderr.
+- The boundary is covered by tests at each prompt site: a configured secret must not appear in the
+  prompt a provider would receive, in the structured logs, or in the emitted JSON.

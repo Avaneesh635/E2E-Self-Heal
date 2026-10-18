@@ -1,17 +1,159 @@
 ---
 title: "Configuration"
-description: "All E2E_HEALER_* environment variables and their defaults."
+description: "Every E2E_HEALER_* variable, the provider matrix, local-first recipes, and the redaction boundary settings."
 ---
 
 # Configuration
 
-All E2E_HEALER_* environment variables and their defaults.
+Every setting uses the `E2E_HEALER_` prefix and is read from the environment or a `.env` file in
+the working directory. [`/.env.example`](https://github.com/Lee-Dongwook/E2E-Self-Heal/blob/main/.env.example)
+lists them all with the same defaults. Configuration is validated at load: an out-of-range loop
+cap, a provider without a model, or a redaction setting that could never match fails immediately
+instead of mid-run.
 
-:::note Draft — scaffolded page
-This page is a stub. Planned contents:
+LLM configuration is **provider-neutral**: pick a backend with `E2E_HEALER_LLM_PROVIDER`, then
+configure it through the generic `E2E_HEALER_LLM_*` variables. The legacy `E2E_HEALER_NVIDIA_*`
+variables still work — when the provider is `nvidia` they are folded into the generic ones, so
+existing setups need no changes.
 
-- Full config table from the README/.env.example
-- Model + endpoint settings
-- Loop cap, verify toggle, node cmd
-- Sandbox-related vars
-:::
+## Provider matrix
+
+| Provider | Install | Required credentials | Structured outputs | Notes |
+| --- | --- | --- | --- | --- |
+| `nvidia` | built-in (default) | `E2E_HEALER_LLM_API_KEY` or legacy `NVIDIA_API_KEY` | strict `json_schema` | OpenAI-compatible NIM endpoint; default model `openai/gpt-oss-120b`. |
+| `openai` | built-in | `E2E_HEALER_LLM_API_KEY` or `OPENAI_API_KEY` | strict `json_schema` | Set `E2E_HEALER_LLM_BASE_URL` for Azure or any OpenAI-compatible server. |
+| `anthropic` | `ai-driven-e2e[anthropic]` | `E2E_HEALER_LLM_API_KEY` or `ANTHROPIC_API_KEY` | tool-use | No configurable endpoint; schema enforced through Claude tool-use. |
+| `ollama` | `ai-driven-e2e[ollama]` | none (local) | native JSON-schema `format` | Fully offline; default endpoint `http://localhost:11434`. |
+| `deepseek` | built-in | `E2E_HEALER_LLM_API_KEY` or `DEEPSEEK_API_KEY` | Responses API `json_schema` | Stateless Responses API; `deepseek-v4-flash` only at the default endpoint. |
+| `orcarouter` | built-in | `E2E_HEALER_LLM_API_KEY` or `ORCAROUTER_API_KEY` | LangChain default | Default endpoint `https://api.orcarouter.ai/v1`. |
+
+`E2E_HEALER_LLM_PROVIDER` is a closed set; any other value is rejected at load. On a
+structured-output parse failure the engine retries with tenacity, then falls back to the Patch
+Generator feedback loop, so a flaky JSON response never crashes a run.
+
+## Choosing where the evidence goes
+
+Every provider receives the repair evidence: the failure log, the DOM diff around the failing
+element, the ARIA snapshot, and the test source. [The data boundary](../safety/data-boundary)
+describes exactly what is sent and what is redacted first. If that evidence must not leave your
+machine, use a local endpoint; the choice is configuration only, never a code change.
+
+The reported `provenance.mode` in `--json` is `local` when the endpoint is a loopback or a
+private/link-local address, `remote` otherwise — so you can verify the decision from the result
+itself. See [`ProviderProvenance`](../reference/json-output#providerprovenance).
+
+### Ollama on this machine
+
+Fully local and offline, with no API key:
+
+```bash
+pip install "ai-driven-e2e[ollama]"      # or: uv sync --extra ollama
+E2E_HEALER_LLM_PROVIDER=ollama
+E2E_HEALER_LLM_MODEL=llama3.1
+# E2E_HEALER_LLM_BASE_URL=http://localhost:11434   # default
+```
+
+Pick a model that handles structured output well (`llama3.1`, `qwen2.5-coder`, `mistral-nemo`).
+Smaller models are less reliable at strict JSON; the retry and feedback loop cover that, at the
+cost of extra cycles.
+
+### An OpenAI-compatible server on your machine or LAN
+
+Any server that speaks the OpenAI chat-completions API — vLLM, llama.cpp, LM Studio, an internal
+gateway — works through `openai` plus a base URL:
+
+```bash
+E2E_HEALER_LLM_PROVIDER=openai
+E2E_HEALER_LLM_BASE_URL=http://127.0.0.1:8000/v1
+E2E_HEALER_LLM_MODEL=your-served-model
+E2E_HEALER_LLM_API_KEY=placeholder-key     # many local servers ignore the value but require one
+```
+
+Replace the host with a private address such as `http://192.168.1.20:8000/v1` to use a server on
+your network. Keep the address literal: `local`/`remote` is derived from the address without a
+DNS lookup, so a hostname that resolves to a private address is reported as `remote`.
+
+### Hosted providers
+
+`openai`, `anthropic`, `deepseek` and `orcarouter` send evidence to a third-party endpoint. Use
+them when that is intended, and configure the redaction boundary below for any value that must
+not leave the machine.
+
+## Redaction boundary
+
+Two variables extend the built-in credential patterns (authorization headers, `password=`,
+`token=`-style pairs, and sensitive URL query values) with values specific to your project:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `E2E_HEALER_SENSITIVE_ENV_VARS` | — | Comma-separated **names** of environment variables whose values are redacted. Values are read at redaction time, so they never live in the configuration object. |
+| `E2E_HEALER_SENSITIVE_VALUES` | — | Comma-separated literal values to redact, for secrets that are not in the environment. Masked in logs and model dumps. |
+
+```bash
+E2E_HEALER_SENSITIVE_ENV_VARS=STAGING_PASSWORD,INTERNAL_API_TOKEN
+E2E_HEALER_SENSITIVE_VALUES=your-test-tenant-identifier
+```
+
+Rules, enforced at load:
+
+- Each `SENSITIVE_ENV_VARS` entry must be a valid environment variable name, so a typo fails
+  instead of silently redacting nothing.
+- Each `SENSITIVE_VALUES` entry must be at least 4 characters. A shorter value would replace
+  ordinary words throughout every prompt.
+- Commas separate entries, so a secret containing a comma cannot be configured this way.
+- The placeholder `[REDACTED]` is never treated as a value to replace.
+
+Configured values are replaced in every prompt, in the `--json` evidence, and in structured logs.
+Secrets are never written to the JSON result, and `evidence.provenance.redaction_applied` /
+`redaction_count` record whether the boundary replaced anything. See
+[the data boundary](../safety/data-boundary) for the threat model and its limits.
+
+## Repair-loop settings
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `E2E_HEALER_MAX_LOOPS` | `3` | Repair loop cap. Must be between 1 and 3; the Router owns termination. |
+| `E2E_HEALER_PLAYWRIGHT_CMD` | `npx playwright test` | Playwright invocation used by the Test Runner. |
+| `E2E_HEALER_TEST_TIMEOUT_SECONDS` | `120` | A Playwright run longer than this is killed and treated as a failure. |
+| `E2E_HEALER_TEST_RESULTS_DIR` | `test-results` | Where Playwright writes `error-context.md` failure snapshots. |
+| `E2E_HEALER_JSX_CHUNK_MARGIN_LINES` | `1` | Extra context lines around the enclosing JSX element sent to the model. |
+
+## Selector verification
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `E2E_HEALER_VERIFY_SELECTORS` | `true` | Check patched selectors against the live DOM before re-running the test. |
+| `E2E_HEALER_APP_URL` | — | Page the verifier loads. Empty skips verification; `--app-url` overrides it. |
+| `E2E_HEALER_NODE_CMD` | `node` | Node executable used for the verifier helper. |
+
+## Sandbox settings
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `E2E_HEALER_SANDBOX_MODE` | `relaxed` | `strict`, `relaxed`, or `off`. |
+| `E2E_HEALER_WORKSPACE_ROOT` | `.` | Root directory for strict path checks. |
+| `E2E_HEALER_WRITE_GLOBS` | `*.spec.js,…` | Comma-separated writable test-file globs. |
+| `E2E_HEALER_DENY_GLOBS` | `.env,.git/**,…` | Comma-separated paths the sandbox always blocks. |
+| `E2E_HEALER_ALLOW_TEMP_HELPER` | `true` | Permit the temporary selector-verifier helper file. |
+| `E2E_HEALER_ARCHITECTURE_ALLOW_GLOBS` | `**/*` | Paths a generated patch may touch. |
+| `E2E_HEALER_ARCHITECTURE_DENY_GLOBS` | — | Paths a generated patch may never touch; takes precedence. |
+
+## Notifications and logging
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `E2E_HEALER_SLACK_WEBHOOK_URL` | — | Posts a heal summary to an incoming webhook; a no-op when empty. |
+| `E2E_HEALER_LOG_LEVEL` | `INFO` | Structured log level. Logs go to stderr and pass through the redaction boundary. |
+
+## Provider-specific variables
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `E2E_HEALER_NVIDIA_API_KEY` | — | Legacy NVIDIA NIM key; folded into `LLM_API_KEY` when the provider is `nvidia`. |
+| `E2E_HEALER_NVIDIA_BASE_URL` | `https://integrate.api.nvidia.com/v1` | Legacy OpenAI-compatible endpoint. |
+| `E2E_HEALER_NVIDIA_MODEL` | `openai/gpt-oss-120b` | Legacy default model. |
+| `E2E_HEALER_NVIDIA_MAX_TOKENS` | `4096` | Legacy token cap. |
+| `ORCAROUTER_API_KEY` | — | OrcaRouter key, used when the provider is `orcarouter`. |
+| `ORCAROUTER_BASE_URL` | `https://api.orcarouter.ai/v1` | OrcaRouter endpoint. |
+
+Generic `E2E_HEALER_LLM_*` values take precedence over the provider-specific ones.

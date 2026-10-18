@@ -2,9 +2,11 @@
 
 import logging
 import sys
-from typing import TextIO, cast
+from typing import Any, MutableMapping, TextIO, cast
 
 import structlog
+
+from app.shadow.redaction import redact_value
 
 
 class _CurrentStderr:
@@ -19,6 +21,18 @@ class _CurrentStderr:
 
     def flush(self) -> None:
         sys.stderr.flush()
+
+
+def redact_event(
+    _logger: object, _name: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
+    """Redact every rendered log event, including tracebacks and exception messages.
+
+    A structlog processor rather than a per-call-site rule, so a message built from a Playwright
+    log or a provider error cannot leak a configured secret just because that one caller forgot.
+    Runs after ``format_exc_info`` so a traceback's text is covered too.
+    """
+    return cast(MutableMapping[str, Any], redact_value(dict(event_dict)))
 
 
 def configure_logging(level: str = "INFO") -> None:
@@ -37,6 +51,7 @@ def configure_logging(level: str = "INFO") -> None:
             structlog.processors.TimeStamper(fmt="iso"),
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
+            redact_event,
             structlog.dev.ConsoleRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(logging.getLevelNamesMapping()[level]),

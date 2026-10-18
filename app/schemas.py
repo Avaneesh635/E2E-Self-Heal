@@ -8,8 +8,9 @@ from pydantic import BaseModel, Field
 # Version of the machine-readable CI contract emitted as `--json`. Version 2 adds the
 # ``refusal`` discriminator and closed refusal reasons, which the published compatibility
 # policy classifies as a breaking change. Version 2.1 adds the optional
-# ``CandidateEvidence.ast_lock`` detail object, a compatible minor addition.
-SCHEMA_VERSION: Literal["2.1"] = "2.1"
+# ``CandidateEvidence.ast_lock`` detail object, a compatible minor addition. Version 2.2 adds
+# the optional ``EvidenceBundle.provenance`` object, another compatible minor addition.
+SCHEMA_VERSION: Literal["2.2"] = "2.2"
 
 
 class DomDiff(BaseModel):
@@ -191,6 +192,32 @@ class SelectorHintEvidence(BaseModel):
     priority: Literal["high"]
 
 
+class ProviderProvenance(BaseModel):
+    """Where the repair evidence was sent, and whether it was redacted first.
+
+    Deliberately non-sensitive: no prompt text, no response text, no credential. ``provider``
+    is an open string rather than a closed enum so adding a backend is not a contract change;
+    consumers must tolerate values they do not recognize. ``endpoint`` is the endpoint the
+    client actually used, with URL credentials and sensitive query values removed.
+    """
+
+    provider: str = Field(description="configured provider backend (an open, growing set)")
+    model: str = Field(description="model name the provider was asked to run")
+    endpoint: str = Field(description="redacted endpoint evidence was sent to")
+    mode: Literal["local", "remote"] = Field(
+        description=(
+            "local when the endpoint host is loopback or a private/link-local address, "
+            "otherwise remote; derived from the address, never from DNS"
+        )
+    )
+    redaction_applied: bool = Field(
+        description="whether the evidence boundary replaced at least one value in a prompt"
+    )
+    redaction_count: int = Field(
+        ge=0, description="number of values the evidence boundary replaced while prompting"
+    )
+
+
 class EvidenceBundle(BaseModel):
     """Reviewable, redacted evidence used to decide a repair or refusal."""
 
@@ -200,12 +227,19 @@ class EvidenceBundle(BaseModel):
     aria_snapshot: SnapshotReference | None = None
     candidates: list[CandidateEvidence] = Field(default_factory=list)
     loop_history: list[LoopEvidence] = Field(default_factory=list)
+    provenance: ProviderProvenance | None = Field(
+        default=None,
+        description=(
+            "provider, model, and endpoint that saw the evidence; absent when the graph never "
+            "ran, because then nothing was sent to a provider"
+        ),
+    )
 
 
 class RefusalReport(BaseModel):
     """Machine-readable outcome when the repair workflow refuses to change a test."""
 
-    schema_version: Literal["2.1"] = Field(
+    schema_version: Literal["2.2"] = Field(
         default=SCHEMA_VERSION,
         description="version of this machine-readable contract; bump on breaking changes",
     )
@@ -232,7 +266,7 @@ class RefusalReport(BaseModel):
 class RepairSummary(BaseModel):
     """Machine-readable result emitted for the CI wrapper to consume."""
 
-    schema_version: Literal["2.1"] = Field(
+    schema_version: Literal["2.2"] = Field(
         default=SCHEMA_VERSION,
         description="version of this machine-readable contract; bump on breaking changes",
     )
@@ -253,7 +287,7 @@ HealResult = Annotated[RepairSummary | RefusalReport, Field(discriminator="kind"
 class SuiteSummary(BaseModel):
     """Aggregate result when healing a whole suite (multiple failing tests)."""
 
-    schema_version: Literal["2.1"] = Field(
+    schema_version: Literal["2.2"] = Field(
         default=SCHEMA_VERSION,
         description="version of this machine-readable contract; bump on breaking changes",
     )
@@ -300,7 +334,7 @@ class ReviewOutput(BaseModel):
 class ReviewReport(BaseModel):
     """Machine-readable review result emitted for the CI wrapper to post as PR comments."""
 
-    schema_version: Literal["2.1"] = Field(
+    schema_version: Literal["2.2"] = Field(
         default=SCHEMA_VERSION,
         description="version of this machine-readable contract; bump on breaking changes",
     )

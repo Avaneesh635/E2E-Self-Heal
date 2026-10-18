@@ -44,8 +44,13 @@ logger = structlog.get_logger(__name__)
 
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
 
-# Ollama runs models locally with no credential; the native endpoint (no OpenAI /v1 path).
+# Per-provider endpoints, used both to build the client and to report provenance. Ollama runs
+# models locally with no credential; the native endpoint (no OpenAI /v1 path).
 _OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434"
+_ANTHROPIC_DEFAULT_BASE_URL = "https://api.anthropic.com"
+_OPENAI_DEFAULT_BASE_URL = "https://api.openai.com/v1"
+_NVIDIA_DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1"
+_ORCAROUTER_DEFAULT_BASE_URL = "https://api.orcarouter.ai/v1"
 
 # DeepSeek's Responses API endpoint. It is stateless (no chat-completions /v1 path), and the
 # Responses API currently supports the deepseek-v4-flash model only.
@@ -178,6 +183,27 @@ class DeepSeekResponsesClient:
         return parsed
 
 
+def resolved_endpoint(provider: LLMProvider) -> str:
+    """Return the endpoint the client for ``provider`` talks to.
+
+    Single source of truth shared by the client factory and by provider provenance, so the
+    reported endpoint is the one evidence really left for rather than the raw configuration
+    (an empty ``E2E_HEALER_LLM_BASE_URL`` means the provider default). Anthropic currently
+    has no configurable endpoint: ``ChatAnthropic`` is built without a ``base_url``.
+    """
+    if provider == "anthropic":
+        return _ANTHROPIC_DEFAULT_BASE_URL
+    if provider == "ollama":
+        return settings.llm_base_url or _OLLAMA_DEFAULT_BASE_URL
+    if provider == "deepseek":
+        return settings.llm_base_url or _DEEPSEEK_DEFAULT_BASE_URL
+    if provider == "openai":
+        return settings.llm_base_url or _OPENAI_DEFAULT_BASE_URL
+    if provider == "orcarouter":
+        return settings.llm_base_url or _ORCAROUTER_DEFAULT_BASE_URL
+    return settings.llm_base_url or _NVIDIA_DEFAULT_BASE_URL
+
+
 def _require_key() -> str:
     """Return the configured API key, or raise so callers fail loudly (not silently)."""
     if not settings.llm_api_key:
@@ -232,7 +258,7 @@ def _build_deepseek_client() -> DeepSeekResponsesClient:
     explicit model override is rejected unless the base URL points at a custom
     (OpenAI-compatible) endpoint that may serve other models.
     """
-    base_url = settings.llm_base_url or _DEEPSEEK_DEFAULT_BASE_URL
+    base_url = resolved_endpoint("deepseek")
     model = settings.llm_model or _DEEPSEEK_DEFAULT_MODEL
     if base_url == _DEEPSEEK_DEFAULT_BASE_URL and model != _DEEPSEEK_DEFAULT_MODEL:
         raise ValueError(
@@ -282,24 +308,24 @@ def _build_chat_model(provider: LLMProvider) -> BaseChatModel:
         # at strict JSON). num_predict is Ollama's token-cap name.
         params = {
             "model": settings.llm_model,
-            "base_url": settings.llm_base_url or _OLLAMA_DEFAULT_BASE_URL,
+            "base_url": resolved_endpoint("ollama"),
             "num_predict": settings.llm_max_tokens,
         }
         return ChatOllama(**params)
     if provider == "openai":
-        # Native OpenAI. base_url stays empty for api.openai.com, or points at an
-        # Azure / OpenAI-compatible endpoint via E2E_HEALER_LLM_BASE_URL.
+        # Native OpenAI, or an Azure / OpenAI-compatible endpoint via
+        # E2E_HEALER_LLM_BASE_URL; the resolved default is api.openai.com.
         params = {
             "model": settings.llm_model,
             "api_key": _openai_api_key(),
-            "base_url": settings.llm_base_url or None,
+            "base_url": resolved_endpoint("openai"),
             "max_tokens": settings.llm_max_tokens,
         }
         return ChatOpenAI(**params)
     if provider == "orcarouter":
         return OrcaRouterProvider(
             api_key=_require_key(),
-            base_url=settings.llm_base_url,
+            base_url=resolved_endpoint("orcarouter"),
             model=settings.llm_model,
             max_tokens=settings.llm_max_tokens,
         ).build_chat_model()
@@ -308,7 +334,7 @@ def _build_chat_model(provider: LLMProvider) -> BaseChatModel:
     params = {
         "model": settings.llm_model,
         "api_key": _require_key(),
-        "base_url": settings.llm_base_url or None,
+        "base_url": resolved_endpoint("nvidia"),
         "max_tokens": settings.llm_max_tokens,
     }
     return ChatOpenAI(**params)

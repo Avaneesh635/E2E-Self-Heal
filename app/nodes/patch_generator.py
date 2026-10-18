@@ -8,6 +8,7 @@ from typing import cast
 import structlog
 
 from app.evidence import add_candidate, add_loop_event
+from app.evidence_boundary import prepare_evidence, redaction_state_update
 from app.llm import generate_patch
 from app.prompts.patch_generator import (
     DomDiffEntry,
@@ -551,8 +552,11 @@ def patch_generator(state: AgentState) -> dict:
                 state, "patch_generator", "boundary_denied", error=str(exc)
             ),
         }
+    # The diagnosis can quote the raw log, so it crosses the evidence boundary; the numbered
+    # test source does not, because every instruction must match it byte for byte.
+    prepared = prepare_evidence(state)
     user_prompt = (
-        f"Failure diagnosis:\n{state['analysis_report']}\n\n"
+        f"Failure diagnosis:\n{prepared.analysis_report}\n\n"
         f"Current test code (each line is prefixed with its 1-based number and '| ', which "
         f"is not part of the line):\n{_numbered(state['current_code'])}"
     )
@@ -574,6 +578,7 @@ def patch_generator(state: AgentState) -> dict:
             "verification_report": {},
             "memory_report": {"active": False, "source": "llm"},
             "evidence_history": add_loop_event(state, "patch_generator", "provider_failed"),
+            **redaction_state_update(state, prepared),
         }
 
     try:
@@ -609,6 +614,7 @@ def patch_generator(state: AgentState) -> dict:
             "evidence_history": add_loop_event(
                 state, "patch_generator", "application_rejected", error=str(exc)
             ),
+            **redaction_state_update(state, prepared),
         }
     logger.info("patch_generator_finished", instruction_count=len(output.instructions))
     return {
@@ -626,4 +632,5 @@ def patch_generator(state: AgentState) -> dict:
             "candidate_generated",
             instruction_count=len(output.instructions),
         ),
+        **redaction_state_update(state, prepared),
     }

@@ -11,12 +11,13 @@ It applies to `RepairSummary`, `RefusalReport`, `SuiteSummary`, and `ReviewRepor
 ## Status and scope
 
 Schema `1.0` is the original published baseline. Schema `2.0` added the `refusal`
-discriminator, closed refusal reasons, and evidence bundles. Schema `2.1` is the current output
-contract: it adds the optional `CandidateEvidence.ast_lock` detail object, a compatible minor
-change under the rules below. It is emitted
-by the CLI, documented for GitHub Action workflows, and consumed by the bundled Playwright
-Reporter and review-bot examples. A schema change is evaluated against this published contract,
-not merely against direct runtime checks in this repository.
+discriminator, closed refusal reasons, and evidence bundles. Schema `2.1` added the optional
+`CandidateEvidence.ast_lock` detail object. Schema `2.2` is the current output contract: it adds
+the optional `EvidenceBundle.provenance` object, which records the provider, model, endpoint and
+redaction counts for the evidence a run sent. Both are compatible minor changes under the rules
+below. The contract is emitted by the CLI, documented for GitHub Action workflows, and consumed by
+the bundled Playwright Reporter and review-bot examples. A schema change is evaluated against this
+published contract, not merely against direct runtime checks in this repository.
 
 The schema version identifies the JSON payload contract. It is independent from the
 `e2e-healer` package or GitHub Action release version.
@@ -133,3 +134,19 @@ classified under this policy as follows:
   recognize.
 - It is `null` when another check, not the AST lock, refused the candidate, so it must not be used
   to decide whether a `guardrail_violation` occurred; that is the job of `reason`.
+
+### Worked example: schema 2.2
+
+Schema `2.2` added `provenance` (`provider`, `model`, `endpoint`, `mode`, `redaction_applied`,
+`redaction_count`) to the evidence bundle so a run records where its evidence went and whether the
+boundary replaced anything first:
+
+- The field is optional and absent (`null`) when the repair loop never ran, so a consumer written
+  against `2.1` keeps working by ignoring it: a **minor** change.
+- `provider` is an **open string**, not a closed enum, so supporting a new backend is not a contract
+  change. Consumers must tolerate values they do not recognize; that is why it is not closed.
+- `mode` is a closed enum (`local` / `remote`) whose value is derived from the endpoint address. A new
+  mode, or a change to how an existing one is derived, is a **major** change: a wrapper that gates on
+  `mode === "remote"` would otherwise start sending evidence differently without noticing.
+- `redaction_applied` and `redaction_count` describe what the boundary did, not what it guarantees;
+  a count of `0` must not be read as "this evidence was harmless".

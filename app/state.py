@@ -121,5 +121,9 @@ class AgentState(TypedDict):
     refusal_reason: NotRequired[RefusalReason]  # exact reason for a terminal repair refusal
     evidence_candidates: NotRequired[list[EvidenceCandidateRecord]]
     evidence_history: NotRequired[list[EvidenceLoopRecord]]
+    # Number of values the evidence boundary replaced while preparing model prompts, and whether
+    # anything was replaced at all. Reported in the result as provider provenance.
+    redaction_count: NotRequired[int]
+    redaction_applied: NotRequired[bool]
     loop_count: int  # infinite-loop guard (max: settings.max_loops)
     is_success: bool  # whether the test passed

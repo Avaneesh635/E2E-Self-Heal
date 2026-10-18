@@ -14,6 +14,7 @@ from pydantic import SecretStr
 
 from app import llm
 from app.config import settings
+from app.nodes.diagnoser import diagnoser
 from app.schemas import DiagnosisVerdict
 
 
@@ -513,6 +514,72 @@ def test_generate_diagnosis_verdict_delegates_to_structured(monkeypatch):
     assert isinstance(out, llm.DiagnosisVerdictOutput)
     assert fake.calls[0][:3] == ("structured", "sys", "usr")
     assert fake.calls[0][3] is llm.DiagnosisVerdictOutput
+
+
+def test_a_configured_secret_never_reaches_the_provider_request(monkeypatch):
+    """Acceptance test for the redaction boundary: the request body a provider would receive.
+
+    The recording model stands in for the transport, so the captured ``messages`` are exactly
+    what ``LangChainClient`` hands to the chat model, still serialized as the provider would
+    receive them. The Diagnoser node drives the call, so the boundary is on the path.
+    """
+    secret = "sk-live-5f4d3c2b1a09"
+    sent: list[list[tuple[str, str]]] = []
+
+    class _Response:
+        content = "diagnosis"
+
+    class _RecordingChatModel:
+        def invoke(self, messages):
+            sent.append(messages)
+            return _Response()
+
+    monkeypatch.setenv("E2E_TEST_PROVIDER_KEY", secret)
+    monkeypatch.setattr(settings, "sensitive_env_vars", "E2E_TEST_PROVIDER_KEY")
+    monkeypatch.setattr(settings, "sensitive_values", SecretStr(""))
+    client = llm.LangChainClient(_RecordingChatModel())  # type: ignore[arg-type]
+    monkeypatch.setattr(llm, "_get_client", lambda: client)
+
+    diagnoser(
+        {
+            "test_script_path": "tests/login.spec.ts",
+            "original_code": "",
+            "current_code": "await page.click('#login')\n",
+            "error_log": f"Error: header was authorization: bearer {secret}\n  at a:1:1",
+            "dom_diff_context": [],
+            "dom_snapshot": "",
+            "analysis_report": "",
+            "patch_instructions": {},
+            "verification_report": {},
+            "loop_count": 0,
+            "is_success": False,
+        }
+    )
+
+    assert sent, "the provider was never called"
+    assert secret not in repr(sent)
+    assert "[REDACTED]" in repr(sent)
+
+
+@pytest.mark.parametrize(
+    ("provider", "base_url", "expected"),
+    [
+        ("ollama", "", "http://localhost:11434"),
+        ("ollama", "http://box.internal:11434", "http://box.internal:11434"),
+        ("openai", "", "https://api.openai.com/v1"),
+        ("openai", "http://localhost:8000/v1", "http://localhost:8000/v1"),
+        ("anthropic", "https://ignored.example.com", "https://api.anthropic.com"),
+        ("deepseek", "", "https://api.deepseek.com"),
+        ("nvidia", "", "https://integrate.api.nvidia.com/v1"),
+        ("orcarouter", "", "https://api.orcarouter.ai/v1"),
+    ],
+)
+def test_resolved_endpoint_reports_what_the_client_actually_uses(
+    monkeypatch, provider, base_url: str, expected: str
+) -> None:
+    monkeypatch.setattr(settings, "llm_base_url", base_url)
+
+    assert llm.resolved_endpoint(provider) == expected
 
 
 def test_generate_patch_surfaces_client_error_for_retry_and_feedback(monkeypatch):

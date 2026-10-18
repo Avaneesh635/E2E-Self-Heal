@@ -24,6 +24,7 @@ from app.schemas import (
     LoopEvidence,
     LoopEvidenceDetails,
     PatchInstruction,
+    ProviderProvenance,
     RefusalReason,
     RefusalReport,
     RepairSummary,
@@ -52,6 +53,7 @@ DOCUMENTED_MODELS: list[type[BaseModel]] = [
     AstLockRejection,
     LoopEvidence,
     LoopEvidenceDetails,
+    ProviderProvenance,
 ]
 
 # Reasons the page documents but cannot show a captured payload for, and why.

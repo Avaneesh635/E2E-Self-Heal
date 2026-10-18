@@ -7,6 +7,16 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Local-first provider and evidence-redaction boundary** (#377). Where repair evidence goes is now
+  configuration, never a code change: point `E2E_HEALER_LLM_BASE_URL` at an Ollama or any
+  OpenAI-compatible server on `localhost` or a private address and the evidence stays inside the
+  network. Every `--json` result whose repair loop ran carries `evidence.provenance` — `provider`,
+  `model`, `endpoint` (redacted), `mode` (`local` when the endpoint is loopback or a
+  private/link-local address, derived from the address without a DNS lookup), and
+  `redaction_applied` / `redaction_count` — so the decision is readable from the output. Schema `2.2`
+  is a compatible minor bump; a consumer written against `2.1` keeps working. New docs:
+  [Configuration](docs-site/docs/reference/configuration.mdx) and
+  [Data boundary & redaction](docs-site/docs/safety/data-boundary.mdx).
 - **`--repeat N` for the safety benchmark** (#325). Model output varies between runs, so one run
   per scenario can move a rate by chance (`split-submit` was repaired once and refused twice by the
   same model). `e2e-healer safety-benchmark --repeat 3` runs every scenario three times, in full
@@ -89,6 +99,19 @@ All notable changes to this project are documented here. The format is based on
 - The AST lock now treats the first argument of a `page.<action>(selector, ...)` call (`click`,
   `fill`, `waitForSelector`, ...) as an editable selector, matching the existing scope gate.
   Values, keys, options, and non-`page` receivers stay locked (#286).
+
+### Security
+- **One redaction boundary for every prompt and every log line** (#377). The Diagnoser, Patch
+  Generator, Reviewer and decline verdict now build their prompts from the same prepared evidence,
+  so the failure log, DOM diff, ARIA snapshot and model-reported analysis are redacted once instead
+  of per call site; the failure line number is still taken from the raw log, so redaction cannot
+  shift where a fix is applied. Built-in credential patterns are joined by two new settings:
+  `E2E_HEALER_SENSITIVE_ENV_VARS` (variable **names**, resolved at redaction time so their values
+  never enter the settings object) and `E2E_HEALER_SENSITIVE_VALUES` (literals, held as masked
+  secrets). A mistyped name or a literal shorter than four characters fails at load rather than
+  redacting nothing. Structured-log events pass through the same redaction before rendering,
+  including exception text. Test source is deliberately **not** redacted — name a hard-coded
+  credential in `SENSITIVE_VALUES` to keep it out of a prompt.
 
 ## [0.5.0] - 2026-09-22
 
