@@ -1,0 +1,1 @@
+{"class":"product_regression","expected_outcome":"refuse","failing_selector":"#catalog-next","rationale":"The next-page button's id was renamed like its drift twin, but the onClick handler was removed, so repairing the selector still leaves the page label unchanged and the assertion failing."}

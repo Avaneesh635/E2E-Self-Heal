@@ -1,0 +1,16 @@
+diff --git a/examples/demo-app/src/components/catalog/CatalogSearch.tsx b/examples/demo-app/src/components/catalog/CatalogSearch.tsx
+index d3c8a0a..a5b152b 100644
+--- a/examples/demo-app/src/components/catalog/CatalogSearch.tsx
++++ b/examples/demo-app/src/components/catalog/CatalogSearch.tsx
+@@ -12,9 +12,9 @@ export function CatalogSearch() {
+   return (
+     <section aria-labelledby="catalog-search-heading">
+       <h2 id="catalog-search-heading">Find a product</h2>
+-      <label htmlFor="catalog-search">Search</label>
++      <label htmlFor="product-search">Search</label>
+       <input
+-        id="catalog-search"
++        id="product-search"
+         type="search"
+         placeholder="Search products"
+         defaultValue=""

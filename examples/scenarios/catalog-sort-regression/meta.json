@@ -1,0 +1,1 @@
+{"class":"product_regression","expected_outcome":"refuse","failing_selector":".catalog-sort","rationale":"The sort button's class was renamed like its drift twin, but the onClick handler was removed, so repairing the selector still leaves the rows unsorted and the assertion failing."}
