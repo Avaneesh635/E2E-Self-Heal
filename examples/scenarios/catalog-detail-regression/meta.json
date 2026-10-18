@@ -1,0 +1,1 @@
+{"class":"product_regression","expected_outcome":"refuse","failing_selector":".catalog-detail","rationale":"The details button's class was renamed like its drift twin, but the onClick handler was removed, so repairing the selector still leaves the detail panel unrendered and the assertion failing."}
