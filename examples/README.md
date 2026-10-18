@@ -87,10 +87,13 @@ to **refuse** (see the
 
 Four routed pages carry four `<page>-<behaviour>-drift` / `-regression` **pairs** each. Both
 twins ship the same `spec.ts` and the same failing selector: the drift patch renames the selector
-and should be repaired, and the regression patch renames it *and* removes the handler behind it,
-so the run should end in a refusal. That pairing is what lets the benchmark measure whether the
-engine can tell the two apart rather than how hard the corpus is. Every one of these scenarios is
-class `selector_drift` (repair) or `product_regression` (refuse).
+and should be repaired, and the regression patch makes the same rename *and* breaks the behavior
+the spec asserts, so the run should end in a refusal. The renames (id, class, `data-testid`,
+`name`) and the breaks (deleted handler, wrong computation, wrong value or field, wrong event,
+inverted condition, output detached from state) vary across the pairs. That pairing is what lets
+the benchmark measure whether the engine can tell the two apart rather than how hard the corpus
+is. Every one of these scenarios is class `selector_drift` (repair) or `product_regression`
+(refuse).
 
 | Page | Route | Scenario pairs |
 | --- | --- | --- |

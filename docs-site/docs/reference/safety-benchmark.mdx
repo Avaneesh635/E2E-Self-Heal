@@ -203,19 +203,33 @@ The checked-in corpus is 44 scenarios: 43 runnable and one static fixture (`jsx-
 `skipped` and in no rate). Every rate gate is therefore enforceable on a full run, and the corpus
 cannot shrink without a gate going back to `insufficient_sample`:
 
-| Population | Scenarios | Gate |
+| Population | Scenarios scored | Used by |
 | --- | --- | --- |
-| `product_regression` | 20 | `false_green_rate` |
-| labeled `refuse` | 22 | `correct_refusal_rate` |
-| labeled `repair` | 22 | `incorrect_refusal_rate` |
-| judged (expected refuse, or actually refused) | 22 or more | `refusal_accuracy` |
+| `product_regression` | 20 | `false_green_rate` gate |
+| labeled `refuse` | 22 | `correct_refusal_rate` (reported, not a gate) |
+| labeled `repair` | 21 (22 minus `jsx-context`) | `incorrect_refusal_rate` gate |
+| judged (expected refuse, or actually refused) | 22 or more | `refusal_accuracy` gate |
 
-Sixteen of the regressions come in **pairs** on four demo-app pages: `<page>-<behaviour>-drift` is a
-pure selector rename that should be repaired, and `<page>-<behaviour>-regression` is the same rename
-with the handler behind it removed, which should be refused. Both twins ship the identical spec
-and the same failing selector, so a model that gets one right and the other wrong is measured on
-discrimination rather than on how easy the corpus is. `tests/test_safety_benchmark.py` fails if a
-drift scenario loses its twin, or if the corpus drops below 20 `product_regression` scenarios.
+Sixteen of the regressions come in **pairs** on four demo-app pages: `<page>-<behaviour>-drift`
+renames a selector and should be repaired, and `<page>-<behaviour>-regression` makes the same
+rename and also breaks the behavior the spec asserts, so it should be refused. Both twins ship the
+identical spec and the same failing selector, so a model that gets one right and the other wrong
+is measured on discrimination rather than on how easy the corpus is.
+
+The pairs vary both halves so the twenty regressions are not one mutation repeated:
+
+- **Renames:** an id or class renamed, an id or class replaced by a `data-testid`, or an id
+  replaced by a `name` attribute.
+- **Breaks:** a deleted event handler (on the renamed element or on a sibling), a wrong
+  computation (subtotal, sort order, search predicate, coupon check), a handler that writes the
+  wrong value or reads the wrong field, a handler bound to the wrong event, a broken guard, an
+  inverted condition or label, and output that no longer reads state. Several of these sit outside
+  the JSX the diff analyzer abstracts, so the model sees only the rename.
+
+Distinct is still not independent: the pairs share four small pages and one author, so read a
+0% false-green rate as "no false green on these twenty", not as a population estimate.
+`tests/test_safety_benchmark.py` fails if a drift scenario has no regression twin, or if the
+checked-in corpus can no longer enforce every rate gate.
 
 The four pages the paired scenarios run against, as rendered by `vite preview`:
 
