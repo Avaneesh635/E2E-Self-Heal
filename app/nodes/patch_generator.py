@@ -372,10 +372,24 @@ def _masked_selector_line(text: str) -> str | None:
     return masked
 
 
-def _validate_action_calls(instruction: PatchInstruction) -> None:
-    """Allow selector edits while preserving every other argument (data and options)."""
-    original = _masked_selector_line(instruction.original)
-    replacement = _masked_selector_line(instruction.replacement)
+def _validate_action_calls(
+    instruction: PatchInstruction,
+    *,
+    original_source: str | None = None,
+    replacement_source: str | None = None,
+) -> None:
+    """Allow selector edits while preserving every other argument (data and options).
+
+    A complete source view is required for action calls whose arguments continue onto
+    another line.  The line-only fallback remains useful for callers that validate an
+    instruction before they have the file contents.
+    """
+    original_text = original_source if original_source is not None else instruction.original
+    replacement_text = (
+        replacement_source if replacement_source is not None else instruction.replacement
+    )
+    original = _masked_selector_line(original_text)
+    replacement = _masked_selector_line(replacement_text)
     if (
         original is None
         or replacement is None
@@ -410,14 +424,20 @@ def ast_lock_verdict(error: BaseException) -> AstLockVerdict | None:
 
 
 def _validate_patch_scope(
-    instruction: PatchInstruction, masked_original: str | None = None
+    instruction: PatchInstruction,
+    masked_original: str | None = None,
+    *,
+    action_original: str | None = None,
+    action_replacement: str | None = None,
 ) -> None:
     """Reject edits outside the single-line locator/wait guardrail.
 
     ``masked_original`` is the code-only view of the target line computed against the
     *complete* source (see ``_apply``), so a line that continues a block comment or
     template literal opened on an earlier line is treated as non-code. When omitted,
-    the line is masked in isolation (tests / callers without file context).
+    the line is masked in isolation (tests / callers without file context). Action
+    validation additionally receives complete source views from ``_apply`` so a
+    multi-line action's arguments can be compared safely.
     """
     if "\n" in instruction.replacement or "\r" in instruction.replacement:
         raise PatchApplicationError(
@@ -438,7 +458,11 @@ def _validate_patch_scope(
             f"line {instruction.line} is not limited to a locator or wait condition"
         )
     if _ACTION_CALL.search(original_code) or _ACTION_CALL.search(replacement_code):
-        _validate_action_calls(instruction)
+        _validate_action_calls(
+            instruction,
+            original_source=action_original,
+            replacement_source=action_replacement,
+        )
 
 
 def _enforce_ast_lock(original: str, patched: str) -> None:
@@ -511,7 +535,15 @@ def _apply(code: str, instructions: list[PatchInstruction]) -> str:
                 f"line {instruction.line} no longer matches the expected original text{hint}"
             )
         masked_current, _ = split_line_ending(masked_lines[index])
-        _validate_patch_scope(instruction, masked_original=masked_current)
+        candidate_lines = lines.copy()
+        candidate_lines[index] = instruction.replacement + line_ending
+        candidate = "".join(candidate_lines)
+        _validate_patch_scope(
+            instruction,
+            masked_original=masked_current,
+            action_original=code,
+            action_replacement=candidate,
+        )
         replacements.append((index, instruction.replacement + line_ending))
 
     for index, replacement in replacements:

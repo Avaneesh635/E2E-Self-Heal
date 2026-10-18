@@ -3,6 +3,7 @@ import pytest
 import app.nodes.patch_generator as patch_node
 from app.config import settings
 from app.graph import refusal_finalizer
+from app.nodes.patch_generator import _apply
 from app.schemas import PatchInstruction, PatchOutput, RefusalReason
 from app.state import AgentState
 
@@ -120,3 +121,49 @@ def test_patch_generator_clears_stale_selector_verification(
 
     assert state["verification_report"] == {}
     assert refusal_finalizer(state)["refusal_reason"] is RefusalReason.LOOP_CAP_REACHED
+
+
+def test_apply_allows_selector_edit_on_first_line_of_multiline_action() -> None:
+    code = (
+        "test('avatar upload', async ({ page }) => {\n"
+        "  await page.goto('/profile');\n"
+        "  await page.getByRole('button', { name: 'Upload' }).click();\n"
+        "  await expect(page.getByText('Avatar')).toBeVisible();\n"
+        '  await page.setInputFiles("#avatar-input", {\n'
+        '    name: "avatar.png",\n'
+        '    mimeType: "image/png",\n'
+        '    buffer: Buffer.from("data"),\n'
+        "  });\n"
+        "});\n"
+    )
+    original = '  await page.setInputFiles("#avatar-input", {'
+    replacement = '  await page.setInputFiles("#avatar-file", {'
+    instruction = PatchInstruction(
+        line=5,
+        original=original,
+        replacement=replacement,
+        reason="updated avatar selector",
+    )
+
+    assert _apply(code, [instruction]) == code.replace(original, replacement)
+
+
+def test_apply_rejects_non_selector_edit_on_first_line_of_multiline_action() -> None:
+    code = (
+        '  await page.setInputFiles("#avatar-input", {\n'
+        '    name: "avatar.png",\n'
+        '    mimeType: "image/png",\n'
+        '    buffer: Buffer.from("data"),\n'
+        "  });\n"
+    )
+    original = '  await page.setInputFiles("#avatar-input", {'
+    replacement = '  await page.setInputFiles("#avatar-input", { lastModified: 1,'
+    instruction = PatchInstruction(
+        line=1,
+        original=original,
+        replacement=replacement,
+        reason="changed upload option",
+    )
+
+    with pytest.raises(patch_node.PatchApplicationError, match="argument other than the selector"):
+        _apply(code, [instruction])
