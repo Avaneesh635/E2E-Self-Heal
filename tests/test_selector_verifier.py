@@ -3,7 +3,7 @@
 import app.nodes.selector_verifier as verifier_node
 from app.config import settings
 from app.graph import route_after_verify
-from app.nodes.selector_verifier import _revert, selector_verifier
+from app.nodes.selector_verifier import selector_verifier
 from app.schemas import PatchInstruction, PatchOutput
 from app.state import AgentState
 
@@ -37,16 +37,6 @@ def _state(selector: str = "#new", **overrides) -> AgentState:
     }
     base.update(overrides)  # type: ignore[typeddict-item]
     return base
-
-
-def test_revert_restores_original_line():
-    assert _revert(PATCHED, [_instruction("#new")]) == ORIGINAL
-
-
-def test_revert_preserves_crlf_line_ending():
-    # Reverting must not silently normalize CRLF to LF (regression: "\r\n".endswith("\n")).
-    patched_crlf = "await page.click('#new')\r\n"
-    assert _revert(patched_crlf, [_instruction("#new")]) == "await page.click('#old')\r\n"
 
 
 def test_skips_when_disabled(monkeypatch):

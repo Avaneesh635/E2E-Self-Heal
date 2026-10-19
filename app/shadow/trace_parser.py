@@ -17,7 +17,6 @@ import structlog
 
 from app.shadow.har_entry import (
     duration_ms_from_har,
-    headers_to_dict,
     request_from_har,
     response_from_har,
     started_at_from_har,
@@ -209,11 +208,6 @@ class PlaywrightTraceParser(ITraceParser):
         except KeyError:
             logger.warning("trace_resource_missing", sha1=sha1)
             return None
-
-    @staticmethod
-    def _headers_to_dict(headers: object) -> dict[str, str]:
-        """Convert HAR ``[{"name", "value"}]`` header lists into a plain dict."""
-        return headers_to_dict(headers)
 
     @staticmethod
     def _monotonic_time(entry: dict) -> float:

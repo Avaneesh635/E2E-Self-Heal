@@ -17,23 +17,12 @@ from app.config import settings
 from app.evidence import add_loop_event, update_latest_candidate
 from app.schemas import PatchInstruction
 from app.state import AgentState
-from app.utils.files import atomic_write, split_line_ending
+from app.utils.files import atomic_write
 from app.verify.selector_check import check_selectors
 
 logger = structlog.get_logger(__name__)
 
 _SKIPPED: dict = {"skipped": True, "ok": True}
-
-
-def _revert(code: str, instructions: list[PatchInstruction]) -> str:
-    """Undo an applied patch by restoring each instruction's original line (1-based)."""
-    lines = code.splitlines(keepends=True)
-    for instruction in instructions:
-        index = instruction.line - 1
-        if 0 <= index < len(lines):
-            _, line_ending = split_line_ending(lines[index])
-            lines[index] = instruction.original + line_ending
-    return "".join(lines)
 
 
 def _feedback(bad: dict[str, int]) -> str:

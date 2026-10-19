@@ -33,11 +33,6 @@ class PreparedEvidence:
     error_line: int | None
     redaction_count: int
 
-    @property
-    def redaction_applied(self) -> bool:
-        """Whether preparing this evidence replaced at least one value."""
-        return self.redaction_count > 0
-
 
 def prepare_evidence(state: AgentState) -> PreparedEvidence:
     """Redact and bound the state fields that may be sent to a model provider.

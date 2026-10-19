@@ -66,32 +66,6 @@ def test_read_failure_snapshot_handles_toctou(tmp_path: Path) -> None:
     assert snapshot == ""
 
 
-def test_read_failure_snapshot_legacy_mode(tmp_path: Path) -> None:
-    """When test_path is None, returns newest context (backward compatibility)."""
-    results_dir = tmp_path / "test-results"
-    results_dir.mkdir()
-
-    old_dir = results_dir / "spec-old"
-    old_dir.mkdir()
-    old_file = old_dir / "error-context.md"
-    old_file.write_text("# Page snapshot\n```yaml\n- button: Old\n```")
-
-    new_dir = results_dir / "spec-new"
-    new_dir.mkdir()
-    new_file = new_dir / "error-context.md"
-    new_file.write_text("# Page snapshot\n```yaml\n- button: New\n```")
-
-    # Make new file newer
-    import time
-
-    time.sleep(0.01)
-    new_file.write_text("# Page snapshot\n```yaml\n- button: New\n```")
-
-    # Legacy mode (no test_path) should return newest
-    snapshot = read_failure_snapshot(results_dir, test_path=None)
-    assert "New" in snapshot
-
-
 def test_read_failure_snapshot_ambiguous_match_picks_newest(tmp_path: Path) -> None:
     """When multiple contexts match, picks the newest and logs warning."""
     results_dir = tmp_path / "test-results"

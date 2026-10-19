@@ -75,7 +75,6 @@ def test_prepare_evidence_redacts_every_field_and_counts_the_replacements() -> N
     assert SECRET not in prepared.analysis_report
     assert SECRET not in str(prepared.dom_diff_context)
     assert prepared.redaction_count >= 4
-    assert prepared.redaction_applied is True
 
 
 def test_the_diagnoser_prompt_carries_no_configured_secret(monkeypatch: pytest.MonkeyPatch) -> None:
