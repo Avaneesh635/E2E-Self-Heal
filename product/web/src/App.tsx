@@ -6,7 +6,6 @@ type HealthState = { kind: "loading" } | { kind: "loaded"; health: Health } | { 
 
 type VersionInfo = {
   api_version?: string;
-  version?: string;
   schema_version?: string;
 };
 
@@ -41,20 +40,14 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    // Try to fetch version info - API and schema versions for footer
+    // API and schema versions for the footer.
     fetch("/api/version")
       .then((res) => {
         if (!res.ok) throw new Error("version endpoint not found");
         return res.json() as Promise<VersionInfo>;
       })
       .then((info) => setVersionState({ kind: "loaded", info }))
-      .catch(() => {
-        // Fallback to /api/info or /api/healthz if version endpoint doesn't exist
-        fetch("/api/info")
-          .then((r) => r.json() as Promise<VersionInfo>)
-          .then((info) => setVersionState({ kind: "loaded", info }))
-          .catch(() => setVersionState({ kind: "error" }));
-      });
+      .catch(() => setVersionState({ kind: "error" }));
   }, []);
 
   return (
@@ -82,7 +75,7 @@ export function App() {
         {versionState.kind === "error" && <span>API: unknown · Schema: unknown</span>}
         {versionState.kind === "loaded" && (
           <span>
-            API: {versionState.info.api_version || versionState.info.version || "unknown"} · Schema: {versionState.info.schema_version || "unknown"}
+            API: {versionState.info.api_version || "unknown"} · Schema: {versionState.info.schema_version || "unknown"}
           </span>
         )}
       </footer>
