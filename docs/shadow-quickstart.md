@@ -50,7 +50,7 @@ print(f"saved {len(network_snapshots)} network interactions as '{snapshot_id}'")
 PY
 ```
 
-The snapshot lands as JSON under `.shadow_workspace/snapshots/login-happy-path.json`
+The snapshot lands as JSON under `.shadow_workspace/snapshots/<sha256 of the snapshot id>.json`
 (the workspace root and subdirectory names come from
 [`ShadowConfig`](../app/shadow/config.py)). Deterministic, diff-friendly serialization
 means re-running this against the same trace always produces the same file.

@@ -187,7 +187,7 @@ from `src/data/help-wanted.json` (`{title, description, issueUrl, area, difficul
 - Filter toggles by `area`. Whole card links to `issueUrl`.
 - Grid: 3 cols desktop → 2 tablet → 1 mobile.
 
-### 3.5 Architecture doc page (`docs/architecture/overview.md`) — Issue C2
+### 3.5 Architecture doc page (`docs/architecture/repair-loop.mdx`) — Issue C2
 
 Standard Docusaurus MDX doc: sidebar entry under an "Architecture" category, anchored
 headings, and `<ArchitectureFlow/>` embedded inline. Content Markdown provided by

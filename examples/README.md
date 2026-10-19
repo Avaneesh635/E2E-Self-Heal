@@ -80,9 +80,6 @@ to **refuse** (see the
 | [`disabled-submit/`](scenarios/disabled-submit/) | `product_regression` | submit button disabled (fails like a timeout) | refuse |
 | [`wrong-base-url/`](scenarios/wrong-base-url/) | `environment` | Playwright `baseURL` points at the wrong port | refuse |
 
-> The legacy static-HTML [`classname-scenario/`](classname-scenario/) predates this demo
-> app and is pending migration onto it.
-
 ### The four paired pages
 
 Four routed pages carry four `<page>-<behaviour>-drift` / `-regression` **pairs** each. Both
