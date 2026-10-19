@@ -80,6 +80,27 @@ All notable changes to this project are documented here. The format is based on
   repair (#291).
 
 ### Fixed
+- **Selector repairs on multi-line Playwright calls are no longer refused** (#388). The
+  action-argument gate masked selectors on the edited line alone, so a call such as
+  `page.setInputFiles("#avatar", {` with its payload on later lines never matched and every
+  selector-only edit was rejected as changing another argument, ending in `guardrail_violation`.
+  The gate now compares the whole original and patched source; changes to any other argument are
+  still rejected.
+- **Attribute edits inside multi-line JSX tags reach the model** (#388). `analyze_diff` parsed
+  each run of changed lines on its own, so renaming `id=` on the line below `<input` produced no
+  DOM change at all. Such a run is now widened to the whole opening tag (to its closing line, or a
+  synthetic close at the hunk edge); other context lines are still not parsed, so unchanged
+  neighbours are not reported.
+- **The failure-time page snapshot survives truncated result directories** (#388). Playwright
+  shortens long `test-results/` names, which then no longer contain the spec name, and 16 of 43
+  benchmark scenarios ran without a snapshot. The context is now matched on the test location
+  recorded in `error-context.md`, with directory-name matching kept for artifacts that lack it.
+  With all three fixes, a `deepseek-v4-flash` run over the 44-scenario corpus repairs both drifts
+  it refused before (each also repaired 3 of 3 in a repeat run), finds every failure snapshot,
+  and moves `refusal_accuracy` from 87.5% to 91.3% and `incorrect_refusal_rate` from 9.5% to
+  4.8%. The gate still fails: `split-submit` is repaired (expected refuse), and `delayed-cta` was
+  refused in this run; it is unstable with or without the fix (repaired in 1 of 3 repeat runs
+  after it, 2 of 4 before it).
 - **A declined patch is a signal, not a reason to re-run the test** (#330). When the model
   proposes no change it now gets one structured verdict on its own diagnosis: `selector_drift`,
   `behaviour_change` or `unclear`. `behaviour_change` refuses immediately as

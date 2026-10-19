@@ -46,6 +46,19 @@ _HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 # Matches a line that ends a complete JSX element (</tag> or />).
 _COMPLETE_JSX_END_RE = re.compile(r"(?:</[A-Za-z][\w.\-]*>|/>)\s*$")
 
+# A JSX/TSX tag opener (``<input``) and the pieces of a line that can hide a ``>`` which
+# does not close a tag: string literals and arrow functions.
+_TAG_OPENER_RE = re.compile(r"<[A-Za-z]")
+_NON_TAG_GT_RE = re.compile(r"\"[^\"]*\"|'[^']*'|`[^`]*`|=>")
+
+# Closes a tag left open at the end of a hunk so the parser still sees its attributes.
+_SYNTHETIC_TAG_CLOSE = "/>"
+
+# One hunk line: kind (" ", "-" or "+"), text, old-file line number, new-file line number.
+HunkEntry = tuple[str, str, int, int]
+# One parse unit: removed-side lines, added-side lines, and whether a tag was left open.
+HunkGroup = tuple[list[tuple[str, int]], list[tuple[str, int]], bool]
+
 _JSX_SUFFIXES = (".tsx", ".jsx")
 
 _HAS_TREE_SITTER = (
@@ -82,6 +95,67 @@ def _chunk_fragment_lines(code_text: str) -> list[tuple[str, int]]:
     if current:
         chunks.append(("\n".join(current), start_row))
     return chunks
+
+
+def _tag_state_after(line: str, inside_tag: bool) -> bool:
+    """Whether a JSX opening tag is still open after ``line``, given the state before it."""
+    masked = _NON_TAG_GT_RE.sub("", line)
+    last_opener = max((m.start() for m in _TAG_OPENER_RE.finditer(masked)), default=-1)
+    last_close = masked.rfind(">")
+    if last_opener > last_close:
+        return True
+    if last_close != -1:
+        return False
+    return inside_tag
+
+
+def _group_hunk(entries: list[HunkEntry]) -> list[HunkGroup]:
+    """Split a hunk into contiguous runs of changed lines, one parse unit each.
+
+    A run that edits attribute lines of a multi-line opening tag (``<input`` on one
+    line, ``id="..."`` on the next) has no ``<tag`` of its own, so it is widened over
+    the surrounding context lines to the tag's opener and on to the line that closes
+    it; runs that fall inside the same tag merge. Context outside such a tag is never
+    parsed, so unchanged neighbouring elements are not reported.
+    """
+    groups: list[HunkGroup] = []
+    index = 0
+    while index < len(entries):
+        if entries[index][0] == " ":
+            index += 1
+            continue
+
+        start = index
+        # Widen back to an opener on a context line if the run starts inside its tag.
+        for back in range(index - 1, -1, -1):
+            kind, text, _, _ = entries[back]
+            if kind != " ":
+                break
+            masked = _NON_TAG_GT_RE.sub("", text)
+            if _TAG_OPENER_RE.search(masked) and _tag_state_after(text, inside_tag=False):
+                start = back
+                break
+            if ">" in masked:
+                break
+
+        old_open = new_open = False
+        end = start
+        # Take the changed run, then keep going while either side leaves a tag open.
+        while end < len(entries):
+            kind, text, _, _ = entries[end]
+            if kind == " " and end >= index and not (old_open or new_open):
+                break
+            if kind != "+":
+                old_open = _tag_state_after(text, old_open)
+            if kind != "-":
+                new_open = _tag_state_after(text, new_open)
+            end += 1
+
+        removed = [(text, old) for kind, text, old, _ in entries[start:end] if kind != "+"]
+        added = [(text, new) for kind, text, _, new in entries[start:end] if kind != "-"]
+        groups.append((removed, added, old_open or new_open))
+        index = end
+    return groups
 
 
 def _extract_jsx_elements_regex(code_text: str, start_line: int) -> list[JsxElement]:
@@ -227,25 +301,27 @@ def _analyze(git_diff: str, extract: Extractor) -> list[DomDiff]:
     diffs: list[DomDiff] = []
     current_file = ""
     pending_minus = ""
-    cur_rem: list[tuple[str, int]] = []
-    cur_add: list[tuple[str, int]] = []
-    hunks: list[tuple[list[tuple[str, int]], list[tuple[str, int]]]] = []
+    cur_hunk: list[HunkEntry] = []
+    hunks: list[HunkGroup] = []
     old_line = 0
     new_line = 0
     in_hunk = False
 
     def flush_hunk() -> None:
-        if cur_rem or cur_add:
-            hunks.append((list(cur_rem), list(cur_add)))
-        cur_rem.clear()
-        cur_add.clear()
+        if cur_hunk:
+            hunks.extend(_group_hunk(cur_hunk))
+        cur_hunk.clear()
 
     def process_file() -> None:
         flush_hunk()
         if current_file.endswith(_JSX_SUFFIXES):
-            for rem_lines, add_lines in hunks:
+            for rem_lines, add_lines, left_open in hunks:
                 rem_text = "\n".join(text for text, _ in rem_lines)
                 add_text = "\n".join(text for text, _ in add_lines)
+                if left_open:
+                    # Appended after the last line, so no element's line number shifts.
+                    rem_text = f"{rem_text}\n{_SYNTHETIC_TAG_CLOSE}" if rem_lines else rem_text
+                    add_text = f"{add_text}\n{_SYNTHETIC_TAG_CLOSE}" if add_lines else add_text
 
                 rem_start = rem_lines[0][1] if rem_lines else 1
                 add_start = add_lines[0][1] if add_lines else 1
@@ -323,16 +399,16 @@ def _analyze(git_diff: str, extract: Extractor) -> list[DomDiff]:
             continue
         elif line.startswith("-"):
             # Removed content line (incl. content that itself starts with ---).
-            cur_rem.append((line[1:], old_line))
+            cur_hunk.append(("-", line[1:], old_line, new_line))
             old_line += 1
         elif line.startswith("+"):
             # Added content line (incl. content that itself starts with +++).
-            cur_add.append((line[1:], new_line))
+            cur_hunk.append(("+", line[1:], old_line, new_line))
             new_line += 1
         else:
-            # Context line: " text" or "" for blank lines; flush so each +/-
-            # chunk stays line-contiguous.
-            flush_hunk()
+            # Context line: " text" or "" for blank lines. Kept so a run of changes inside
+            # a multi-line opening tag can be widened to the whole tag (_group_hunk).
+            cur_hunk.append((" ", line[1:], old_line, new_line))
             old_line += 1
             new_line += 1
     process_file()

@@ -119,3 +119,36 @@ def test_read_failure_snapshot_ambiguous_match_picks_newest(tmp_path: Path) -> N
 
     # Should pick the newest
     assert "Run 2" in snapshot
+
+
+def test_read_failure_snapshot_matches_truncated_directory_using_location(
+    tmp_path: Path,
+) -> None:
+    """A truncated Playwright result directory still resolves by recorded location."""
+    results_dir = tmp_path / "test-results"
+    results_dir.mkdir()
+
+    target_dir = results_dir / "catalog-pagination-regress-69aaf--to-the-second-catalog-page"
+    target_dir.mkdir()
+    (target_dir / "error-context.md").write_text(
+        "# Test info\n"
+        "- Name: catalog-pagination-regression/spec.ts >> advances to the second catalog page\n"
+        "- Location: scenarios/catalog-pagination-regression/spec.ts:3:1\n\n"
+        "# Page snapshot\n```yaml\n- button: Target\n```"
+    )
+
+    wrong_dir = results_dir / "spec-other-catalog-pagination-regress"
+    wrong_dir.mkdir()
+    (wrong_dir / "error-context.md").write_text(
+        "# Test info\n"
+        "- Name: catalog-pagination-other/spec.ts >> advances to the second catalog page\n"
+        "- Location: scenarios/catalog-pagination-other/spec.ts:3:1\n\n"
+        "# Page snapshot\n```yaml\n- button: Wrong test\n```"
+    )
+
+    snapshot = read_failure_snapshot(
+        results_dir, Path("scenarios/catalog-pagination-regression/spec.ts")
+    )
+
+    assert "Target" in snapshot
+    assert "Wrong test" not in snapshot

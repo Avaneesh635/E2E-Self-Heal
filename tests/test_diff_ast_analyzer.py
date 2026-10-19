@@ -305,3 +305,141 @@ rename to new.tsx
         assert len(diffs) == 1
         assert diffs[0].current.get("tag") == "button"
         assert diffs[0].line == 4
+
+    @pytest.mark.parametrize(
+        ("scenario", "removed_id", "added_attribute", "added_value"),
+        [
+            (
+                "settings-notifications-drift",
+                "notifications-toggle",
+                "name",
+                "email-notifications",
+            ),
+            ("account-password-drift", "password-input", "name", "new-password"),
+            ("checkout-quantity-drift", "quantity", "id", "item-quantity"),
+            ("account-avatar-drift", "avatar-input", "id", "avatar-file"),
+        ],
+    )
+    def test_multiline_attribute_replacements(
+        self,
+        scenario: str,
+        removed_id: str,
+        added_attribute: str,
+        added_value: str,
+    ) -> None:
+        """Attribute-only edits in multiline opening tags report one input change."""
+        patches = {
+            "settings-notifications-drift": """diff --git a/examples/demo-app/src/components/settings/SettingsNotifications.tsx b/examples/demo-app/src/components/settings/SettingsNotifications.tsx
+--- a/examples/demo-app/src/components/settings/SettingsNotifications.tsx
++++ b/examples/demo-app/src/components/settings/SettingsNotifications.tsx
+@@ -9,7 +9,7 @@ export function SettingsNotifications() {
+       <label>
+         Email notifications
+         <input
+-          id="notifications-toggle"
++          name="email-notifications"
+           type="checkbox"
+           checked={enabled}
+           onChange={(event) => setEnabled(event.target.checked)}
+""",
+            "account-password-drift": """diff --git a/examples/demo-app/src/components/account/AccountPassword.tsx b/examples/demo-app/src/components/account/AccountPassword.tsx
+--- a/examples/demo-app/src/components/account/AccountPassword.tsx
++++ b/examples/demo-app/src/components/account/AccountPassword.tsx
+@@ -8,7 +8,7 @@ export function AccountPassword() {
+     <section aria-labelledby="account-password-heading">
+       <h2 id="account-password-heading">Password</h2>
+       <input
+-        id="password-input"
++        name="new-password"
+         aria-label="New password"
+         type="password"
+         value={password}
+""",
+            "checkout-quantity-drift": """diff --git a/examples/demo-app/src/components/checkout/CheckoutQuantity.tsx b/examples/demo-app/src/components/checkout/CheckoutQuantity.tsx
+--- a/examples/demo-app/src/components/checkout/CheckoutQuantity.tsx
++++ b/examples/demo-app/src/components/checkout/CheckoutQuantity.tsx
+@@ -12,7 +12,7 @@ export function CheckoutQuantity() {
+       <label>
+         Quantity
+         <input
+-          id="quantity"
++          id="item-quantity"
+           type="number"
+           min="1"
+           value={quantity}
+""",
+            "account-avatar-drift": """diff --git a/examples/demo-app/src/components/account/AccountAvatar.tsx b/examples/demo-app/src/components/account/AccountAvatar.tsx
+--- a/examples/demo-app/src/components/account/AccountAvatar.tsx
++++ b/examples/demo-app/src/components/account/AccountAvatar.tsx
+@@ -7,7 +7,7 @@ export function AccountAvatar() {
+     <section aria-labelledby="account-avatar-heading">
+       <h2 id="account-avatar-heading">Avatar</h2>
+       <input
+-        id="avatar-input"
++        id="avatar-file"
+         aria-label="Avatar image"
+         type="file"
+         onChange={(event) => setFileName(event.target.files?.[0]?.name ?? "No file")}
+""",
+        }
+
+        diffs = analyze_diff(patches[scenario])
+
+        assert len(diffs) == 1
+        assert diffs[0].previous.get("tag") == "input"
+        assert diffs[0].previous.get("attributes", {}).get("id") == removed_id
+        assert diffs[0].current.get("tag") == "input"
+        assert diffs[0].current.get("attributes", {}).get(added_attribute) == added_value
+
+    def test_multiline_tag_widening_leaves_unchanged_neighbours_out(self) -> None:
+        """Only the edited multi-line tag is parsed; sibling elements in context are not."""
+        diff = """diff --git a/Form.tsx b/Form.tsx
+--- a/Form.tsx
++++ b/Form.tsx
+@@ -3,10 +3,10 @@ export function Form() {
+     <label htmlFor="email">Email</label>
+     <input
+-      id="email"
++      id="email-address"
+       type="email"
+       onChange={(event) => setEmail(event.target.value)}
+     />
+     <p id="hint">We never share it.</p>
+     <button type="submit">Save</button>
+"""
+        diffs = analyze_diff(diff)
+
+        assert len(diffs) == 1
+        assert diffs[0].line == 4
+        assert diffs[0].previous["attributes"]["id"] == "email"
+        assert diffs[0].current["attributes"]["id"] == "email-address"
+        assert diffs[0].current["attributes"]["type"] == "email"
+
+    def test_wrapping_an_element_reports_the_new_wrapper(self) -> None:
+        """A wrapper added around an unchanged element is still reported as added."""
+        diff = """diff --git a/SubmitButton.tsx b/SubmitButton.tsx
+--- a/SubmitButton.tsx
++++ b/SubmitButton.tsx
+@@ -1,7 +1,9 @@
+ export function SubmitButton() {
+   return (
+-    <button id="submit-btn" className="btn" type="submit">
+-      Submit
+-    </button>
++    <div className="form-actions">
++      <button id="submit-btn" className="btn" type="submit">
++        Submit
++      </button>
++    </div>
+   );
+ }
+"""
+        diffs = analyze_diff(diff)
+
+        added = [d for d in diffs if not d.previous]
+        assert any(
+            d.current.get("tag") == "div"
+            and d.current.get("attributes", {}).get("className") == "form-actions"
+            for d in added
+        )
+        assert any(d.current.get("tag") == "button" and d.previous for d in diffs)
