@@ -139,6 +139,20 @@ All notable changes to this project are documented here. The format is based on
   `fill`, `waitForSelector`, ...) as an editable selector, matching the existing scope gate.
   Values, keys, options, and non-`page` receivers stay locked (#286).
 
+### Removed
+- Code nothing ran, found in a dead-code sweep:
+  - The failure-cause aggregation in `app/registry.py` (`FailureCause`, `HealingRecord`,
+    `aggregate_failure_stats` and its stats models). Nothing ever produced a `HealingRecord`.
+    `SelectorKind` and `classify_selector_kind` stay, because the healing-history store uses them.
+  - The TypeScript Markdown report generator in `app/core/report/` and the root `package.json`
+    that existed only to run its Vitest test. No CLI command, Action step or workflow called it.
+  - Unused internals: `selector_verifier._revert` (rollback writes the saved code directly),
+    `PreparedEvidence.redaction_applied` (callers read `redaction_count`),
+    `PlaywrightTraceParser._headers_to_dict` and the unreferenced `SnapshotMetadata` model.
+  - The default Docusaurus scaffold left in the docs site: the unused `HomepageFeatures`
+    component, its illustrations, `docusaurus.png` and the unlisted `/markdown-page` page.
+  - The product dashboard's fallback to `/api/info`, an endpoint the API never had.
+
 ### Security
 - **One redaction boundary for every prompt and every log line** (#377). The Diagnoser, Patch
   Generator, Reviewer and decline verdict now build their prompts from the same prepared evidence,
