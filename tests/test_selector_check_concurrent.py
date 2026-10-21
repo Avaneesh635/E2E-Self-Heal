@@ -4,6 +4,8 @@ import threading
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from app.verify.selector_check import _get_helper_path, check_selectors
 
 
@@ -26,8 +28,9 @@ def test_get_helper_path_returns_unique_paths() -> None:
     assert path2.name.endswith(".mjs")
 
 
-def test_concurrent_runs_use_unique_files(tmp_path: Path) -> None:
+def test_concurrent_runs_use_unique_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Two concurrent selector checks should use different helper files."""
+    monkeypatch.chdir(tmp_path)
     # Track which files were created
     created_files: list[Path] = []
 
@@ -72,8 +75,12 @@ def test_concurrent_runs_use_unique_files(tmp_path: Path) -> None:
     assert all(not f.exists() for f in created_files)
 
 
-def test_helper_file_cleanup_on_permission_error(tmp_path: Path) -> None:
+def test_helper_file_cleanup_on_permission_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Cleanup should not fail even if unlink raises PermissionError (Windows)."""
+    # The failed unlink leaves the helper behind, so keep it out of the working tree.
+    monkeypatch.chdir(tmp_path)
     with patch("app.verify.selector_check.subprocess.run") as mock_run:
         mock_run.return_value.returncode = 0
         mock_run.return_value.stdout = '{"div": 1}'

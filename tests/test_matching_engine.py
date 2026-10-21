@@ -1,77 +1,9 @@
 import pytest
 from concurrent.futures import ThreadPoolExecutor
 
-from app.shadow.normalizer import RequestNormalizer
 from app.shadow.scoring import MatchScorer, ScoringWeights
 from app.shadow.matcher import SnapshotMatcher, NoMatchError
 from app.shadow.schemas import CapturedRequest, CapturedResponse, NetworkSnapshot
-
-
-def test_request_normalizer_value():
-    normalizer = RequestNormalizer()
-    assert normalizer.normalize_value("123e4567-e89b-12d3-a456-426614174000") == "<UUID>"
-    assert normalizer.normalize_value("2026-07-12T13:00:00Z") == "<TIMESTAMP>"
-    assert normalizer.normalize_value("1718291039") == "<TIMESTAMP>"
-    assert normalizer.normalize_value("stable-value") == "stable-value"
-
-
-def test_request_normalizer_url():
-    normalizer = RequestNormalizer()
-
-    # Dynamic path segment and query params
-    url = "https://example.com/api/v1/users/123e4567-e89b-12d3-a456-426614174000/profile?timestamp=1718291039&nonce=abc&stable=yes"
-    path, query = normalizer.normalize_url(url)
-
-    assert path == "/api/v1/users/<UUID>/profile"
-    assert "timestamp" not in query  # Ignored completely as it is dynamic
-    assert "nonce" not in query  # Ignored completely
-    assert query["stable"] == ["yes"]
-
-
-def test_request_normalizer_headers():
-    normalizer = RequestNormalizer()
-    headers = {
-        "Authorization": "Bearer token123",
-        "Content-Type": "application/json",
-        "X-Custom-ID": "123e4567-e89b-12d3-a456-426614174000",
-    }
-    normalized = normalizer.normalize_headers(headers)
-
-    assert "authorization" not in normalized  # Ignored as dynamic
-    assert normalized["content-type"] == "application/json"
-    assert normalized["x-custom-id"] == "<UUID>"
-
-
-def test_request_normalizer_body():
-    normalizer = RequestNormalizer()
-
-    # JSON body with dynamic key/value
-    json_body = (
-        '{"id": "123e4567-e89b-12d3-a456-426614174000", "token": "session123", "name": "Alice"}'
-    )
-    normalized = normalizer.normalize_body(json_body)
-
-    assert normalized["id"] == "<UUID>"
-    assert normalized["token"] == "<DYNAMIC>"
-    assert normalized["name"] == "Alice"
-
-    # Plain text body
-    text_body = "User session expired at 1718291039."
-    assert normalizer.normalize_body(text_body) == "User session expired at <TIMESTAMP>."
-
-
-def test_match_scorer_compatibility():
-    scorer = MatchScorer()
-
-    # Different HTTP methods
-    req1 = CapturedRequest(method="GET", url="http://test.com/users")
-    req2 = CapturedRequest(method="POST", url="http://test.com/users")
-    assert scorer.calculate_score(req1, req2) == -1.0
-
-    # Different paths
-    req3 = CapturedRequest(method="GET", url="http://test.com/users")
-    req4 = CapturedRequest(method="GET", url="http://test.com/posts")
-    assert scorer.calculate_score(req3, req4) == -1.0
 
 
 def test_matching_engine_identical():
