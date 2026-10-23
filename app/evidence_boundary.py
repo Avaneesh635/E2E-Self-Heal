@@ -26,6 +26,7 @@ class PreparedEvidence:
 
     error_log: str
     dom_diff_context: list[dict]
+    untouched_selector: str
     aria_snapshot: str
     analysis_report: str
     # Line number read from the *raw* log: redaction rewrites text, but not the line index the
@@ -46,12 +47,14 @@ def prepare_evidence(state: AgentState) -> PreparedEvidence:
     dom_diff_context = cast(
         "list[dict]", redact_value(state.get("dom_diff_context", []), record=record)
     )
+    untouched_selector = redact_text(state.get("untouched_selector") or "", record=record)
     snapshot = abstract_snapshot(state.get("dom_snapshot", ""))
     aria_snapshot = redact_text(snapshot, record=record) if snapshot else ""
     analysis_report = redact_text(state.get("analysis_report") or "", record=record)
     return PreparedEvidence(
         error_log=error_log,
         dom_diff_context=dom_diff_context,
+        untouched_selector=untouched_selector,
         aria_snapshot=aria_snapshot,
         # The Diagnoser's report can quote the log, so it crosses the same boundary before the
         # Decline Adjudicator and the Patch Generator re-send it.

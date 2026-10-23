@@ -61,7 +61,7 @@ def test_suite_all_healed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> No
     b.write_text("y")
 
     def _heal(
-        path: Path, log: str, context: list[dict], dry_run: bool, memory_enabled: bool
+        path: Path, log: str, context: list[dict], dry_run: bool, memory_enabled: bool, **_: str
     ) -> RepairSummary:
         return RepairSummary(test_script_path=str(path), is_success=True, loop_count=1)
 
@@ -79,7 +79,7 @@ def test_suite_partial_heal_is_not_success(monkeypatch: pytest.MonkeyPatch, tmp_
     b.write_text("y")
 
     def _heal(
-        path: Path, log: str, context: list[dict], dry_run: bool, memory_enabled: bool
+        path: Path, log: str, context: list[dict], dry_run: bool, memory_enabled: bool, **_: str
     ) -> RepairSummary:
         return RepairSummary(
             test_script_path=str(path), is_success=(path.name == "a.spec.ts"), loop_count=1
@@ -119,7 +119,7 @@ def test_suite_denies_external_path_but_keeps_it_visible(
     outside.write_text("secret")
 
     def _heal(
-        path: Path, log: str, context: list[dict], dry_run: bool, memory_enabled: bool
+        path: Path, log: str, context: list[dict], dry_run: bool, memory_enabled: bool, **_: str
     ) -> RepairSummary:
         assert path == inside, "only the in-workspace target may be healed"
         assert memory_enabled is True
@@ -149,7 +149,7 @@ def test_suite_denies_relative_external_path(
     inside.write_text("x")
 
     def _heal(
-        path: Path, log: str, context: list[dict], dry_run: bool, memory: bool
+        path: Path, log: str, context: list[dict], dry_run: bool, memory: bool, **_: str
     ) -> RepairSummary:
         return RepairSummary(test_script_path=str(path), is_success=True, loop_count=1)
 
@@ -179,7 +179,7 @@ def test_suite_threads_no_memory_to_each_file(
     seen_memory: list[bool] = []
 
     def _heal(
-        path: Path, log: str, context: list[dict], dry_run: bool, memory_enabled: bool
+        path: Path, log: str, context: list[dict], dry_run: bool, memory_enabled: bool, **_: str
     ) -> RepairSummary:
         seen_memory.append(memory_enabled)
         return RepairSummary(test_script_path=str(path), is_success=True, loop_count=0)
@@ -218,11 +218,7 @@ def test_suite_final_rerun_reveals_new_failure(
     b.write_text("y")
 
     def _heal(
-        path: Path,
-        log: str,
-        context: list[dict],
-        dry_run: bool,
-        memory_enabled: bool,
+        path: Path, log: str, context: list[dict], dry_run: bool, memory_enabled: bool, **_: str
     ) -> RepairSummary:
         return RepairSummary(test_script_path=str(path), is_success=True, loop_count=1)
 
@@ -245,11 +241,7 @@ def test_suite_unparseable_final_failure_marks_all_unresolved(
     a.write_text("x")
 
     def _heal(
-        path: Path,
-        log: str,
-        context: list[dict],
-        dry_run: bool,
-        memory_enabled: bool,
+        path: Path, log: str, context: list[dict], dry_run: bool, memory_enabled: bool, **_: str
     ) -> RepairSummary:
         return RepairSummary(test_script_path=str(path), is_success=True, loop_count=1)
 
@@ -272,11 +264,7 @@ def test_suite_dry_run_reports_non_successful_preview(
     a.write_text("x")
 
     def _heal(
-        path: Path,
-        log: str,
-        context: list[dict],
-        dry_run: bool,
-        memory_enabled: bool,
+        path: Path, log: str, context: list[dict], dry_run: bool, memory_enabled: bool, **_: str
     ) -> RepairSummary:
         return RepairSummary(test_script_path=str(path), is_success=True, loop_count=1)
 
@@ -302,11 +290,7 @@ def test_suite_final_rerun_reveals_failures_in_scanner_order(
     c.write_text("z")
 
     def _heal(
-        path: Path,
-        log: str,
-        context: list[dict],
-        dry_run: bool,
-        memory_enabled: bool,
+        path: Path, log: str, context: list[dict], dry_run: bool, memory_enabled: bool, **_: str
     ) -> RepairSummary:
         return RepairSummary(test_script_path=str(path), is_success=True, loop_count=1)
 
@@ -326,11 +310,7 @@ def test_suite_final_rerun_rejects_previously_accepted_candidate(
     test_file.write_text("x")
 
     def _heal(
-        path: Path,
-        log: str,
-        context: list[dict],
-        dry_run: bool,
-        memory_enabled: bool,
+        path: Path, log: str, context: list[dict], dry_run: bool, memory_enabled: bool, **_: str
     ) -> RepairSummary:
         return RepairSummary(
             test_script_path=str(path),

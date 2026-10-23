@@ -80,6 +80,22 @@ All notable changes to this project are documented here. The format is based on
   repair (#291).
 
 ### Fixed
+- **A late-rendering element gets a longer wait, not a guessed selector** (#388). On
+  `delayed-cta` the CTA renders four seconds after load, so the 3 s click times out and the
+  failure snapshot has no button. The diff abstraction keeps tags and attributes only, so nothing
+  told the model the `.cta-primary` class still existed, and it swapped in whatever was on the
+  page (`role=region[name="Get started"]`) or declined as a product regression: 1 repair in 4 runs,
+  and that one rewrote the selector too. A new deterministic check
+  (`app/preprocess/selector_diff_check.py`) reports when no line removed by the diff names anything
+  in the failing locator; the Diagnoser and Patch Generator prompts then state that the selector
+  was not renamed, so the fix for a timed-out action is its timeout option. The check is
+  conservative: a rename always removes a line holding the old name, so it never fires for one.
+  On the corpus it fires for `delayed-cta` and `product-regression` only. `delayed-cta` now
+  repairs as `page.click(".cta-primary", { timeout: 15000 })` in 6 of 6 runs, and
+  `product-regression` is still refused in 6 of 6.
+  A full `deepseek-v4-flash` run over the corpus (43 scored, 0 errors) passes every release gate
+  for the first time: `false_green_rate` 0% (n=20), `refusal_accuracy` 95.5% (n=22) and
+  `incorrect_refusal_rate` 0% (n=21). The one miss left is `split-submit` (ambiguous, repaired).
 - **Selector repairs on multi-line Playwright calls are no longer refused** (#388). The
   action-argument gate masked selectors on the edited line alone, so a call such as
   `page.setInputFiles("#avatar", {` with its payload on later lines never matched and every
@@ -96,11 +112,9 @@ All notable changes to this project are documented here. The format is based on
   benchmark scenarios ran without a snapshot. The context is now matched on the test location
   recorded in `error-context.md`, with directory-name matching kept for artifacts that lack it.
   With all three fixes, a `deepseek-v4-flash` run over the 44-scenario corpus repairs both drifts
-  it refused before (each also repaired 3 of 3 in a repeat run), finds every failure snapshot,
-  and moves `refusal_accuracy` from 87.5% to 91.3% and `incorrect_refusal_rate` from 9.5% to
-  4.8%. The gate still fails: `split-submit` is repaired (expected refuse), and `delayed-cta` was
-  refused in this run; it is unstable with or without the fix (repaired in 1 of 3 repeat runs
-  after it, 2 of 4 before it).
+  it refused before (each also repaired 3 of 3 in a repeat run) and finds every failure snapshot.
+  The remaining `delayed-cta` instability is fixed by the selector diff check above; the full run
+  after it is reported there.
 - **A declined patch is a signal, not a reason to re-run the test** (#330). When the model
   proposes no change it now gets one structured verdict on its own diagnosis: `selector_drift`,
   `behaviour_change` or `unclear`. `behaviour_change` refuses immediately as

@@ -12,6 +12,9 @@ This page is a stub. Planned contents:
 
 - Error Log Parser: Error line + failing selector + reason
 - Diff-JSX AST analyzer: before/after DOM node JSON
+- Selector diff check: whether the diff removed any line naming the failing locator; when it
+  did not, the prompts state that the selector was not renamed, so a timing failure is fixed
+  with a longer wait instead of a guessed selector
 - Why abstraction (context window + anti-hallucination)
 - v0.1 regex heuristic, tree-sitter planned
 :::

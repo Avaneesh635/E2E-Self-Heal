@@ -10,6 +10,7 @@ import structlog
 from app.evidence import add_candidate, add_loop_event
 from app.evidence_boundary import prepare_evidence, redaction_state_update
 from app.llm import generate_patch
+from app.prompts.diagnoser import untouched_selector_fact
 from app.prompts.patch_generator import (
     DomDiffEntry,
     build_system_prompt,
@@ -587,8 +588,16 @@ def patch_generator(state: AgentState) -> dict:
     # The diagnosis can quote the raw log, so it crosses the evidence boundary; the numbered
     # test source does not, because every instruction must match it byte for byte.
     prepared = prepare_evidence(state)
+    # The diff check is restated here rather than left to the diagnosis to relay: it is a
+    # deterministic fact, and the model must not trade it for a selector it likes better.
+    diff_check = (
+        f"{untouched_selector_fact(prepared.untouched_selector)}\n\n"
+        if prepared.untouched_selector
+        else ""
+    )
     user_prompt = (
         f"Failure diagnosis:\n{prepared.analysis_report}\n\n"
+        f"{diff_check}"
         f"Current test code (each line is prefixed with its 1-based number and '| ', which "
         f"is not part of the line):\n{_numbered(state['current_code'])}"
     )

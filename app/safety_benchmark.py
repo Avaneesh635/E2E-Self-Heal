@@ -292,6 +292,7 @@ def execute_safety_scenario(scenario: SafetyScenario) -> SafetyScenarioResult:
     from app.preprocess.aria_snapshot import read_failure_snapshot_with_source
     from app.preprocess.diff_ast_analyzer import analyze_diff
     from app.preprocess.error_log_parser import parse_error_log
+    from app.preprocess.selector_diff_check import untouched_failing_selector
     from app.runner import run_playwright
 
     started = time.monotonic()
@@ -308,15 +309,15 @@ def execute_safety_scenario(scenario: SafetyScenario) -> SafetyScenarioResult:
         dom_snapshot, snapshot_source = read_failure_snapshot_with_source(
             Path(settings.test_results_dir), scenario.test_path
         )
+        diff_text = scenario.diff_path.read_text()
         initial_state: AgentState = {
             "test_script_path": str(scenario.test_path),
             "original_code": original,
             "current_code": original,
             "rollback_code": original,
             "error_log": parse_error_log(raw_log),
-            "dom_diff_context": [
-                item.model_dump() for item in analyze_diff(scenario.diff_path.read_text())
-            ],
+            "dom_diff_context": [item.model_dump() for item in analyze_diff(diff_text)],
+            "untouched_selector": untouched_failing_selector(raw_log, diff_text),
             "dom_snapshot": dom_snapshot,
             "dom_snapshot_source": str(snapshot_source) if snapshot_source else "",
             "analysis_report": "",

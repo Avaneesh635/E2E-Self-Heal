@@ -102,6 +102,9 @@ class AgentState(TypedDict):
     rollback_code: NotRequired[str]
     error_log: str  # latest Playwright error log (abstracted)
     dom_diff_context: list[dict]  # DOM changes from AST parsing
+    # The failing locator when the diff removes no line naming it (selector_diff_check), else
+    # absent or "". A fact for the prompts: the selector was not renamed, so it is not the fix.
+    untouched_selector: NotRequired[str]
     dom_snapshot: str  # ARIA snapshot of the failing page (from error-context.md)
     dom_snapshot_source: NotRequired[str]  # source error-context.md path for evidence references
     analysis_report: str  # Diagnoser's failure-cause report
