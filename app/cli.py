@@ -724,7 +724,7 @@ def safety_benchmark(
         help=(
             "Run this many scenarios at once, each in its own copy of the Playwright project "
             "(the current directory) with its own preview port. Needs --apply-patches. Each "
-            "worker's output goes to a log file reported at the end."
+            "worker's output goes to a log file whose directory is printed when the run starts."
         ),
     ),
 ) -> None:
@@ -768,10 +768,11 @@ def safety_benchmark(
         with _benchmark_progress(runs, jobs) as on_result:
             if jobs > 1:
                 log_dir = Path(tempfile.mkdtemp(prefix="e2e-healer-safety-logs-"))
+                # Named up front so a run that aborts still says where its workers logged.
+                console.print(f"[dim]worker logs: {escape(str(log_dir))}[/dim]")
                 report = run_parallel_safety_benchmark(
                     scenarios, jobs=jobs, repeats=repeat, on_result=on_result, log_dir=log_dir
                 )
-                console.print(f"[dim]worker logs: {escape(str(log_dir))}[/dim]")
             else:
                 report = run_safety_benchmark(
                     scenarios, executor, repeats=repeat, on_result=on_result

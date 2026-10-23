@@ -93,7 +93,7 @@ are comparable run for run; only the wall clock changes.
 - **Your checkout is never patched.** Uncommitted changes in the project are part of the copy, so a
   parallel run measures the same working tree a sequential one would.
 - **Worker output** (structured logs, Playwright output) goes to one log file per worker instead of
-  the terminal, where it would interleave. The directory is printed at the end.
+  the terminal, where it would interleave. The directory is printed when the run starts.
 - **Model calls run `N` at a time.** Mind the provider's rate limit.
 
 ## Reading the report
