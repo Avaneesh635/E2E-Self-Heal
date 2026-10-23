@@ -80,6 +80,22 @@ All notable changes to this project are documented here. The format is based on
   repair (#291).
 
 ### Fixed
+- **A late-rendering element gets a longer wait, not a guessed selector** (#388). On
+  `delayed-cta` the CTA renders four seconds after load, so the 3 s click times out and the
+  failure snapshot has no button. The diff abstraction keeps tags and attributes only, so nothing
+  told the model the `.cta-primary` class still existed, and it swapped in whatever was on the
+  page (`role=region[name="Get started"]`) or declined as a product regression: 1 repair in 4 runs,
+  and that one rewrote the selector too. A new deterministic check
+  (`app/preprocess/selector_diff_check.py`) reports when no line removed by the diff names anything
+  in the failing locator; the Diagnoser and Patch Generator prompts then state that the selector
+  was not renamed, so the fix for a timed-out action is its timeout option. The check is
+  conservative: a rename always removes a line holding the old name, so it never fires for one.
+  On the corpus it fires for `delayed-cta` and `product-regression` only. `delayed-cta` now
+  repairs as `page.click(".cta-primary", { timeout: 15000 })` in 6 of 6 runs, and
+  `product-regression` is still refused in 6 of 6.
+  A full `deepseek-v4-flash` run over the corpus (43 scored, 0 errors) passes every release gate
+  for the first time: `false_green_rate` 0% (n=20), `refusal_accuracy` 95.5% (n=22) and
+  `incorrect_refusal_rate` 0% (n=21). The one miss left is `split-submit` (ambiguous, repaired).
 - **Selector repairs on multi-line Playwright calls are no longer refused** (#388). The
   action-argument gate masked selectors on the edited line alone, so a call such as
   `page.setInputFiles("#avatar", {` with its payload on later lines never matched and every
