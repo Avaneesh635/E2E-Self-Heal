@@ -58,8 +58,8 @@ jobs:
     if: needs.check-secret.outputs.has-key == 'true'
     runs-on: ubuntu-latest
     continue-on-error: true
-    # 43 runnable scenarios, each a full repair loop plus browser runs, so the wall clock is
-    # dominated by model latency rather than CPU.
+    # 43 runnable scenarios, each a full repair loop plus browser runs. --jobs 4 runs four at
+    # once in separate copies of examples/, one per runner core.
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -106,6 +106,7 @@ jobs:
           uv run e2e-healer safety-benchmark \
             --scenario-root scenarios \
             --apply-patches \
+            --jobs 4 \
             --output "$RUNNER_TEMP/safety-report.json" \
             --markdown "$RUNNER_TEMP/safety-report.md" \
             --baseline ../benchmarks/safety-baseline.json
