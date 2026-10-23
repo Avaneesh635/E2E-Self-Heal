@@ -26,6 +26,7 @@ from app.preprocess.aria_snapshot import read_failure_snapshot, read_failure_sna
 from app.preprocess.diff_ast_analyzer import analyze_diff
 from app.preprocess.error_log_parser import parse_error_log
 from app.preprocess.failure_scanner import scan_failing_tests
+from app.preprocess.selector_diff_check import untouched_failing_selector
 from app.runner import run_playwright
 from app.safety_benchmark import (
     GateStatus,
@@ -196,6 +197,8 @@ def _heal_file(
     dom_diff_context: list[dict],
     dry_run: bool,
     memory_enabled: bool = True,
+    *,
+    diff_text: str = "",
 ) -> HealResult:
     assert_read_allowed(test_path)
     assert_write_allowed(test_path, reason="repair_target")
@@ -211,6 +214,7 @@ def _heal_file(
         "rollback_code": original_code,
         "error_log": parsed_error_log,
         "dom_diff_context": dom_diff_context,
+        "untouched_selector": untouched_failing_selector(raw_log, diff_text),
         "dom_snapshot": dom_snapshot,
         "dom_snapshot_source": str(snapshot_source) if snapshot_source else "",
         "analysis_report": "",
@@ -286,6 +290,8 @@ def _heal_suite(
     dom_diff_context: list[dict],
     dry_run: bool,
     memory_enabled: bool = True,
+    *,
+    diff_text: str = "",
 ) -> SuiteSummary:
     passed, raw_log = run_playwright(suite_target)
     if passed:
@@ -337,7 +343,9 @@ def _heal_suite(
             results.append(result)
             result_by_rel[rel] = result
             continue
-        result = _heal_file(resolved, focused_log, dom_diff_context, dry_run, memory_enabled)
+        result = _heal_file(
+            resolved, focused_log, dom_diff_context, dry_run, memory_enabled, diff_text=diff_text
+        )
         results.append(result)
         result_by_rel[rel] = result
 
@@ -527,7 +535,8 @@ def heal(
                 console.print(f"[red]Invalid --selector-hint JSON:[/red] {escape(str(e))}")
                 raise typer.Exit(code=2)
 
-        dom_diff_context = [d.model_dump() for d in analyze_diff(_read_diff(diff_file, diff_base))]
+        diff_text = _read_diff(diff_file, diff_base)
+        dom_diff_context = [d.model_dump() for d in analyze_diff(diff_text)]
 
         # Now inject the already-validated hint into context
         if parsed_hint is not None:
@@ -553,7 +562,9 @@ def heal(
                 if passed:
                     console.print("[green]test already passes[/green] — nothing to heal")
                     raise typer.Exit(code=0)
-            summary = _heal_file(test_path, raw_log, dom_diff_context, dry_run, memory_enabled)
+            summary = _heal_file(
+                test_path, raw_log, dom_diff_context, dry_run, memory_enabled, diff_text=diff_text
+            )
             if json_output:
                 typer.echo(summary.model_dump_json())
 
@@ -571,6 +582,7 @@ def heal(
             dom_diff_context,
             dry_run,
             memory_enabled,
+            diff_text=diff_text,
         )
         # Emit JSON before early exits.
         if json_output:

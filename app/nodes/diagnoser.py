@@ -40,6 +40,7 @@ def build_diagnosis_prompt(prepared: PreparedEvidence, current_code: str) -> str
         prepared.dom_diff_context,
         prepared.aria_snapshot,
         chunk,
+        prepared.untouched_selector,
     )
 
 

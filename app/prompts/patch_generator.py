@@ -40,7 +40,13 @@ SYSTEM_PROMPT = (
     "it can be verified against the live DOM; leave 'selector' empty for non-locator edits "
     "such as wait tweaks. Respect the configured architecture boundary and never propose edits "
     "outside it. If a prior attempt is reported as rejected in the diagnosis, do NOT "
-    "reuse the rejected selector - pick a different, more specific one. Return edits strictly "
+    "reuse the rejected selector - pick a different, more specific one. When a diff check "
+    "states that the diff removed no line naming the failing selector, that selector was not "
+    "renamed: keep it exactly and never replace it with a selector for some other element "
+    "that happens to be on the page. In that case, if the failing call is an action (click, "
+    "fill, ...) that timed out and no attempt has raised its timeout yet, raise that call's "
+    "timeout option rather than returning no edit; never add a timeout to an assertion. "
+    "Return edits strictly "
     "via the provided schema; if no selector/wait fix is warranted, return an empty list."
 )
 
