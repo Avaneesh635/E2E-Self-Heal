@@ -4,6 +4,9 @@ import difflib
 import json
 import os
 import subprocess
+import tempfile
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
@@ -12,6 +15,15 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 from rich.panel import Panel
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
 from rich.syntax import Syntax
 from rich.table import Table
 from typer.core import TyperGroup
@@ -29,6 +41,7 @@ from app.preprocess.failure_scanner import scan_failing_tests
 from app.preprocess.selector_diff_check import untouched_failing_selector
 from app.runner import run_playwright
 from app.safety_benchmark import (
+    ActualOutcome,
     GateStatus,
     ScenarioRestoreError,
     ScenarioSandboxError,
@@ -36,8 +49,10 @@ from app.safety_benchmark import (
     discover_safety_scenarios,
     execute_prepared_scenario,
     execute_safety_scenario,
+    SafetyScenarioResult,
     run_safety_benchmark,
 )
+from app.safety_parallel import ParallelSetupError, run_parallel_safety_benchmark
 from app.safety_report import load_baseline, render_markdown, shortfall_summary
 from app.sandbox import (
     SandboxViolation,
@@ -713,6 +728,17 @@ def safety_benchmark(
             "release gates."
         ),
     ),
+    jobs: int = typer.Option(
+        1,
+        "--jobs",
+        min=1,
+        max=8,
+        help=(
+            "Run this many scenarios at once, each in its own copy of the Playwright project "
+            "(the current directory) with its own preview port. Needs --apply-patches. Each "
+            "worker's output goes to a log file whose directory is printed when the run starts."
+        ),
+    ),
 ) -> None:
     """Run the opt-in repair/refusal safety benchmark and print a stable JSON report.
 
@@ -745,13 +771,32 @@ def safety_benchmark(
     except ScenarioSandboxError as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(code=2) from exc
+    if jobs > 1 and not apply_patches:
+        console.print("[red]--jobs above 1 needs --apply-patches[/red]")
+        raise typer.Exit(code=2)
     executor = execute_prepared_scenario if apply_patches else execute_safety_scenario
+    runs = sum(1 for scenario in scenarios if scenario.runnable) * repeat
     try:
-        report = run_safety_benchmark(scenarios, executor, repeats=repeat)
+        with _benchmark_progress(runs, jobs) as on_result:
+            if jobs > 1:
+                log_dir = Path(tempfile.mkdtemp(prefix="e2e-healer-safety-logs-"))
+                # Named up front so a run that aborts still says where its workers logged.
+                console.print(f"[dim]worker logs: {escape(str(log_dir))}[/dim]")
+                report = run_parallel_safety_benchmark(
+                    scenarios, jobs=jobs, repeats=repeat, on_result=on_result, log_dir=log_dir
+                )
+            else:
+                report = run_safety_benchmark(
+                    scenarios, executor, repeats=repeat, on_result=on_result
+                )
     except ScenarioRestoreError as exc:
         # The working tree is still modified, so continuing would benchmark a wrong app.
         console.print(f"[red]aborting, working tree not restored:[/red] {escape(str(exc))}")
         raise typer.Exit(code=1) from exc
+    except ParallelSetupError as exc:
+        # A corpus a parallel run cannot copy (a patch outside the project, wrong directory).
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        raise typer.Exit(code=2) from exc
     json_report = report.model_dump_json(indent=2)
     if output is not None:
         _write_report_file(output, json_report + "\n")
@@ -767,6 +812,42 @@ def safety_benchmark(
     if enforce_gates and failed:
         console.print(f"[red]release gates failed:[/red] {escape(', '.join(failed))}")
         raise typer.Exit(code=1)
+
+
+@contextmanager
+def _benchmark_progress(runs: int, jobs: int) -> Iterator[Callable[[SafetyScenarioResult], None]]:
+    """Show a live bar on stderr and print one line per finished run; yield the callback."""
+    columns = (
+        SpinnerColumn(),
+        TextColumn("[bold]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+        TextColumn("eta"),
+        TimeRemainingColumn(),
+    )
+    label = f"safety benchmark, {jobs} workers" if jobs > 1 else "safety benchmark"
+    with Progress(*columns, console=console, transient=False) as progress:
+        task = progress.add_task(label, total=runs)
+
+        def on_result(result: SafetyScenarioResult) -> None:
+            expected = result.expected_outcome.value
+            actual = result.actual_outcome.value
+            if result.actual_outcome is ActualOutcome.ERROR:
+                mark = "[yellow]![/yellow]"
+            elif actual == expected:
+                mark = "[green]✓[/green]"
+            else:
+                mark = "[red]✗[/red]"
+            reason = f" ({result.refusal_reason})" if result.refusal_reason else ""
+            progress.console.print(
+                f"{mark} {escape(result.name)}: {actual}{escape(reason)}, expected {expected} "
+                f"[dim]{result.latency_seconds:.1f}s[/dim]",
+                soft_wrap=True,
+            )
+            progress.advance(task)
+
+        yield on_result
 
 
 @app.command()

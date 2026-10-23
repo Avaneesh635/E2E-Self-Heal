@@ -453,13 +453,15 @@ def run_safety_benchmark(
     scenarios: Iterable[SafetyScenario],
     executor: ScenarioExecutor = execute_safety_scenario,
     repeats: int = 1,
+    on_result: Callable[[SafetyScenarioResult], None] | None = None,
 ) -> SafetyBenchmarkReport:
     """Execute labeled scenarios and calculate safety metrics without conflating errors/refusals.
 
     With ``repeats`` above 1 every runnable scenario runs that many times, one full pass over
     the corpus at a time. Passes, not back-to-back repeats of one scenario, so a provider
     that degrades for a few minutes touches every scenario a little instead of one scenario
-    completely. A skipped scenario is reported once.
+    completely. A skipped scenario is reported once. ``on_result`` sees each scored run as it
+    finishes, for progress reporting.
     """
     if repeats < 1:
         raise ValueError("repeats must be at least 1")
@@ -472,7 +474,10 @@ def run_safety_benchmark(
     for run in range(1, repeats + 1):
         for scenario in ordered:
             if scenario.runnable:
-                results.append(executor(scenario).model_copy(update={"run": run}))
+                result = executor(scenario).model_copy(update={"run": run})
+                results.append(result)
+                if on_result is not None:
+                    on_result(result)
     results.sort(key=lambda result: (result.name, result.run))
     return build_report(results)
 

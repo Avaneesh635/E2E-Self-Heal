@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **`safety-benchmark --jobs N` runs scenarios in parallel, with live progress.** Scenarios
+  share one demo app, so they ran one after another and a full corpus took about 29 minutes,
+  mostly Playwright rebuilding the app and model latency. With `--jobs N` each of `N` worker
+  processes gets its own copy of the Playwright project in a throwaway git repository and its
+  own preview port, and runs the same executor as a sequential run. A corpus whose patches reach
+  outside the project is refused up front (exit `2`), and worker output goes to per-worker log
+  files. The full 43-scenario run with `deepseek-v4-flash` took 8 min 15 s at `--jobs 4` against
+  about 29 min sequentially, with 43 scored and 0 errors. Every run now shows a progress bar (done,
+  elapsed, ETA) and one line per finished scenario on stderr. The CI workflow uses `--jobs 4`.
 - **The safety corpus is large enough to enforce the release gates** (#383). The corpus grew from
   12 scenarios to 44 (43 runnable), so every rate gate now has its 20 distinct scenarios and is
   enforced on a full run instead of reported as `insufficient_sample`. Four routed demo-app pages

@@ -32,6 +32,7 @@ E2E_HEALER_WRITE_GLOBS="*.spec.ts,**/*.spec.ts,spec.ts,**/spec.ts" \
   uv run e2e-healer safety-benchmark \
     --scenario-root scenarios \
     --apply-patches \
+    --jobs 4 \
     --output /tmp/safety-report.json \
     --markdown /tmp/safety-report.md
 ```
@@ -47,6 +48,9 @@ E2E_HEALER_WRITE_GLOBS="*.spec.ts,**/*.spec.ts,spec.ts,**/spec.ts" \
   Without it the repair engine is not allowed to edit them. The command checks this before running
   anything and exits with code `2`, naming the files, instead of failing every scenario one by one.
 - Progress logs can share stdout with the JSON report. Use `--output` for a clean file.
+- While it runs, stderr shows a progress bar (runs done, elapsed time, estimated time left) and
+  one line per finished run: `✓` when it ended as labeled, `✗` when it did not, `!` for an
+  error, with the refusal reason and latency.
 
 | Flag | Meaning |
 | --- | --- |
@@ -57,6 +61,7 @@ E2E_HEALER_WRITE_GLOBS="*.spec.ts,**/*.spec.ts,spec.ts,**/spec.ts" \
 | `--baseline FILE` | A previous JSON report to compare against. A missing file means "no baseline yet". An invalid file exits with code `2`. |
 | `--enforce-gates` | Exit `1` when a release gate fails. A gate whose sample is too small is reported, never failed. |
 | `--repeat N` | Run every scenario `N` times (1 to 10, default 1) and report how often each outcome happened. See [Repeating runs](#repeating-runs). |
+| `--jobs N` | Run `N` scenarios at once (1 to 8, default 1). Needs `--apply-patches`. See [Running in parallel](#running-in-parallel). |
 
 For each scenario, `--apply-patches` finds the demo app in one of three states:
 
@@ -71,6 +76,25 @@ For each scenario, `--apply-patches` finds the demo app in one of three states:
 If a patch that was applied cannot be reversed, the run stops with exit code `1` and writes no
 report, because every later scenario would run on a modified app. The error includes the
 `git apply --reverse` command that restores it.
+
+### Running in parallel
+
+On one checkout the scenarios must run one after another, because each breaks the same demo app.
+Most of that time is Playwright rebuilding the app for every run and waiting on the model, so the
+machine is mostly idle. `--jobs N` gives each of `N` worker processes its own copy of the
+Playwright project (the directory you run from, `examples/`), in a throwaway git repository, with
+its own preview port. Each worker runs exactly the same steps as a sequential run, so the results
+are comparable run for run; only the wall clock changes.
+
+- **What is copied.** The project, minus `node_modules` (symlinked) and build output. Siblings it
+  only reads, such as the Playwright reporter in `integrations/`, are symlinked. A scenario whose
+  patch targets anything outside the project is refused before any worker starts (exit code `2`),
+  because the patch would land in the shared checkout; run that corpus with `--jobs 1`.
+- **Your checkout is never patched.** Uncommitted changes in the project are part of the copy, so a
+  parallel run measures the same working tree a sequential one would.
+- **Worker output** (structured logs, Playwright output) goes to one log file per worker instead of
+  the terminal, where it would interleave. The directory is printed when the run starts.
+- **Model calls run `N` at a time.** Mind the provider's rate limit.
 
 ## Reading the report
 
@@ -280,10 +304,10 @@ must therefore either apply to the current app or already be applied to it, whic
 `.github/workflows/safety-benchmark.yml` runs the benchmark and publishes the Markdown report as
 the run's step summary and the JSON and Markdown files as the `safety-report` artifact.
 
-- **Never blocks.** The job is `continue-on-error`, time-limited (120 minutes, since 43 runnable
-  scenarios are model-latency bound), and has read-only permissions. There is no partial-corpus
-  mode for pull requests: a subset would hide a regression, and a run over fewer scenarios already
-  reports its own `n` and `insufficient_sample` rows.
+- **Never blocks.** The job is `continue-on-error`, time-limited (120 minutes), and has read-only
+  permissions. It runs four scenarios at a time (`--jobs 4`), one per runner core. There is no
+  partial-corpus mode for pull requests: a subset would hide a regression, and a run over fewer
+  scenarios already reports its own `n` and `insufficient_sample` rows.
 - **Skipped without a key.** It runs only when `E2E_HEALER_NVIDIA_API_KEY` is available, so pull
   requests from forks, which cannot read secrets, skip it instead of failing. It uses the
   `pull_request` trigger, never `pull_request_target`, so a fork's code never runs with the key.
