@@ -112,11 +112,9 @@ All notable changes to this project are documented here. The format is based on
   benchmark scenarios ran without a snapshot. The context is now matched on the test location
   recorded in `error-context.md`, with directory-name matching kept for artifacts that lack it.
   With all three fixes, a `deepseek-v4-flash` run over the 44-scenario corpus repairs both drifts
-  it refused before (each also repaired 3 of 3 in a repeat run), finds every failure snapshot,
-  and moves `refusal_accuracy` from 87.5% to 91.3% and `incorrect_refusal_rate` from 9.5% to
-  4.8%. The gate still fails: `split-submit` is repaired (expected refuse), and `delayed-cta` was
-  refused in this run; it is unstable with or without the fix (repaired in 1 of 3 repeat runs
-  after it, 2 of 4 before it).
+  it refused before (each also repaired 3 of 3 in a repeat run) and finds every failure snapshot.
+  The remaining `delayed-cta` instability is fixed by the selector diff check above; the full run
+  after it is reported there.
 - **A declined patch is a signal, not a reason to re-run the test** (#330). When the model
   proposes no change it now gets one structured verdict on its own diagnosis: `selector_drift`,
   `behaviour_change` or `unclear`. `behaviour_change` refuses immediately as
