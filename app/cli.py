@@ -34,6 +34,7 @@ from app.graph import build_graph, build_review_graph
 from app.healing_history import append_record, make_record
 from app.logging import configure_logging
 from app.notifications import notify_heal_outcome
+from app.preprocess.ambiguous_target import ambiguous_replacements
 from app.preprocess.aria_snapshot import read_failure_snapshot, read_failure_snapshot_with_source
 from app.preprocess.diff_ast_analyzer import analyze_diff
 from app.preprocess.error_log_parser import parse_error_log
@@ -230,6 +231,7 @@ def _heal_file(
         "error_log": parsed_error_log,
         "dom_diff_context": dom_diff_context,
         "untouched_selector": untouched_failing_selector(raw_log, diff_text),
+        "ambiguous_candidates": ambiguous_replacements(raw_log, dom_diff_context),
         "dom_snapshot": dom_snapshot,
         "dom_snapshot_source": str(snapshot_source) if snapshot_source else "",
         "analysis_report": "",

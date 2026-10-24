@@ -40,7 +40,13 @@ def _removed_lines(git_diff: str) -> list[str]:
     ]
 
 
-def _locator_terms(locator: str) -> set[str]:
+def failing_locator(raw_log: str) -> str:
+    """The locator of the Playwright call that failed (the first ``waiting for``), or ``""``."""
+    match = _WAITING_RE.search(raw_log)
+    return match.group(1).strip() if match else ""
+
+
+def locator_terms(locator: str) -> set[str]:
     """Every phrase and word the locator names: quoted strings whole, plus their words."""
     terms: set[str] = set()
     for single, double in _QUOTED_RE.findall(locator):
@@ -65,11 +71,10 @@ def untouched_failing_selector(raw_log: str, git_diff: str) -> str:
     ``""`` also covers every case the check cannot decide: no locator in the log (a
     navigation failure, for example), a locator with no element-naming word, or no diff.
     """
-    match = _WAITING_RE.search(raw_log)
-    if match is None or not git_diff.strip():
+    locator = failing_locator(raw_log)
+    if not locator or not git_diff.strip():
         return ""
-    locator = match.group(1).strip()
-    terms = _locator_terms(locator)
+    terms = locator_terms(locator)
     if not terms:
         return ""
     removed = _removed_lines(git_diff)

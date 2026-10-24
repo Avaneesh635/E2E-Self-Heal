@@ -1,6 +1,7 @@
 import pytest
 from langgraph.graph import END
 
+import app.graph as graph_module
 from app.config import settings
 from app.graph import (
     build_graph,
@@ -181,3 +182,24 @@ def test_an_observed_guardrail_or_ambiguity_outranks_a_behaviour_change_verdict(
 
     assert guardrail["refusal_reason"] is RefusalReason.GUARDRAIL_VIOLATION
     assert ambiguous["refusal_reason"] is RefusalReason.AMBIGUOUS_TARGET
+
+
+def test_an_ambiguous_target_is_refused_before_any_node_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def must_not_run(state: AgentState) -> dict:
+        raise AssertionError("no repair work may run on an ambiguous target")
+
+    for node in ("memory_lookup", "diagnoser", "patch_generator", "test_runner"):
+        monkeypatch.setattr(graph_module, node, must_not_run)
+    initial = _state(
+        dom_diff_context=[{"file": "src/SubmitButton.tsx"}],
+        ambiguous_candidates=["#save-draft", "#publish"],
+        evidence_history=[],
+    )
+
+    final = graph_module.build_graph().invoke(initial)
+
+    assert final["refusal_reason"] is RefusalReason.AMBIGUOUS_TARGET
+    assert final["loop_count"] == 0
+    assert final["current_code"] == initial["current_code"]

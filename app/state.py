@@ -105,6 +105,9 @@ class AgentState(TypedDict):
     # The failing locator when the diff removes no line naming it (selector_diff_check), else
     # absent or "". A fact for the prompts: the selector was not renamed, so it is not the fix.
     untouched_selector: NotRequired[str]
+    # Selectors of the look-alikes that replaced the failing element (ambiguous_target), else
+    # absent or []. Non-empty means the test cannot say which one it meant: refused up front.
+    ambiguous_candidates: NotRequired[list[str]]
     dom_snapshot: str  # ARIA snapshot of the failing page (from error-context.md)
     dom_snapshot_source: NotRequired[str]  # source error-context.md path for evidence references
     analysis_report: str  # Diagnoser's failure-cause report
