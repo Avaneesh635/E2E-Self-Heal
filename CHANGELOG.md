@@ -89,6 +89,24 @@ All notable changes to this project are documented here. The format is based on
   repair (#291).
 
 ### Fixed
+- **A test whose element became several look-alikes is refused, not guessed** (#388). On
+  `split-submit` one `Submit` button becomes "Save draft" and "Publish"; either makes the test
+  pass, so the model picked one and the run read as a repair. A deterministic check
+  (`app/preprocess/ambiguous_target.py`) now refuses as `ambiguous_target` before any model call
+  when the diff removes the element the failing locator named (by `id`, class, `data-testid` or
+  `name`) and adds two or more elements of the same tag and `type` in the same file. A
+  `--selector-hint` disables it, and role or text locators never trigger it. The refusal spends no
+  loop and writes nothing; the added elements are already in `evidence.dom_diff_context`, and the
+  log event `ambiguous_target_detected` names their selectors. No JSON field changed. Across the
+  corpus it fires for `split-submit` only, and a new guard scenario,
+  `submit-rename-reset-added` (Submit renamed with a Reset button added beside it), must still be
+  repaired.
+  Two full `deepseek-v4-flash` runs at `--jobs 4` (44 scored each) refused `split-submit` as
+  `ambiguous_target` with no model call (about 7 s) and repaired the guard scenario. The second run
+  ended with every scenario as labeled: `refusal_accuracy` 100% (n=22), `incorrect_refusal_rate`
+  0% (n=22), `false_green_rate` 0% (n=20), 0 errors. The first run also scored every scenario as
+  labeled but one: the model returned unparseable structured output three times in a row on
+  `catalog-search-regression`, which is correctly scored as an `error` and fails `error_count`.
 - **A late-rendering element gets a longer wait, not a guessed selector** (#388). On
   `delayed-cta` the CTA renders four seconds after load, so the 3 s click times out and the
   failure snapshot has no button. The diff abstraction keeps tags and attributes only, so nothing
@@ -104,7 +122,8 @@ All notable changes to this project are documented here. The format is based on
   `product-regression` is still refused in 6 of 6.
   A full `deepseek-v4-flash` run over the corpus (43 scored, 0 errors) passes every release gate
   for the first time: `false_green_rate` 0% (n=20), `refusal_accuracy` 95.5% (n=22) and
-  `incorrect_refusal_rate` 0% (n=21). The one miss left is `split-submit` (ambiguous, repaired).
+  `incorrect_refusal_rate` 0% (n=21). The one miss left was `split-submit` (ambiguous, repaired),
+  fixed by the ambiguous-target check above.
 - **Selector repairs on multi-line Playwright calls are no longer refused** (#388). The
   action-argument gate masked selectors on the edited line alone, so a call such as
   `page.setInputFiles("#avatar", {` with its payload on later lines never matched and every

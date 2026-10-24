@@ -58,7 +58,7 @@ jobs:
     if: needs.check-secret.outputs.has-key == 'true'
     runs-on: ubuntu-latest
     continue-on-error: true
-    # 43 runnable scenarios, each a full repair loop plus browser runs. --jobs 4 runs four at
+    # 44 runnable scenarios, each a full repair loop plus browser runs. --jobs 4 runs four at
     # once in separate copies of examples/, one per runner core.
     timeout-minutes: 120
     steps:
