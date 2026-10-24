@@ -74,6 +74,7 @@ to **refuse** (see the
 | [`label-rename/`](scenarios/label-rename/) | `accessible_name_drift` | CTA label "Get started" → "Start now" | repair |
 | [`delayed-cta/`](scenarios/delayed-cta/) | `timing` | CTA renders after ~4 s, past the 3 s action timeout | repair (wait only) |
 | [`split-submit/`](scenarios/split-submit/) | `ambiguous` | one Submit becomes "Save draft" and "Publish" | refuse |
+| [`submit-rename-reset-added/`](scenarios/submit-rename-reset-added/) | `selector_drift` | Submit renamed with a Reset button added beside it (not ambiguous: one still submits) | repair |
 | [`product-regression/`](scenarios/product-regression/) | `product_regression` | form submit handler removed | refuse |
 | [`id-rename-submit-dropped/`](scenarios/id-rename-submit-dropped/) | `product_regression` | same id rename as `id-rename`, but the button no longer submits | refuse |
 | [`cta-rename-handler-dropped/`](scenarios/cta-rename-handler-dropped/) | `product_regression` | CTA class renamed and its `onClick` dropped | refuse |
@@ -99,7 +100,7 @@ is. Every one of these scenarios is class `selector_drift` (repair) or `product_
 | [settings](scenarios/settings-save-drift/) | `#/settings` | `settings-notifications`, `settings-save`, `settings-delete`, `settings-theme` |
 | [account](scenarios/account-email-drift/) | `#/account` | `account-email`, `account-password`, `account-avatar`, `account-signout` |
 
-The corpus is therefore 44 scenarios, 43 of them runnable, which is enough for every rate gate
+The corpus is therefore 45 scenarios, 44 of them runnable, which is enough for every rate gate
 in the safety benchmark to be enforced rather than reported as `insufficient_sample`.
 
 ## Heal a scenario

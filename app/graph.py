@@ -31,6 +31,17 @@ def route(state: AgentState) -> str:
     return "diagnoser"
 
 
+def route_at_start(state: AgentState) -> str:
+    """Refuse an ambiguous target before any work; otherwise start with the memory lookup.
+
+    The ambiguity is read from the diff, not judged by a model, and no candidate can resolve
+    it, so spending a loop (or a remembered repair) on it would only produce a guess.
+    """
+    if state.get("ambiguous_candidates"):
+        return _REFUSAL_FINALIZER
+    return "memory_lookup"
+
+
 def route_after_memory(state: AgentState) -> str:
     """Skip LLM work only when a guarded history candidate was applied."""
     if state.get("memory_report", {}).get("active", False):
@@ -66,9 +77,11 @@ def refusal_finalizer(state: AgentState) -> dict:
         # Exhausted structured-output retries directly establish provider failure; absent
         # diff context is weaker evidence and must not hide a known provider outage.
         reason = RefusalReason.PROVIDER_ERROR
-    elif not verification.get("ok", True):
+    elif not verification.get("ok", True) or state.get("ambiguous_candidates"):
         # A failed live-DOM check proves this candidate is unusable, but does not prove a
-        # product behavior change. Prefer the observed ambiguity over that speculation.
+        # product behavior change. Prefer the observed ambiguity over that speculation. The
+        # diff-level check (several look-alikes replaced the failing element) is the same
+        # observation made before any candidate exists.
         reason = RefusalReason.AMBIGUOUS_TARGET
     elif not state["dom_diff_context"]:
         reason = RefusalReason.INSUFFICIENT_EVIDENCE
@@ -158,7 +171,11 @@ def build_graph() -> CompiledStateGraph:
     graph.add_node("test_runner", test_runner)
     graph.add_node(_REFUSAL_FINALIZER, refusal_finalizer)
 
-    graph.add_edge(START, "memory_lookup")
+    graph.add_conditional_edges(
+        START,
+        route_at_start,
+        {"memory_lookup": "memory_lookup", _REFUSAL_FINALIZER: _REFUSAL_FINALIZER},
+    )
     graph.add_conditional_edges(
         "memory_lookup",
         route_after_memory,

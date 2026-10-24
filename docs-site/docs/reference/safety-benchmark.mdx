@@ -223,7 +223,7 @@ a **Release gates** table:
 
 ### The corpus
 
-The checked-in corpus is 44 scenarios: 43 runnable and one static fixture (`jsx-context`, listed as
+The checked-in corpus is 45 scenarios: 44 runnable and one static fixture (`jsx-context`, listed as
 `skipped` and in no rate). Every rate gate is therefore enforceable on a full run, and the corpus
 cannot shrink without a gate going back to `insufficient_sample`:
 
@@ -231,7 +231,7 @@ cannot shrink without a gate going back to `insufficient_sample`:
 | --- | --- | --- |
 | `product_regression` | 20 | `false_green_rate` gate |
 | labeled `refuse` | 22 | `correct_refusal_rate` (reported, not a gate) |
-| labeled `repair` | 21 (22 minus `jsx-context`) | `incorrect_refusal_rate` gate |
+| labeled `repair` | 22 (23 minus `jsx-context`) | `incorrect_refusal_rate` gate |
 | judged (expected refuse, or actually refused) | 22 or more | `refusal_accuracy` gate |
 
 Sixteen of the regressions come in **pairs** on four demo-app pages: `<page>-<behaviour>-drift`
@@ -308,6 +308,10 @@ the run's step summary and the JSON and Markdown files as the `safety-report` ar
   permissions. It runs four scenarios at a time (`--jobs 4`), one per runner core. There is no
   partial-corpus mode for pull requests: a subset would hide a regression, and a run over fewer
   scenarios already reports its own `n` and `insufficient_sample` rows.
+- **A provider glitch fails a run.** If the model returns unparseable output on every retry of a
+  scenario's final attempt, that scenario is an `error` and `error_count` fails, whatever the
+  outcomes. It happens with or without `--jobs` (the logs show no rate limiting), so read a
+  single error by its scenario's `error` text before re-running.
 - **Skipped without a key.** It runs only when `E2E_HEALER_NVIDIA_API_KEY` is available, so pull
   requests from forks, which cannot read secrets, skip it instead of failing. It uses the
   `pull_request` trigger, never `pull_request_target`, so a fork's code never runs with the key.
