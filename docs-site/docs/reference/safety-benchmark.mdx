@@ -308,6 +308,10 @@ the run's step summary and the JSON and Markdown files as the `safety-report` ar
   permissions. It runs four scenarios at a time (`--jobs 4`), one per runner core. There is no
   partial-corpus mode for pull requests: a subset would hide a regression, and a run over fewer
   scenarios already reports its own `n` and `insufficient_sample` rows.
+- **A provider glitch fails a run.** If the model returns unparseable output on every retry of a
+  scenario's final attempt, that scenario is an `error` and `error_count` fails, whatever the
+  outcomes. It happens with or without `--jobs` (the logs show no rate limiting), so read a
+  single error by its scenario's `error` text before re-running.
 - **Skipped without a key.** It runs only when `E2E_HEALER_NVIDIA_API_KEY` is available, so pull
   requests from forks, which cannot read secrets, skip it instead of failing. It uses the
   `pull_request` trigger, never `pull_request_target`, so a fork's code never runs with the key.

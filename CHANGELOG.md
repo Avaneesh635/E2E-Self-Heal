@@ -107,6 +107,9 @@ All notable changes to this project are documented here. The format is based on
   0% (n=22), `false_green_rate` 0% (n=20), 0 errors. The first run also scored every scenario as
   labeled but one: the model returned unparseable structured output three times in a row on
   `catalog-search-regression`, which is correctly scored as an `error` and fails `error_count`.
+  That is model output, not `--jobs`: the logs show no rate limiting, and the sequential runs of
+  #387 had as many unparseable answers (26 against 24) and four exhausted patch retries, which
+  happened to recover on a later loop.
 - **A late-rendering element gets a longer wait, not a guessed selector** (#388). On
   `delayed-cta` the CTA renders four seconds after load, so the 3 s click times out and the
   failure snapshot has no button. The diff abstraction keeps tags and attributes only, so nothing
